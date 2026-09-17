@@ -19,7 +19,7 @@ const CSS = `
 .toolbar button.on{color:#fff;background:#e35d5d;border-color:#e35d5d}
 .els button{background:transparent;border-color:transparent;color:#8291b0;padding:0 6px}
 .els button:hover{background:#2e3a58;color:#fff}
-.chip{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;background:#161b2a;border:1px solid #232c42;color:#aab6d0;white-space:nowrap;cursor:default;user-select:none}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;background:#161b2a;border:1px solid transparent;color:#aab6d0;white-space:nowrap;cursor:default;user-select:none}
 .chip.off{color:#f0b429;border-color:#4a3a1a}
 .dot{font-size:9px;line-height:1;color:#8291b0}
 .dot.waiting{color:#4fd18b}
@@ -76,7 +76,7 @@ const T = {
     agentIdle: 'Agent not connected', agentWaiting: 'Waiting for your feedback', agentSent: 'Sent — waiting for the agent',
     agentWorking: 'Working', agentDone: 'Done',
     chipIdle: 'Offline', chipWaiting: 'Waiting', chipSent: 'Sent', chipWorking: 'Working', chipDone: 'Done', chipOff: 'Disconnected',
-    agentSentDetail: 'waiting for the agent',
+    agentSentDetail: 'Waiting for the agent',
     disconnected: 'Disconnected — reconnecting',
     hintSend: 'Press Send to deliver', hintClick: 'Click an element on the page · Esc to exit',
     hintMore: (n: number) => `${n} selected · pick more or write a note`,
@@ -165,15 +165,19 @@ export function createUI(h: UIHandlers) {
     selectBtn.classList.toggle('on', vm.selecting);
     const cur = vm.drafts[vm.drafts.length - 1];
     const hasElements = !!cur && cur.elements.length > 0;
-    const suffix = vm.strategy ? ` · ${T.refresh}: ${vm.strategy}` : '';
+    const strategyText = vm.strategy ? `${T.refresh}: ${vm.strategy}` : '';
     let hint: string;
     if (!vm.connected) hint = T.disconnected;
-    else if (vm.agent.status === 'sent' || vm.agent.status === 'working' || vm.agent.status === 'done') hint = AGENT_TEXT[vm.agent.status](vm.agent.text) + suffix;
-    else if (hasElements && cur!.note.trim() !== '') hint = T.hintSend + suffix;
-    else if (vm.selecting && !hasElements) hint = T.hintClick + suffix;
-    else if (vm.selecting) hint = T.hintMore(cur!.elements.length) + suffix;
-    else if (hasElements) hint = T.hintNote + suffix;
-    else hint = T.hintPick + suffix;
+    else {
+      let text: string;
+      if (vm.agent.status === 'sent' || vm.agent.status === 'working' || vm.agent.status === 'done') text = AGENT_TEXT[vm.agent.status](vm.agent.text);
+      else if (hasElements && cur!.note.trim() !== '') text = T.hintSend;
+      else if (vm.selecting && !hasElements) text = T.hintClick;
+      else if (vm.selecting) text = T.hintMore(cur!.elements.length);
+      else if (hasElements) text = T.hintNote;
+      else text = T.hintPick;
+      hint = [text, strategyText].filter(Boolean).join(' · ');
+    }
     if (hint !== lastHint) {
       lastHint = hint;
       if (!statusIn.classList.contains('scroll')) {

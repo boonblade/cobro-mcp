@@ -131,7 +131,8 @@ test.describe('en locale', () => {
   test('shows English hints and labels', async ({ cobroPage: page, bridge }) => {
     await page.goto('http://127.0.0.1:4173/basic.html');
     await expect(page.locator(`${HOST} .status`)).toContainText('Press Ctrl+Shift+F');
-    bridge.core.wait(10_000);
+    const waiting = bridge.core.wait(10_000);
+    void waiting; // 이 테스트는 응답을 기다리지 않는다 — 칩 라벨만 확인
     await expect(page.locator(`${HOST} .chip`)).toContainText('Waiting');
     await selectAt(page, '#target');
     await expect(page.locator(`${HOST} .status`)).toContainText('selected');
@@ -243,15 +244,19 @@ test('toolbar chip and detail are separate — no duplicated label', async ({ co
   await page.goto('http://127.0.0.1:4173/basic.html');
   await selectAt(page, '#target');
   await page.locator(`${HOST} textarea`).fill('메모');
+  const waiting = bridge.core.wait(10_000);
+  await expect(page.locator(`${HOST} .chip`)).toContainText('대기 중');
+  await expect(page.locator(`${HOST} .status`)).toContainText('Send로 전송하세요'); // 디바운스된 draft가 반영된 뒤(M1)
+  await expect(page.locator(`${HOST} .status-in`)).not.toHaveClass(/enter/); // 슬라이드인 애니메이션이 끝난 뒤 촬영(M2)
   const waitingBox = (await page.locator(`${HOST} .toolbar`).boundingBox())!;
   await page.screenshot({ path: 'screenshots/toolbar-waiting.png', clip: { x: waitingBox.x - 8, y: waitingBox.y - 8, width: waitingBox.width + 16, height: waitingBox.height + 16 } });
-  const waiting = bridge.core.wait(10_000);
   await page.locator(`${HOST} button.send`).click();
   await waiting;
   bridge.core.setAgentText('수정 중: collab.py + page.tsx');
   await expect(page.locator(`${HOST} .chip`)).toHaveText(/수정 중/);
   await expect(page.locator(`${HOST} .status`)).toContainText('collab.py + page.tsx');
   await expect(page.locator(`${HOST} .status`)).not.toContainText('수정 중');
+  await expect(page.locator(`${HOST} .status-in`)).not.toHaveClass(/enter/); // 슬라이드인 애니메이션이 끝난 뒤 촬영(M2)
   const workingBox = (await page.locator(`${HOST} .toolbar`).boundingBox())!;
   await page.screenshot({ path: 'screenshots/toolbar-working.png', clip: { x: workingBox.x - 8, y: workingBox.y - 8, width: workingBox.width + 16, height: workingBox.height + 16 } });
   bridge.done({ summary: '완료: ok', selectors: [], changedFiles: [] });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { stripStatusLabel } from '../../src/overlay/status-text.js';
+import { stripStatusLabel } from '../../../src/overlay/status-text.js';
 
 describe('stripStatusLabel', () => {
   it('strips a matching label prefix followed by a colon', () => {
