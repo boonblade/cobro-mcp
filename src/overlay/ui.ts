@@ -12,21 +12,21 @@ const CSS = `
 :host{
   --bg:#0e111a;--bg-2:#171b28;--bg-3:#232c42;--chip:#161b2a;--border:#2a3350;--border-2:#3a4a72;
   --hover:#2e3a58;--hover-border:#4c5f92;--fg:#e8ecf5;--fg-2:#cdd8f0;--fg-3:#aab6d0;--fg-4:#8a97b5;--fg-5:#8291b0;
-  --accent:#e35d5d;--warn:#f0b429;--ok:#4fd18b;--info:#9db8ef;--badge-bg:#1c2333;--fg-on-accent:#fff;--fg-hover:#fff;
+  --accent:#e35d5d;--warn:#f0b429;--ok:#4fd18b;--info:#9db8ef;--badge-bg:#1c2333;--badge-fg:#fff;--fg-on-accent:#fff;--fg-hover:#fff;
   --chip-off-border:#4a3a1a;--shadow:0 4px 16px rgba(0,0,0,.5);--blur:none;--radius:12px;--radius-sm:6px;
   position:fixed;inset:0;margin:0;padding:0;border:0;background:transparent;width:100vw;height:100vh;overflow:visible;pointer-events:none;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;color:var(--fg)
 }
 :host([data-theme="light"]){
   --bg:#ffffff;--bg-2:#f4f6fb;--bg-3:#e6eaf3;--chip:#eef1f7;--border:#cfd6e4;--border-2:#b8c2d6;
   --hover:#dde3ef;--hover-border:#9fadc8;--fg:#171b28;--fg-2:#2a3350;--fg-3:#4b5670;--fg-4:#5f6b86;--fg-5:#6f7c97;
-  --accent:#d9453f;--warn:#b7791f;--ok:#1f8f57;--info:#3b6fd6;--badge-bg:#ffffff;--fg-hover:#171b28;
+  --accent:#d9453f;--warn:#b7791f;--ok:#1f8f57;--info:#3b6fd6;--badge-bg:#ffffff;--badge-fg:#171b28;--fg-hover:#171b28;
   --chip-off-border:#e6d29c;--shadow:0 4px 16px rgba(20,30,60,.18);--blur:none;
 }
 :host([data-theme="frost"]){
   --bg:rgba(14,17,26,.78);--bg-2:#171b28;--bg-3:rgba(255,255,255,.10);--chip:rgba(255,255,255,.06);
   --border:rgba(255,255,255,.14);--border-2:rgba(255,255,255,.22);--hover:rgba(255,255,255,.16);--hover-border:rgba(255,255,255,.30);
   --fg:#e8ecf5;--fg-2:#cdd8f0;--fg-3:#aab6d0;--fg-4:#9aa6c2;--fg-5:#8291b0;
-  --accent:#e35d5d;--warn:#f0b429;--ok:#4fd18b;--info:#9db8ef;--badge-bg:#1c2333;--fg-hover:#fff;
+  --accent:#e35d5d;--warn:#f0b429;--ok:#4fd18b;--info:#9db8ef;--badge-bg:#1c2333;--badge-fg:#fff;--fg-hover:#fff;
   --chip-off-border:rgba(240,180,41,.35);--shadow:0 8px 24px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.08);--blur:blur(18px) saturate(140%);
 }
 @supports not (backdrop-filter: blur(1px)) { :host([data-theme="frost"]) { --bg:#0e111a; --blur:none } }
@@ -34,7 +34,7 @@ const CSS = `
 *{box-sizing:border-box}
 .glass{position:fixed;inset:0;pointer-events:auto;cursor:crosshair;display:none}
 .hover-box{position:fixed;display:none;border:2px solid var(--accent);background:color-mix(in srgb, var(--accent) 8%, transparent);border-radius:2px;pointer-events:none}
-.hover-badge{position:fixed;display:none;background:var(--badge-bg);border:1px solid var(--accent);border-radius:var(--radius-sm);padding:4px 8px;white-space:pre;color:var(--fg-on-accent);pointer-events:none;max-width:480px}
+.hover-badge{position:fixed;display:none;background:var(--badge-bg);border:1px solid var(--accent);border-radius:var(--radius-sm);padding:4px 8px;white-space:pre;color:var(--badge-fg);pointer-events:none;max-width:480px}
 .band{position:fixed;display:none;border:1.5px dashed var(--accent);background:color-mix(in srgb, var(--accent) 6%, transparent);pointer-events:none}
 .toolbar{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:6px;align-items:center;background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:6px 10px;box-shadow:var(--shadow);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);pointer-events:auto}
 .toolbar button,.panel button{font:inherit;color:var(--fg-2);background:var(--bg-3);border:1px solid var(--border-2);border-radius:999px;padding:4px 10px;cursor:pointer}
