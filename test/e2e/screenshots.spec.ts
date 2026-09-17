@@ -8,9 +8,10 @@ const union = (a: Box, b: Box): Box => {
 
 test('toolbar and settings popover screenshots for each theme', async ({ cobroPage: page }) => {
   await page.goto('http://127.0.0.1:4173/basic.html'); // 흰 배경 페이지 — frost 반투명 확인용
-  const gear = page.locator(`${HOST} .ib[aria-label="설정"]`);
+  const gear = page.locator(`${HOST} .ib.gear`);
   const toolbar = page.locator(`${HOST} .toolbar`);
   const pop = page.locator(`${HOST} .pop`);
+  const selectBtn = page.locator(`${HOST} .ib.select`);
   await expect(page.locator(`${HOST} .status-in`)).not.toHaveClass(/enter/);
 
   const setTheme = async (key: 'dark' | 'light' | 'frost') => {
@@ -31,11 +32,14 @@ test('toolbar and settings popover screenshots for each theme', async ({ cobroPa
 
   await setTheme('light');
   await shootToolbar('toolbar-light');
+  await selectBtn.hover();
+  await page.waitForTimeout(200); // 라벨 펼침 전환(150ms) 종료 대기(Task 29 M2 교훈) — light hover 대비 확인용(B2)
+  await shootToolbar('toolbar-light-hover');
+  await page.mouse.move(0, 0);
 
   await setTheme('frost');
   await shootToolbar('toolbar-frost');
 
-  const selectBtn = page.locator(`${HOST} .ib[aria-label="Select"]`);
   await selectBtn.hover();
   await page.waitForTimeout(200); // 라벨 펼침 전환(150ms) 종료 대기(Task 29 M2 교훈)
   await shootToolbar('toolbar-hover-select');

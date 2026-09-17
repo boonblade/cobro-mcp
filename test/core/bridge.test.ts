@@ -157,4 +157,19 @@ describe('createBridge', () => {
     err.mockRestore();
     ws.close();
   });
+
+  it('settingsFile 없이 만든 bridge는 settings 메시지를 무시한다(M5)', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    b = await createBridge({ store: new Store(mkdtempSync(join(tmpdir(), 'cobro-'))), token: 't' }); // settingsFile 미전달
+    const ws = new WebSocket(`ws://127.0.0.1:${b.port}`);
+    await new Promise((r) => ws.once('open', r));
+    ws.send(JSON.stringify({ type: 'hello', token: 't' }));
+    await new Promise((r) => setTimeout(r, 30));
+    ws.send(JSON.stringify({ type: 'settings', patch: { theme: 'light' } }));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(b.ui()).toEqual({ theme: 'auto', themeLocked: false });
+    expect(err.mock.calls.some((c) => String(c[0]).includes('settingsFile 없음'))).toBe(true);
+    err.mockRestore();
+    ws.close();
+  });
 });

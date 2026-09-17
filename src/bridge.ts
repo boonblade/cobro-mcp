@@ -32,7 +32,7 @@ export async function createBridge(opts: { store: Store; token: string; screensh
           if (!msg.patch || typeof msg.patch !== 'object') return bad('patch가 없다');
           if (!opts.settingsFile) return bad('settingsFile 없음');
           if (opts.envTheme) return bad('COBRO_THEME로 고정됨');
-          if (msg.patch.theme !== undefined && !isTheme(msg.patch.theme)) return bad('theme 값이 아니다');
+          if (!isTheme(msg.patch.theme)) return bad('theme 값이 아니다'); // theme 없는 patch({})도 거부 — 아니면 {theme:undefined}가 저장돼 auto로 지워진다(M1)
           const next = writeUserSettings(opts.settingsFile, { theme: msg.patch.theme });
           cachedTheme = next.theme;
           channel.broadcast(stateMsg());

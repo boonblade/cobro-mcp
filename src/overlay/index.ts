@@ -77,7 +77,7 @@ declare const __COBRO_TOKEN__: string;
       onBandPick: (els) => { const b = ensureCurrent(); for (const el of els) addEl(b, el, false); pushDraft(); render(); },
     });
     window.addEventListener('keydown', (e) => {
-      if (e.ctrlKey && e.shiftKey && e.code === 'KeyF') { e.preventDefault(); picker.setActive(!picker.isActive()); render(); }
+      if (e.ctrlKey && e.shiftKey && e.code === 'KeyF') { e.preventDefault(); ui.closePop(); picker.setActive(!picker.isActive()); render(); }
       else if (e.key === 'Escape' && picker.isActive()) { picker.setActive(false); render(); }
     }, true);
     installGuards(ui.host); // 반드시 위 리스너들 뒤

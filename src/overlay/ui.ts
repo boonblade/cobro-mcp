@@ -12,21 +12,21 @@ const CSS = `
 :host{
   --bg:#0e111a;--bg-2:#171b28;--bg-3:#232c42;--chip:#161b2a;--border:#2a3350;--border-2:#3a4a72;
   --hover:#2e3a58;--hover-border:#4c5f92;--fg:#e8ecf5;--fg-2:#cdd8f0;--fg-3:#aab6d0;--fg-4:#8a97b5;--fg-5:#8291b0;
-  --accent:#e35d5d;--warn:#f0b429;--ok:#4fd18b;--info:#9db8ef;--badge-bg:#1c2333;--fg-on-accent:#fff;
+  --accent:#e35d5d;--warn:#f0b429;--ok:#4fd18b;--info:#9db8ef;--badge-bg:#1c2333;--fg-on-accent:#fff;--fg-hover:#fff;
   --chip-off-border:#4a3a1a;--shadow:0 4px 16px rgba(0,0,0,.5);--blur:none;
   position:fixed;inset:0;margin:0;padding:0;border:0;background:transparent;width:100vw;height:100vh;overflow:visible;pointer-events:none;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;color:var(--fg)
 }
 :host([data-theme="light"]){
   --bg:#ffffff;--bg-2:#f4f6fb;--bg-3:#e6eaf3;--chip:#eef1f7;--border:#cfd6e4;--border-2:#b8c2d6;
   --hover:#dde3ef;--hover-border:#9fadc8;--fg:#171b28;--fg-2:#2a3350;--fg-3:#4b5670;--fg-4:#5f6b86;--fg-5:#6f7c97;
-  --accent:#d9453f;--warn:#b7791f;--ok:#1f8f57;--info:#3b6fd6;--badge-bg:#ffffff;
+  --accent:#d9453f;--warn:#b7791f;--ok:#1f8f57;--info:#3b6fd6;--badge-bg:#ffffff;--fg-hover:#171b28;
   --chip-off-border:#e6d29c;--shadow:0 4px 16px rgba(20,30,60,.18);--blur:none;
 }
 :host([data-theme="frost"]){
   --bg:rgba(14,17,26,.78);--bg-2:#171b28;--bg-3:rgba(255,255,255,.10);--chip:rgba(255,255,255,.06);
   --border:rgba(255,255,255,.14);--border-2:rgba(255,255,255,.22);--hover:rgba(255,255,255,.16);--hover-border:rgba(255,255,255,.30);
   --fg:#e8ecf5;--fg-2:#cdd8f0;--fg-3:#aab6d0;--fg-4:#9aa6c2;--fg-5:#8291b0;
-  --accent:#e35d5d;--warn:#f0b429;--ok:#4fd18b;--info:#9db8ef;--badge-bg:#1c2333;
+  --accent:#e35d5d;--warn:#f0b429;--ok:#4fd18b;--info:#9db8ef;--badge-bg:#1c2333;--fg-hover:#fff;
   --chip-off-border:rgba(240,180,41,.35);--shadow:0 8px 24px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.08);--blur:blur(18px) saturate(140%);
 }
 @supports not (backdrop-filter: blur(1px)) { :host([data-theme="frost"]) { --bg:#0e111a; --blur:none } }
@@ -38,11 +38,11 @@ const CSS = `
 .band{position:fixed;display:none;border:1.5px dashed var(--accent);background:color-mix(in srgb, var(--accent) 6%, transparent);pointer-events:none}
 .toolbar{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:6px;align-items:center;background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:6px 10px;box-shadow:var(--shadow);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);pointer-events:auto}
 .toolbar button,.panel button{font:inherit;color:var(--fg-2);background:var(--bg-3);border:1px solid var(--border-2);border-radius:999px;padding:4px 10px;cursor:pointer}
-.toolbar button:hover,.panel button:hover{background:var(--hover);border-color:var(--hover-border);color:var(--fg-on-accent)}
+.toolbar button:hover,.panel button:hover{background:var(--hover);border-color:var(--hover-border);color:var(--fg-hover)}
 .toolbar button:focus-visible,.panel button:focus-visible{outline:2px solid var(--info);outline-offset:1px}
 .toolbar button.on{color:var(--fg-on-accent);background:var(--accent);border-color:var(--accent)}
 .els button{background:transparent;border-color:transparent;color:var(--fg-5);padding:0 6px}
-.els button:hover{background:var(--hover);color:var(--fg-on-accent)}
+.els button:hover{background:var(--hover);color:var(--fg-hover)}
 .chip{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;background:var(--chip);border:1px solid transparent;color:var(--fg-3);white-space:nowrap;cursor:default;user-select:none}
 .chip.off{color:var(--warn);border-color:var(--chip-off-border)}
 .dot{font-size:9px;line-height:1;color:var(--fg-5)}
@@ -73,13 +73,13 @@ textarea{width:100%;height:54px;resize:none;font:inherit;color:var(--fg);backgro
 /* shadow root의 자식은 모두 position:fixed 형제 — picker가 glass를 toolbar/panel 뒤에 append하므로 쌓임 순서를 명시한다 */
 .glass{z-index:0}
 .hover-box,.hover-badge,.band,.flash{z-index:1}
-.toolbar,.panel{z-index:2}
+.toolbar,.pop,.panel{z-index:2}
 .pop{position:fixed;bottom:56px;left:50%;transform:translateX(-50%);display:none;min-width:260px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;box-shadow:var(--shadow);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);pointer-events:auto;color:var(--fg-2)}
 .pop.show{display:block}
 .pop-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .pop-label{color:var(--fg-3)}
 .seg{display:inline-flex;gap:2px;background:var(--chip);border-radius:999px;padding:2px}
-.seg button{border:1px solid transparent;background:transparent;padding:2px 9px}
+.seg button{border:1px solid transparent;background:transparent;padding:2px 9px;font:inherit;cursor:pointer}
 .seg button.on{background:var(--bg-3);color:var(--fg)}
 .seg button:disabled{opacity:.5;cursor:not-allowed}
 .pop-note{margin-top:6px;color:var(--warn);font-size:11px}
@@ -149,14 +149,14 @@ export function createUI(h: UIHandlers) {
   const root = host.attachShadow({ mode: 'open' });
   const style = document.createElement('style'); style.textContent = CSS;
   const toolbar = document.createElement('div'); toolbar.className = 'toolbar';
-  const iconBtn = (icon: IconName, label: string, title: string) => {
-    const btn = document.createElement('button'); btn.className = 'ib'; btn.title = title; btn.setAttribute('aria-label', label);
+  const iconBtn = (icon: IconName, label: string, title: string, extraClass: string) => {
+    const btn = document.createElement('button'); btn.className = `ib ${extraClass}`; btn.title = title; btn.setAttribute('aria-label', label);
     const ico = document.createElement('span'); ico.className = 'ico'; ico.innerHTML = svg(icon);
     const lbl = document.createElement('span'); lbl.className = 'lbl'; lbl.textContent = label;
     btn.append(ico, lbl);
     return { btn, ico, lbl };
   };
-  const selectParts = iconBtn('select', 'Select', T.tipSelect);
+  const selectParts = iconBtn('select', 'Select', T.tipSelect, 'select');
   const selectBtn = selectParts.btn; selectBtn.onclick = () => { closePop(); h.onToggleSelect(); };
   const chip = document.createElement('span'); chip.className = 'chip';
   const dot = document.createElement('span'); dot.className = 'dot'; dot.textContent = '●';
@@ -165,9 +165,9 @@ export function createUI(h: UIHandlers) {
   const status = document.createElement('span'); status.className = 'status';
   const statusIn = document.createElement('span'); statusIn.className = 'status-in';
   status.append(statusIn);
-  const gearParts = iconBtn('settings', T.tipSettings, T.tipSettings);
+  const gearParts = iconBtn('settings', T.tipSettings, T.tipSettings, 'gear');
   const gearBtn = gearParts.btn;
-  const collapseParts = iconBtn('collapse', 'Collapse', T.tipCollapse);
+  const collapseParts = iconBtn('collapse', 'Collapse', T.tipCollapse, 'collapse');
   const collapseBtn = collapseParts.btn;
   toolbar.append(selectBtn, chip, status, gearBtn, collapseBtn);
   const pop = document.createElement('div'); pop.className = 'pop';
@@ -195,6 +195,7 @@ export function createUI(h: UIHandlers) {
     pop.classList.add('show');
     popOpen = true;
     const onDocPointerDown = (e: Event) => { const path = e.composedPath(); if (!path.includes(pop) && !path.includes(gearBtn)) closePop(); };
+    // 선택 모드 진입이 항상 closePop()을 부르므로(B1) pop이 열려 있는 동안 picker는 비활성 — Escape가 pop·picker 양쪽에서 동시에 처리될 일이 없다(M3)
     const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') closePop(); };
     document.addEventListener('pointerdown', onDocPointerDown, true);
     window.addEventListener('keydown', onKeyDown, true);
@@ -332,5 +333,5 @@ export function createUI(h: UIHandlers) {
   }
   function focusNote() { const ta = panel.querySelector('textarea'); ta?.focus(); }
   function setTheme(t: ResolvedTheme): void { host.dataset.theme = t; }
-  return { host, root, render, flash, focusNote, setTheme };
+  return { host, root, render, flash, focusNote, setTheme, closePop };
 }
