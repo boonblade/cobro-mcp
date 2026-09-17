@@ -1,4 +1,4 @@
-import { test, expect, HOST } from './helpers.js';
+import { test, expect, HOST, selectAt } from './helpers.js';
 
 test('settings popover selects a theme and the server persists it', async ({ cobroPage: page, bridge }) => {
   await page.goto('http://127.0.0.1:4173/basic.html');
@@ -52,6 +52,30 @@ test('auto follows prefers-color-scheme', async ({ cobroPage: page }) => {
   await expect(page.locator(HOST)).toHaveAttribute('data-theme', 'light');
   await page.emulateMedia({ colorScheme: 'dark' });
   await expect(page.locator(HOST)).toHaveAttribute('data-theme', 'dark');
+});
+
+test('segment labels are readable in dark and light', async ({ cobroPage: page }) => {
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.locator(`${HOST} .ib.gear`).click();
+  const onBtn = page.locator(`${HOST} .seg button[data-theme="auto"]`);
+  const offBtn = page.locator(`${HOST} .seg button[data-theme="dark"]`);
+  await expect(offBtn).toHaveCSS('color', 'rgb(170, 182, 208)');
+  await expect(onBtn).toHaveCSS('color', 'rgb(232, 236, 245)');
+  await page.locator(`${HOST} .seg button[data-theme="light"]`).click();
+  await expect(offBtn).toHaveCSS('color', 'rgb(75, 86, 112)');
+  const lightOnBtn = page.locator(`${HOST} .seg button[data-theme="light"]`);
+  await expect(lightOnBtn).toHaveCSS('color', 'rgb(23, 27, 40)');
+});
+
+test('layers share one radius', async ({ cobroPage: page }) => {
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await selectAt(page, '#target');
+  await page.locator(`${HOST} .ib.gear`).click();
+  await expect(page.locator(`${HOST} .pop`)).toHaveCSS('border-radius', '12px');
+  await expect(page.locator(`${HOST} .panel`)).toHaveCSS('border-radius', '12px');
+  await expect(page.locator(`${HOST} textarea`)).toHaveCSS('border-radius', '6px');
+  await expect(page.locator(`${HOST} .toolbar`)).toHaveCSS('border-radius', '999px');
 });
 
 test.describe('COBRO_THEME pins the theme', () => {
