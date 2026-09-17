@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [0.6.0] — 2026-09-17
 ### Added
 - README: `Payload` section — field rules and an example of what `wait` returns after Send.
 - Settings popover (⚙) on the toolbar with theme selection: auto / dark / light / frost. Saved per user in `~/.cobro/settings.json`; `COBRO_THEME` pins it.
