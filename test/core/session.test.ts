@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Store } from '../../src/core/store.js';
+import { Store, emptySession } from '../../src/core/store.js';
 import { SessionCore } from '../../src/core/session.js';
 import type { Batch, Payload, PageInfo } from '../../src/core/types.js';
 
@@ -19,6 +19,10 @@ describe('SessionCore', () => {
     core.setDrafts([draft('1')]);
     const again = new SessionCore(store);
     expect(again.session.batches.map((b) => b.id)).toEqual(['1']);
+  });
+  it('restart normalizes waiting to idle but keeps the done text (M1)', () => {
+    store.save({ ...emptySession(), agent: { status: 'waiting', text: '요약' } });
+    expect(new SessionCore(store).session.agent.text).toBe('요약');
   });
   it('setDrafts replaces only drafts', () => {
     core.setDrafts([draft('1'), draft('2')]);
@@ -119,5 +123,34 @@ describe('SessionCore', () => {
     await expect(first).resolves.toEqual({ status: 'pending' });
     core.deliver(payloadOf(['z']));
     await expect(second).resolves.toMatchObject({ status: 'sent', payload: { batches: [{ id: 'z' }] } });
+  });
+  it('wait after done keeps the summary; wait after sent clears it (R98)', async () => {
+    vi.useFakeTimers();
+    core.setDrafts([draft('1')]);
+    core.markSent(['1'], page);
+    const p1 = core.wait(1000);
+    core.deliver(payloadOf(['1']));
+    await p1;
+    core.done({ summary: '색 변경', selectors: [], changedFiles: [] });
+    const p2 = core.wait(1000);
+    expect(core.session.agent).toEqual({ status: 'waiting', text: '색 변경' });
+    await vi.advanceTimersByTimeAsync(1000);
+    await p2;
+
+    const p2b = core.wait(50); // I1: pending으로 풀린 뒤 재wait해도 done 요약 유지
+    expect(core.session.agent).toEqual({ status: 'waiting', text: '색 변경' });
+    await vi.advanceTimersByTimeAsync(50);
+    await expect(p2b).resolves.toEqual({ status: 'pending' });
+    expect(core.session.agent).toEqual({ status: 'waiting', text: '색 변경' });
+
+    const store2 = new Store(mkdtempSync(join(tmpdir(), 'cobro-')));
+    const core2 = new SessionCore(store2);
+    core2.setDrafts([draft('1')]);
+    core2.markSent(['1'], page);
+    const p3 = core2.wait(1000);
+    expect(core2.session.agent).toEqual({ status: 'waiting', text: '' });
+    await vi.advanceTimersByTimeAsync(1000);
+    await p3;
+    vi.useRealTimers();
   });
 });

@@ -263,3 +263,22 @@ test('toolbar chip and detail are separate — no duplicated label', async ({ co
   await expect(page.locator(`${HOST} .chip:not(.strategy)`)).toHaveText(/완료/);
   await expect(page.locator(`${HOST} .status`)).toContainText('ok');
 });
+
+test('done summary stays in the detail while waiting, until a new draft starts (R98)', async ({ cobroPage: page, bridge }) => {
+  bridge.core.setStrategy('none');
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await selectAt(page, '#target');
+  await page.locator(`${HOST} textarea`).fill('색 변경');
+  const waiting = bridge.core.wait(10_000);
+  await page.locator(`${HOST} button.send`).click();
+  await waiting;
+  bridge.done({ summary: '완료: 색 변경', selectors: ['#target'], changedFiles: ['x.tsx'] });
+  bridge.core.wait(10_000);
+  await expect(page.locator(`${HOST} .chip:not(.strategy)`)).toContainText('대기 중');
+  await expect(page.locator(`${HOST} .status`)).toContainText('✓ 완료: 색 변경');
+  await expect(page.locator(`${HOST} .status-in`)).not.toHaveClass(/enter/); // 슬라이드인 애니메이션이 끝난 뒤 촬영(M2)
+  const box = (await page.locator(`${HOST} .toolbar`).boundingBox())!;
+  await page.screenshot({ path: 'screenshots/toolbar-done-waiting.png', clip: { x: box.x - 8, y: box.y - 8, width: box.width + 16, height: box.height + 16 } });
+  await selectAt(page, '#card');
+  await expect(page.locator(`${HOST} .status`)).not.toContainText('완료');
+});

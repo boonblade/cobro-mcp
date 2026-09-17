@@ -99,6 +99,7 @@ const T = {
   ko: {
     agentIdle: '에이전트 미연결', agentWaiting: '피드백 대기 중', agentSent: '전송됨 — 에이전트 응답 대기',
     agentWorking: '수정 중', agentDone: '완료',
+    doneResult: (s: string) => `✓ ${T.agentDone}: ${s}`,
     chipIdle: '미연결', chipWaiting: '대기 중', chipSent: '전송됨', chipWorking: '수정 중', chipDone: '완료', chipOff: '연결 끊김',
     agentSentDetail: '에이전트 응답 대기',
     disconnected: '연결 끊김 — 재연결 중',
@@ -119,6 +120,7 @@ const T = {
   en: {
     agentIdle: 'Agent not connected', agentWaiting: 'Waiting for your feedback', agentSent: 'Sent — waiting for the agent',
     agentWorking: 'Working', agentDone: 'Done',
+    doneResult: (s: string) => `✓ ${T.agentDone}: ${s}`,
     chipIdle: 'Offline', chipWaiting: 'Waiting', chipSent: 'Sent', chipWorking: 'Working', chipDone: 'Done', chipOff: 'Disconnected',
     agentSentDetail: 'Waiting for the agent',
     disconnected: 'Disconnected — reconnecting',
@@ -273,6 +275,7 @@ export function createUI(h: UIHandlers) {
     else {
       let text: string;
       if (vm.agent.status === 'sent' || vm.agent.status === 'working' || vm.agent.status === 'done') text = AGENT_TEXT[vm.agent.status](vm.agent.text);
+      else if (vm.agent.status === 'waiting' && vm.agent.text && !hasElements && (cur?.note.trim() ?? '') === '') text = T.doneResult(stripStatusLabel(vm.agent.text, LABELS.done));
       else if (hasElements && cur!.note.trim() !== '') text = T.hintSend;
       else if (vm.selecting && !hasElements) text = T.hintClick;
       else if (vm.selecting) text = T.hintMore(cur!.elements.length);
