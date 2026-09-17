@@ -4,6 +4,10 @@
 
 **Meet Cobro: Your Co-Agent, Your Browser.**
 
+![Pick an element, write a note, press Send — the agent edits the source and the page updates](https://raw.githubusercontent.com/boonblade/cobro-mcp/master/assets/demo.gif)
+
+Stop describing the screen to your agent. Point at it.
+
 Cobro = **co-browse**. The human and the agent watch the same screen together.
 
 Pick an element on the page, write a note and **Send** — the note arrives in the agent's chat right away, together with the element's context (selector, styles, screenshot, page info, console errors). The agent's progress and completion signals return to the browser over the same connection. MCP server + local WebSocket + page overlay. The target project's source is never touched (the only thing created is a `.cobro/` folder).
@@ -94,7 +98,7 @@ If `wait` returns `pending`, call it again (not an error). If `browserGone: true
 | `elements[].text` | `textContent`, whitespace collapsed, first 40 characters |
 | `elements[].rect` | `{ x, y, w, h }` in page coordinates (scroll included), integers |
 | `elements[].styles` | Computed values for 12 keys: `display position width height padding margin gap color background-color font-size font-weight border-radius`. `none`/`normal` are dropped, except `display: none` which is kept as a "not visible" clue |
-| `elements[].react` | `{ component, source? }` from React dev builds only; key omitted otherwise |
+| `elements[].react` | `{ component, source? }` from React dev builds only; key omitted otherwise. `source` (file:line) needs React ≤ 18 — React 19 removed `_debugSource`, so only `component` arrives |
 | `elements[].missing` | `true` when the selector no longer matches after re-injection (rare) |
 | `console[]` | `level` ∈ `error` `warning` `pageerror` `requestfailed`; `text` up to 300 chars; identical messages merged with `count`; newest 10 by `last` |
 | `refreshStrategy` | Strategy `done` will apply: `none` / `reload` / `event` |

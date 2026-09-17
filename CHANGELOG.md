@@ -3,6 +3,8 @@
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
+### Added
+- README: demo GIF of the core loop (pick → note → Send → done) and a note that React 19 reports `react.component` without `source`.
 ### Changed
 - `close` deletes screenshots of finished batches and the manual screenshot folder; manual screenshots are capped at 50 during a session.
 

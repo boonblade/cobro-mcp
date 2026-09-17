@@ -4,6 +4,10 @@
 
 **Meet Cobro: Your Co-Agent, Your Browser.**
 
+![요소를 고르고 메모를 써서 Send — 에이전트가 소스를 고치고 화면이 갱신된다](https://raw.githubusercontent.com/boonblade/cobro-mcp/master/assets/demo.gif)
+
+화면을 설명하지 말고, 직접 가리키세요.
+
 Cobro = **co-browse**. 사람과 에이전트가 같은 화면을 함께 본다.
 
 화면에서 요소를 고르고 메모를 써서 **Send**하면, 그 메모가 요소 맥락(선택자·스타일·스크린샷·페이지 정보·콘솔 에러)과 함께 에이전트 대화에 바로 도착한다. 에이전트의 진행·완료 신호는 같은 연결로 브라우저에 즉시 돌아온다. MCP 서버 + 로컬 WebSocket + 페이지 오버레이. 대상 프로젝트 소스는 건드리지 않는다(생기는 것은 `.cobro/` 하나).
@@ -94,7 +98,7 @@ claude mcp add -s user cobro -- npx -y cobro-mcp@latest
 | `elements[].text` | `textContent`를 공백 정규화한 뒤 앞 40자 |
 | `elements[].rect` | `{ x, y, w, h }` 페이지 좌표(스크롤 포함), 정수 |
 | `elements[].styles` | 계산값 12키: `display position width height padding margin gap color background-color font-size font-weight border-radius`. `none`/`normal`은 생략하되 `display: none`은 "안 보임" 단서로 남긴다 |
-| `elements[].react` | React dev 빌드에서만 `{ component, source? }`. 아니면 키 자체가 없다 |
+| `elements[].react` | React dev 빌드에서만 `{ component, source? }`. 아니면 키 자체가 없다. `source`(파일:행)는 React 18까지 — React 19는 `_debugSource`를 없애서 `component`만 온다 |
 | `elements[].missing` | 재주입 뒤 선택자로 못 찾으면 `true`(드묾) |
 | `console[]` | `level` ∈ `error` `warning` `pageerror` `requestfailed`, `text` 300자, 같은 메시지는 `count`로 합산, `last` 기준 최신 10건 |
 | `refreshStrategy` | `done` 때 적용될 전략 `none` / `reload` / `event` |
