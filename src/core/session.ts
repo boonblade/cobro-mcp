@@ -12,8 +12,10 @@ export class SessionCore extends EventEmitter {
   constructor(private readonly store: Store) {
     super();
     this.s = store.load() ?? emptySession();
-    // 재시작 시 'waiting'/'working'은 의미가 없다 → idle
-    if (this.s.agent.status === 'waiting' || this.s.agent.status === 'working') this.s.agent = { status: 'idle', text: '' };
+    // 재시작 시 'waiting'/'working'은 의미가 없다 → idle. 단, 'waiting'의 text(직전 done 요약일 수 있다)는
+    // 상태의 주인이 서버이므로 재시작해도 남긴다(M1)
+    if (this.s.agent.status === 'waiting') this.s.agent = { status: 'idle', text: this.s.agent.text };
+    else if (this.s.agent.status === 'working') this.s.agent = { status: 'idle', text: '' };
   }
   get session(): Session { return this.s; }
 
@@ -55,7 +57,7 @@ export class SessionCore extends EventEmitter {
     if (this.waiter) { const prev = this.waiter; this.waiter = null; prev.resolve({ status: 'pending' }); }
     const queued = this.queue.shift();
     if (queued) return Promise.resolve({ status: 'sent', ...queued });
-    const keep = this.s.agent.status === 'done' ? this.s.agent.text : '';
+    const keep = (this.s.agent.status === 'done' || this.s.agent.status === 'waiting') ? this.s.agent.text : '';
     this.s.agent = { status: 'waiting', text: keep };
     this.commit();
     const tickMs = opts.tickMs ?? 30_000;
