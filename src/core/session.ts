@@ -82,6 +82,12 @@ export class SessionCore extends EventEmitter {
     w.resolve({ status: 'pending', browserGone: true });
     return true;
   }
+  /** 미완 묶음의 샷만 남기고 done 묶음의 샷과 manual/ 전체를 지운다(close() 전용, R81·R82) */
+  closeSession(): void {
+    this.store.clearShots(this.s.batches.filter((b) => b.status !== 'done').map((b) => b.id));
+    for (const b of this.s.batches) if (b.status === 'done') b.screenshot = undefined;
+    this.commit();
+  }
   setAgentText(text: string): void { this.s.agent = { status: 'working', text }; this.commit(); }
   done(info: DoneInfo): Batch[] {
     const now = new Date().toISOString();

@@ -51,4 +51,25 @@ describe('Store', () => {
     expect(existsSync(manual)).toBe(true); // 하위 폴더는 prune 대상이 아니다
     expect(readdirSync(join(dir, 'shots')).filter((f) => f.endsWith('.png'))).toHaveLength(1);
   });
+  it('clearShots keeps only listed ids and removes manual/ entirely', () => {
+    const s = new Store(dir);
+    for (const id of ['a', 'b', 'c']) writeFileSync(s.shotPath(id), 'x');
+    writeFileSync(s.manualShotPath('m'), 'x');
+    s.clearShots(['a']);
+    expect(readdirSync(join(dir, 'shots')).filter((f) => f.endsWith('.png'))).toEqual(['a.png']);
+    expect(existsSync(join(dir, 'shots', 'manual'))).toBe(false);
+  });
+  it('manualShotPath caps manual/ at 50, deleting the oldest', () => {
+    const s = new Store(dir);
+    const baseTime = Date.now();
+    for (let i = 0; i < 51; i++) {
+      const p = s.manualShotPath('m' + i);
+      writeFileSync(p, 'x');
+      const mtime = new Date(baseTime + i * 1000);
+      utimesSync(p, mtime, mtime);
+    }
+    const left = readdirSync(join(dir, 'shots', 'manual')).filter((f) => f.endsWith('.png'));
+    expect(left).toHaveLength(50);
+    expect(left).not.toContain('m0.png');
+  });
 });

@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, readdirSync, statSync, unlinkSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, readdirSync, statSync, unlinkSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Session } from './types.js';
 
@@ -28,16 +28,28 @@ export class Store {
   }
   private static safe(name: string): string { return name.replace(/[^a-zA-Z0-9_-]/g, '_'); }
   shotPath(batchId: string): string { return join(this.shots, Store.safe(batchId) + '.png'); }
-  /** 사람이 요청한 스크린샷. prune은 shots/ 최상위만 훑으므로 여기 놓인 파일은 배치 샷을 밀어내지 않는다 */
+  /** 사람이 요청한 스크린샷. manual/은 그 자체로 최신 49장 + 이번 파일 = 50장 상한(R82) */
   manualShotPath(name: string): string {
     const dir = join(this.shots, 'manual');
     mkdirSync(dir, { recursive: true });
+    this.pruneDir(dir, new Set(), 49);
     return join(dir, Store.safe(name) + '.png');
   }
   pruneShots(keepIds: string[], max = 50): void {
+    this.pruneDir(this.shots, new Set(keepIds.map((id) => this.shotPath(id))), max);
+  }
+  /** close() 시 미완 묶음(keepIds)의 샷만 남기고 나머지와 manual/ 전체를 지운다(R81·R82) */
+  clearShots(keepIds: string[]): void {
     const keep = new Set(keepIds.map((id) => this.shotPath(id)));
-    // shots/ 최상위의 .png만 대상 — 하위 폴더(manual/)는 재귀하지 않는다
-    const files = readdirSync(this.shots).filter((f) => f.endsWith('.png')).map((f) => join(this.shots, f))
+    for (const f of readdirSync(this.shots).filter((f) => f.endsWith('.png'))) {
+      const p = join(this.shots, f);
+      if (!keep.has(p)) unlinkSync(p);
+    }
+    rmSync(join(this.shots, 'manual'), { recursive: true, force: true });
+  }
+  private pruneDir(dir: string, keep: Set<string>, max: number): void {
+    // dir의 .png만 대상 — 하위 폴더는 재귀하지 않는다
+    const files = readdirSync(dir).filter((f) => f.endsWith('.png')).map((f) => join(dir, f))
       .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs); // 최신 우선
     let kept = 0;
     for (const f of files) {
