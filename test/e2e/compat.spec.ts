@@ -53,6 +53,17 @@ test('refresh strategy is a chip, not hint text', async ({ cobroPage: page, brid
   await expect(chip2).toHaveAttribute('title', /(none|reload|event)/);
   bridge.core.setStrategy('event');
   await expect(chip2).toHaveText('event');
+  await expect(chip2).toHaveAttribute('title', /event/);
   await expect(page.locator('[data-cobro-host] .status')).not.toContainText('갱신');
   await expect(page.locator('[data-cobro-host] .status')).not.toContainText('refresh');
+});
+
+test('hidden strategy chip stays display:none (B1)', async ({ cobroPage: page }) => {
+  await page.goto('http://127.0.0.1:4174/');
+  const chip2 = page.locator('[data-cobro-host] .chip.strategy');
+  await expect(chip2).toBeVisible();
+  await chip2.evaluate((el) => { (el as HTMLElement).hidden = true; });
+  await expect(chip2).toBeHidden();
+  await chip2.evaluate((el) => { (el as HTMLElement).hidden = false; });
+  await expect(chip2).toBeVisible();
 });

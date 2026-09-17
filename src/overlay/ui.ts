@@ -44,6 +44,7 @@ const CSS = `
 .els button{background:transparent;border-color:transparent;color:var(--fg-5);padding:0 6px}
 .els button:hover{background:var(--hover);color:var(--fg-hover)}
 .chip{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;background:var(--chip);border:1px solid transparent;color:var(--fg-3);white-space:nowrap;cursor:default;user-select:none}
+.chip[hidden]{display:none}
 .chip .ico{display:inline-flex;line-height:0}
 .chip.strategy .ico svg{width:12px;height:12px}
 .chip.off{color:var(--warn);border-color:var(--chip-off-border)}
@@ -104,7 +105,6 @@ const T = {
     hintSend: 'Send로 전송하세요', hintClick: '페이지에서 요소를 클릭하세요 · Esc로 해제',
     hintMore: (n: number) => `요소 ${n}개 선택 · 더 고르거나 메모를 적으세요`,
     hintNote: '메모를 적고 Send를 누르세요', hintPick: 'Ctrl+Shift+F 또는 Select로 요소를 고르세요',
-    refresh: '갱신',
     tipStrategy: (s: RefreshStrategy) => `갱신 전략: ${s} — ${{ none: 'HMR이 있어 done 뒤 새로고침 없음', reload: 'done 뒤 페이지 새로고침', event: '앱이 cobro:done 이벤트로 직접 갱신' }[s]}`,
     selCount: (n: number) => `요소 ${n}개 선택됨`,
     selNone: '선택된 요소 없음 · 메모만 보내도 됩니다',
@@ -125,7 +125,6 @@ const T = {
     hintSend: 'Press Send to deliver', hintClick: 'Click an element on the page · Esc to exit',
     hintMore: (n: number) => `${n} selected · pick more or write a note`,
     hintNote: 'Write a note, then press Send', hintPick: 'Press Ctrl+Shift+F or Select to pick an element',
-    refresh: 'refresh',
     tipStrategy: (s: RefreshStrategy) => `Refresh strategy: ${s} — ${{ none: 'HMR present — no reload after done', reload: 'page reloads after done', event: 'the app refreshes itself on cobro:done' }[s]}`,
     selCount: (n: number) => `${n} element(s) selected`,
     selNone: 'No element selected · a note alone is fine',
