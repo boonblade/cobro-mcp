@@ -2,6 +2,8 @@ import type { AgentStatus, Batch, RefreshStrategy, Theme, UiPrefs } from '../cor
 import { THEMES } from '../core/types.js';
 import { stripStatusLabel } from './status-text.js';
 import type { ResolvedTheme } from './theme.js';
+import { svg } from './icons.js';
+type IconName = Parameters<typeof svg>[0];
 
 export interface ViewModel { selecting: boolean; connected: boolean; agent: { status: AgentStatus; text: string }; strategy: RefreshStrategy | null; drafts: Batch[]; locked: boolean; prefs: UiPrefs }
 export interface UIHandlers { onToggleSelect(): void; onNoteInput(id: string, note: string): void; onRemoveElement(id: string, index: number): void; onSend(): void; onSettings(patch: { theme?: Theme }): void }
@@ -81,6 +83,11 @@ textarea{width:100%;height:54px;resize:none;font:inherit;color:var(--fg);backgro
 .seg button.on{background:var(--bg-3);color:var(--fg)}
 .seg button:disabled{opacity:.5;cursor:not-allowed}
 .pop-note{margin-top:6px;color:var(--warn);font-size:11px}
+.ib{display:inline-flex;align-items:center;padding:4px 7px}
+.ib .ico{display:inline-flex;line-height:0}
+.ib .lbl{max-width:0;opacity:0;overflow:hidden;white-space:nowrap;margin-left:0;transition:max-width .1s ease-in,opacity .1s ease-in,margin-left .1s ease-in}
+.ib:hover .lbl,.ib:focus-visible .lbl{max-width:9ch;opacity:1;margin-left:5px;transition-duration:.15s;transition-timing-function:ease-out}
+@media (prefers-reduced-motion: reduce){.ib .lbl{transition:none}}
 `;
 
 const LANG = navigator.language.toLowerCase().startsWith('ko') ? 'ko' : 'en';
@@ -142,7 +149,15 @@ export function createUI(h: UIHandlers) {
   const root = host.attachShadow({ mode: 'open' });
   const style = document.createElement('style'); style.textContent = CSS;
   const toolbar = document.createElement('div'); toolbar.className = 'toolbar';
-  const selectBtn = document.createElement('button'); selectBtn.textContent = 'Select'; selectBtn.title = T.tipSelect; selectBtn.onclick = () => { closePop(); h.onToggleSelect(); };
+  const iconBtn = (icon: IconName, label: string, title: string) => {
+    const btn = document.createElement('button'); btn.className = 'ib'; btn.title = title; btn.setAttribute('aria-label', label);
+    const ico = document.createElement('span'); ico.className = 'ico'; ico.innerHTML = svg(icon);
+    const lbl = document.createElement('span'); lbl.className = 'lbl'; lbl.textContent = label;
+    btn.append(ico, lbl);
+    return { btn, ico, lbl };
+  };
+  const selectParts = iconBtn('select', 'Select', T.tipSelect);
+  const selectBtn = selectParts.btn; selectBtn.onclick = () => { closePop(); h.onToggleSelect(); };
   const chip = document.createElement('span'); chip.className = 'chip';
   const dot = document.createElement('span'); dot.className = 'dot'; dot.textContent = '●';
   const chipLabel = document.createElement('span'); chipLabel.className = 'chip-label';
@@ -150,8 +165,10 @@ export function createUI(h: UIHandlers) {
   const status = document.createElement('span'); status.className = 'status';
   const statusIn = document.createElement('span'); statusIn.className = 'status-in';
   status.append(statusIn);
-  const gearBtn = document.createElement('button'); gearBtn.textContent = '⚙'; gearBtn.title = T.tipSettings;
-  const collapseBtn = document.createElement('button'); collapseBtn.textContent = 'Collapse'; collapseBtn.title = T.tipCollapse;
+  const gearParts = iconBtn('settings', T.tipSettings, T.tipSettings);
+  const gearBtn = gearParts.btn;
+  const collapseParts = iconBtn('collapse', 'Collapse', T.tipCollapse);
+  const collapseBtn = collapseParts.btn;
   toolbar.append(selectBtn, chip, status, gearBtn, collapseBtn);
   const pop = document.createElement('div'); pop.className = 'pop';
   const popRow = document.createElement('div'); popRow.className = 'pop-row';
@@ -187,7 +204,13 @@ export function createUI(h: UIHandlers) {
   const panel = document.createElement('div'); panel.className = 'panel';
   root.append(style, toolbar, pop, panel);
   let collapsed = false; let lastVm: ViewModel | null = null; let lastHint: string | null = null;
-  collapseBtn.onclick = () => { collapsed = !collapsed; collapseBtn.textContent = collapsed ? 'Expand' : 'Collapse'; if (lastVm) render(lastVm); };
+  collapseBtn.onclick = () => {
+    collapsed = !collapsed;
+    collapseParts.lbl.textContent = collapsed ? 'Expand' : 'Collapse';
+    collapseBtn.setAttribute('aria-label', collapsed ? 'Expand' : 'Collapse');
+    collapseParts.ico.innerHTML = svg(collapsed ? 'expand' : 'collapse');
+    if (lastVm) render(lastVm);
+  };
   const textareas = new Map<string, HTMLTextAreaElement>();
 
   let leaveTimer: ReturnType<typeof setTimeout> | undefined;

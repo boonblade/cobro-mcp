@@ -2,7 +2,7 @@ import { test, expect, HOST } from './helpers.js';
 
 test('settings popover selects a theme and the server persists it', async ({ cobroPage: page, bridge }) => {
   await page.goto('http://127.0.0.1:4173/basic.html');
-  const gear = page.locator(`${HOST} .toolbar button:text("⚙")`);
+  const gear = page.locator(`${HOST} .ib[aria-label="설정"]`);
   const pop = page.locator(`${HOST} .pop`);
   await gear.click();
   await expect(pop).toHaveClass(/show/);
@@ -34,7 +34,7 @@ test.describe('COBRO_THEME pins the theme', () => {
   test.use({ envTheme: 'frost' });
   test('COBRO_THEME pins the theme', async ({ cobroPage: page }) => {
     await page.goto('http://127.0.0.1:4173/basic.html');
-    await page.locator(`${HOST} .toolbar button:text("⚙")`).click();
+    await page.locator(`${HOST} .ib[aria-label="설정"]`).click();
     await expect(page.locator(`${HOST} .seg button`).first()).toBeDisabled();
     const count = await page.locator(`${HOST} .seg button`).count();
     for (let i = 0; i < count; i++) await expect(page.locator(`${HOST} .seg button`).nth(i)).toBeDisabled();
