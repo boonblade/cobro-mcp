@@ -7,6 +7,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - README: demo GIF of the core loop (pick → note → Send → done) and a note that React 19 reports `react.component` without `source`.
 ### Changed
 - `close` deletes screenshots of finished batches and the manual screenshot folder; manual screenshots are capped at 50 during a session.
+### Fixed
+- Light theme: the pick-mode hover badge (selector + size) rendered white-on-white; it now uses a dark text color.
 
 ## [0.6.0] — 2026-09-17
 ### Added

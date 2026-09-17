@@ -90,3 +90,23 @@ test.describe('COBRO_THEME pins the theme', () => {
     await expect(page.locator(HOST)).toHaveAttribute('data-theme', 'frost');
   });
 });
+
+test.describe('light theme hover badge (부채 #5)', () => {
+  test.use({ envTheme: 'light' });
+  test('light theme hover badge text is readable', async ({ cobroPage: page }) => {
+    await page.goto('http://127.0.0.1:4173/basic.html');
+    await page.keyboard.press('Control+Shift+F');
+    const b = (await page.locator('#target').boundingBox())!;
+    await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+    const badge = page.locator(`${HOST} .hover-badge`);
+    await expect(badge).toBeVisible();
+    await expect(badge).toContainText('#target');
+    await page.screenshot({ path: 'screenshots/badge-light.png' });
+    const { color, background } = await badge.evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return { color: cs.color, background: cs.backgroundColor };
+    });
+    expect(color).not.toBe(background);
+    expect(color).toBe('rgb(23, 27, 40)');
+  });
+});
