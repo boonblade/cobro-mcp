@@ -1,9 +1,10 @@
-import type { AgentStatus, Batch, RefreshStrategy } from '../core/types.js';
+import type { AgentStatus, Batch, RefreshStrategy, Theme, UiPrefs } from '../core/types.js';
+import { THEMES } from '../core/types.js';
 import { stripStatusLabel } from './status-text.js';
 import type { ResolvedTheme } from './theme.js';
 
-export interface ViewModel { selecting: boolean; connected: boolean; agent: { status: AgentStatus; text: string }; strategy: RefreshStrategy | null; drafts: Batch[]; locked: boolean }
-export interface UIHandlers { onToggleSelect(): void; onNoteInput(id: string, note: string): void; onRemoveElement(id: string, index: number): void; onSend(): void }
+export interface ViewModel { selecting: boolean; connected: boolean; agent: { status: AgentStatus; text: string }; strategy: RefreshStrategy | null; drafts: Batch[]; locked: boolean; prefs: UiPrefs }
+export interface UIHandlers { onToggleSelect(): void; onNoteInput(id: string, note: string): void; onRemoveElement(id: string, index: number): void; onSend(): void; onSettings(patch: { theme?: Theme }): void }
 
 const CSS = `
 :host{
@@ -71,6 +72,15 @@ textarea{width:100%;height:54px;resize:none;font:inherit;color:var(--fg);backgro
 .glass{z-index:0}
 .hover-box,.hover-badge,.band,.flash{z-index:1}
 .toolbar,.panel{z-index:2}
+.pop{position:fixed;bottom:56px;left:50%;transform:translateX(-50%);display:none;min-width:260px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;box-shadow:var(--shadow);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);pointer-events:auto;color:var(--fg-2)}
+.pop.show{display:block}
+.pop-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.pop-label{color:var(--fg-3)}
+.seg{display:inline-flex;gap:2px;background:var(--chip);border-radius:999px;padding:2px}
+.seg button{border:1px solid transparent;background:transparent;padding:2px 9px}
+.seg button.on{background:var(--bg-3);color:var(--fg)}
+.seg button:disabled{opacity:.5;cursor:not-allowed}
+.pop-note{margin-top:6px;color:var(--warn);font-size:11px}
 `;
 
 const LANG = navigator.language.toLowerCase().startsWith('ko') ? 'ko' : 'en';
@@ -92,6 +102,8 @@ const T = {
     tipSend: '선택한 요소와 메모를 에이전트에 전송',
     tipSendLocked: '에이전트가 작업 중 — done 뒤에 보낼 수 있습니다',
     tipRemove: '이 요소 빼기',
+    tipSettings: '설정', theme: '테마', themeAuto: '자동', themeDark: '어둡게', themeLight: '밝게', themeFrost: '유리',
+    themeLocked: 'COBRO_THEME 환경 변수로 고정됨',
   },
   en: {
     agentIdle: 'Agent not connected', agentWaiting: 'Waiting for your feedback', agentSent: 'Sent — waiting for the agent',
@@ -110,8 +122,11 @@ const T = {
     tipSend: 'Send the selected elements and note to the agent',
     tipSendLocked: 'Agent is working — you can send after done',
     tipRemove: 'Remove this element',
+    tipSettings: 'Settings', theme: 'Theme', themeAuto: 'Auto', themeDark: 'Dark', themeLight: 'Light', themeFrost: 'Frost',
+    themeLocked: 'Pinned by COBRO_THEME',
   },
 }[LANG];
+const THEME_LABEL: Record<Theme, string> = { auto: T.themeAuto, dark: T.themeDark, light: T.themeLight, frost: T.themeFrost };
 const LABELS = { working: ['수정 중', 'Editing', 'Working'], done: ['완료', 'Done'] };
 const AGENT_TEXT: Record<AgentStatus, (t: string) => string> = {
   idle: () => T.agentIdle, waiting: () => T.agentWaiting, sent: () => T.agentSentDetail,
@@ -127,7 +142,7 @@ export function createUI(h: UIHandlers) {
   const root = host.attachShadow({ mode: 'open' });
   const style = document.createElement('style'); style.textContent = CSS;
   const toolbar = document.createElement('div'); toolbar.className = 'toolbar';
-  const selectBtn = document.createElement('button'); selectBtn.textContent = 'Select'; selectBtn.title = T.tipSelect; selectBtn.onclick = () => h.onToggleSelect();
+  const selectBtn = document.createElement('button'); selectBtn.textContent = 'Select'; selectBtn.title = T.tipSelect; selectBtn.onclick = () => { closePop(); h.onToggleSelect(); };
   const chip = document.createElement('span'); chip.className = 'chip';
   const dot = document.createElement('span'); dot.className = 'dot'; dot.textContent = '●';
   const chipLabel = document.createElement('span'); chipLabel.className = 'chip-label';
@@ -135,10 +150,42 @@ export function createUI(h: UIHandlers) {
   const status = document.createElement('span'); status.className = 'status';
   const statusIn = document.createElement('span'); statusIn.className = 'status-in';
   status.append(statusIn);
+  const gearBtn = document.createElement('button'); gearBtn.textContent = '⚙'; gearBtn.title = T.tipSettings;
   const collapseBtn = document.createElement('button'); collapseBtn.textContent = 'Collapse'; collapseBtn.title = T.tipCollapse;
-  toolbar.append(selectBtn, chip, status, collapseBtn);
+  toolbar.append(selectBtn, chip, status, gearBtn, collapseBtn);
+  const pop = document.createElement('div'); pop.className = 'pop';
+  const popRow = document.createElement('div'); popRow.className = 'pop-row';
+  const popLabel = document.createElement('span'); popLabel.className = 'pop-label'; popLabel.textContent = T.theme;
+  const seg = document.createElement('div'); seg.className = 'seg';
+  const segButtons = THEMES.map((key) => {
+    const btn = document.createElement('button'); btn.textContent = THEME_LABEL[key]; btn.dataset.theme = key;
+    btn.onclick = () => h.onSettings({ theme: key });
+    return btn;
+  });
+  seg.append(...segButtons);
+  popRow.append(popLabel, seg);
+  const popNote = document.createElement('div'); popNote.className = 'pop-note'; popNote.textContent = T.themeLocked;
+  pop.append(popRow, popNote);
+  let popOpen = false;
+  let popCloseListeners: { doc: (e: Event) => void; key: (e: KeyboardEvent) => void } | null = null;
+  const closePop = () => {
+    if (!popOpen) return;
+    pop.classList.remove('show');
+    popOpen = false;
+    if (popCloseListeners) { document.removeEventListener('pointerdown', popCloseListeners.doc, true); window.removeEventListener('keydown', popCloseListeners.key, true); popCloseListeners = null; }
+  };
+  const openPop = () => {
+    pop.classList.add('show');
+    popOpen = true;
+    const onDocPointerDown = (e: Event) => { const path = e.composedPath(); if (!path.includes(pop) && !path.includes(gearBtn)) closePop(); };
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') closePop(); };
+    document.addEventListener('pointerdown', onDocPointerDown, true);
+    window.addEventListener('keydown', onKeyDown, true);
+    popCloseListeners = { doc: onDocPointerDown, key: onKeyDown };
+  };
+  gearBtn.onclick = () => { if (popOpen) closePop(); else openPop(); };
   const panel = document.createElement('div'); panel.className = 'panel';
-  root.append(style, toolbar, panel);
+  root.append(style, toolbar, pop, panel);
   let collapsed = false; let lastVm: ViewModel | null = null; let lastHint: string | null = null;
   collapseBtn.onclick = () => { collapsed = !collapsed; collapseBtn.textContent = collapsed ? 'Expand' : 'Collapse'; if (lastVm) render(lastVm); };
   const textareas = new Map<string, HTMLTextAreaElement>();
@@ -184,6 +231,8 @@ export function createUI(h: UIHandlers) {
     const wasTa = active instanceof HTMLTextAreaElement ? active : null;
     const sel: [number, number] | null = wasTa ? [wasTa.selectionStart, wasTa.selectionEnd] : null;
     selectBtn.classList.toggle('on', vm.selecting);
+    for (const btn of segButtons) { btn.classList.toggle('on', btn.dataset.theme === vm.prefs.theme); btn.disabled = vm.prefs.themeLocked; }
+    popNote.hidden = !vm.prefs.themeLocked;
     const cur = vm.drafts[vm.drafts.length - 1];
     const hasElements = !!cur && cur.elements.length > 0;
     const strategyText = vm.strategy ? `${T.refresh}: ${vm.strategy}` : '';
@@ -240,7 +289,7 @@ export function createUI(h: UIHandlers) {
     const row = el('div', 'row');
     const send = el('button', 'send', 'Send') as HTMLButtonElement; send.disabled = vm.locked;
     send.title = vm.locked ? T.tipSendLocked : T.tipSend;
-    send.onclick = () => h.onSend();
+    send.onclick = () => { closePop(); h.onSend(); };
     row.append(send);
     panel.append(row);
     for (const id of [...textareas.keys()]) if (!vm.drafts.some((b) => b.id === id)) textareas.delete(id);

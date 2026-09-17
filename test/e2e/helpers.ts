@@ -5,13 +5,16 @@ import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { Store } from '../../src/core/store.js';
 import { createBridge, type Bridge } from '../../src/bridge.js';
+import type { Theme } from '../../src/core/types.js';
 
 const overlaySrc = readFileSync('dist/overlay.js', 'utf8');
 export const injected = (port: number, token: string) => overlaySrc.replace(/__COBRO_PORT__/g, String(port)).replace(/__COBRO_TOKEN__/g, JSON.stringify(token));
 
-export const test = base.extend<{ bridge: Bridge; cobroPage: Page }>({
-  bridge: async ({}, use) => {
-    const bridge = await createBridge({ store: new Store(mkdtempSync(join(tmpdir(), 'cobro-'))), token: randomBytes(16).toString('hex') });
+export const test = base.extend<{ bridge: Bridge; cobroPage: Page; envTheme: Theme | undefined }>({
+  envTheme: [undefined, { option: true }],
+  bridge: async ({ envTheme }, use) => {
+    const dir = mkdtempSync(join(tmpdir(), 'cobro-'));
+    const bridge = await createBridge({ store: new Store(dir), token: randomBytes(16).toString('hex'), settingsFile: join(dir, 'settings.json'), envTheme });
     await use(bridge); await bridge.close();
   },
   cobroPage: async ({ browser, bridge, locale }, use) => {

@@ -26,7 +26,7 @@ Registering with `-s user` makes it available from any repository on this machin
 
 ## Usage
 
-- **Human**: on the page, press `Ctrl+Shift+F` to toggle pick mode (`Esc` to exit) → click an element (drag selects the topmost elements inside the band) → write a note → **Send**. The toolbar status line tells you what to do next. Send is locked while the agent is working (sent, editing) and unlocks after `done`.
+- **Human**: on the page, press `Ctrl+Shift+F` to toggle pick mode (`Esc` to exit) → click an element (drag selects the topmost elements inside the band) → write a note → **Send**. The toolbar status line tells you what to do next. Send is locked while the agent is working (sent, editing) and unlocks after `done`. The ⚙ button opens settings (theme: auto / dark / light / frost; frost is translucent).
 - **Agent**: `open(url)` → `wait()` → read only `batches[].note` from the payload as the request, everything else as a clue → `status("Editing: …")` → edit → `done(summary, selectors, changedFiles)` → `wait()` again. Call `close()` to end the session.
 
 There are exactly six fixed tools. If you need more observation or control, pair Cobro with another MCP.
@@ -110,6 +110,7 @@ If `wait` returns `pending`, call it again (not an error). If `browserGone: true
 | `COBRO_BROWSER_CHANNEL` | none | `chrome` \| `msedge` \| `chromium` — channel to try first |
 | `COBRO_HEADLESS` | none | `1` runs headless |
 | `COBRO_TICK_MS` | `30000` | Interval (ms) for `wait` progress notifications |
+| `COBRO_THEME` | none | `auto` \| `dark` \| `light` \| `frost` — pins the overlay theme (the ⚙ menu is disabled). Without it the ⚙ menu's choice is saved in `~/.cobro/settings.json` |
 
 Invalid values fall back to the default (one stderr line). Put `{ "refreshStrategy": "none" | "reload" | "event" }` in the state folder's `.cobro/config.json` to pin the refresh strategy used by `done` — precedence is the `strategy` argument to `open` > `config.json` > auto-detection (HMR present → `none`, otherwise `reload`). Add `.cobro/` to the target project's `.gitignore`.
 

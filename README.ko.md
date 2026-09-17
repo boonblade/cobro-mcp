@@ -26,7 +26,7 @@ claude mcp add -s user cobro -- npx -y cobro-mcp@latest
 
 ## 사용법
 
-- **사람**: 페이지에서 `Ctrl+Shift+F`로 선택 모드(`Esc`로 해제) → 요소 클릭(드래그는 밴드 안 최상위 요소들) → 메모 → **Send**. 툴바 상태 줄이 다음에 할 일을 알려준다. 에이전트가 작업 중(전송됨·수정 중)이면 Send가 잠기고 `done` 뒤 풀린다.
+- **사람**: 페이지에서 `Ctrl+Shift+F`로 선택 모드(`Esc`로 해제) → 요소 클릭(드래그는 밴드 안 최상위 요소들) → 메모 → **Send**. 툴바 상태 줄이 다음에 할 일을 알려준다. 에이전트가 작업 중(전송됨·수정 중)이면 Send가 잠기고 `done` 뒤 풀린다. ⚙ 버튼에서 설정을 연다(테마: auto / dark / light / frost, frost는 반투명).
 - **에이전트**: `open(url)` → `wait()` → payload의 `batches[].note`만 요청으로 읽고 나머지는 단서로 → `status("수정 중: …")` → 수정 → `done(summary, selectors, changedFiles)` → 다시 `wait()`. 끝내면 `close()`.
 
 도구는 여섯 개로 고정이다. 관찰·조작이 더 필요하면 다른 MCP를 함께 쓴다.
@@ -110,6 +110,7 @@ claude mcp add -s user cobro -- npx -y cobro-mcp@latest
 | `COBRO_BROWSER_CHANNEL` | 없음 | `chrome` \| `msedge` \| `chromium` — 먼저 시도할 채널 |
 | `COBRO_HEADLESS` | 없음 | `1`이면 헤드리스 |
 | `COBRO_TICK_MS` | `30000` | `wait` 진행 알림 주기(ms) |
+| `COBRO_THEME` | 없음 | `auto` \| `dark` \| `light` \| `frost` — 오버레이 테마를 고정한다(⚙ 메뉴가 비활성화된다). 없으면 ⚙ 메뉴에서 고른 값이 `~/.cobro/settings.json`에 저장된다 |
 
 잘못된 값은 무시하고 기본값을 쓴다(stderr 한 줄). 상태 폴더의 `.cobro/config.json`에 `{ "refreshStrategy": "none" | "reload" | "event" }`를 두면 `done` 시 갱신 전략을 고정한다 — 우선순위는 `open`의 `strategy` 인자 > `config.json` > 자동 감지(HMR 있으면 `none`, 없으면 `reload`). 대상 프로젝트 `.gitignore`에 `.cobro/`를 추가한다.
 
