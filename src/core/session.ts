@@ -55,7 +55,9 @@ export class SessionCore extends EventEmitter {
     if (this.waiter) { const prev = this.waiter; this.waiter = null; prev.resolve({ status: 'pending' }); }
     const queued = this.queue.shift();
     if (queued) return Promise.resolve({ status: 'sent', ...queued });
-    this.s.agent = { status: 'waiting', text: '' }; this.commit();
+    const keep = this.s.agent.status === 'done' ? this.s.agent.text : '';
+    this.s.agent = { status: 'waiting', text: keep };
+    this.commit();
     const tickMs = opts.tickMs ?? 30_000;
     const started = Date.now();
     return new Promise<WaitResult>((resolve) => {

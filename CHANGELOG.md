@@ -13,6 +13,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - The refresh strategy (none / reload / event) is shown as a second chip next to the agent state instead of trailing the hint text.
 ### Fixed
 - Settings popover: unselected theme labels were invisible in dark mode; popover and panel now share one corner radius.
+- The agent's done summary stays visible while it waits for the next request (it used to vanish the instant the agent called wait again).
 
 ## [0.5.0] — 2026-09-10
 ### Changed

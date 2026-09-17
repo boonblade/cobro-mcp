@@ -120,4 +120,27 @@ describe('SessionCore', () => {
     core.deliver(payloadOf(['z']));
     await expect(second).resolves.toMatchObject({ status: 'sent', payload: { batches: [{ id: 'z' }] } });
   });
+  it('wait after done keeps the summary; wait after sent clears it (R98)', async () => {
+    vi.useFakeTimers();
+    core.setDrafts([draft('1')]);
+    core.markSent(['1'], page);
+    const p1 = core.wait(1000);
+    core.deliver(payloadOf(['1']));
+    await p1;
+    core.done({ summary: '색 변경', selectors: [], changedFiles: [] });
+    const p2 = core.wait(1000);
+    expect(core.session.agent).toEqual({ status: 'waiting', text: '색 변경' });
+    await vi.advanceTimersByTimeAsync(1000);
+    await p2;
+
+    const store2 = new Store(mkdtempSync(join(tmpdir(), 'cobro-')));
+    const core2 = new SessionCore(store2);
+    core2.setDrafts([draft('1')]);
+    core2.markSent(['1'], page);
+    const p3 = core2.wait(1000);
+    expect(core2.session.agent).toEqual({ status: 'waiting', text: '' });
+    await vi.advanceTimersByTimeAsync(1000);
+    await p3;
+    vi.useRealTimers();
+  });
 });
