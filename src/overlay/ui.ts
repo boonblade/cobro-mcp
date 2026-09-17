@@ -1,4 +1,5 @@
 import type { AgentStatus, Batch, RefreshStrategy } from '../core/types.js';
+import { stripStatusLabel } from './status-text.js';
 
 export interface ViewModel { selecting: boolean; connected: boolean; agent: { status: AgentStatus; text: string }; strategy: RefreshStrategy | null; drafts: Batch[]; locked: boolean }
 export interface UIHandlers { onToggleSelect(): void; onNoteInput(id: string, note: string): void; onRemoveElement(id: string, index: number): void; onSend(): void }
@@ -18,12 +19,14 @@ const CSS = `
 .toolbar button.on{color:#fff;background:#e35d5d;border-color:#e35d5d}
 .els button{background:transparent;border-color:transparent;color:#8291b0;padding:0 6px}
 .els button:hover{background:#2e3a58;color:#fff}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;background:#161b2a;border:1px solid transparent;color:#aab6d0;white-space:nowrap;cursor:default;user-select:none}
+.chip.off{color:#f0b429;border-color:#4a3a1a}
 .dot{font-size:9px;line-height:1;color:#8291b0}
 .dot.waiting{color:#4fd18b}
 .dot.sent{color:#f0b429}
 .dot.working{color:#9db8ef}
 .dot.done{color:#4fd18b}
-.status{max-width:440px;overflow:hidden;color:#aab6d0}
+.status{max-width:440px;overflow:hidden;color:#8a97b5}
 .status.off{color:#f0b429}
 .status-in{display:inline-block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;transition:transform .2s ease-out}
 .status-in.scroll{max-width:none;overflow:visible;text-overflow:clip}
@@ -54,6 +57,8 @@ const T = {
   ko: {
     agentIdle: '에이전트 미연결', agentWaiting: '피드백 대기 중', agentSent: '전송됨 — 에이전트 응답 대기',
     agentWorking: '수정 중', agentDone: '완료',
+    chipIdle: '미연결', chipWaiting: '대기 중', chipSent: '전송됨', chipWorking: '수정 중', chipDone: '완료', chipOff: '연결 끊김',
+    agentSentDetail: '에이전트 응답 대기',
     disconnected: '연결 끊김 — 재연결 중',
     hintSend: 'Send로 전송하세요', hintClick: '페이지에서 요소를 클릭하세요 · Esc로 해제',
     hintMore: (n: number) => `요소 ${n}개 선택 · 더 고르거나 메모를 적으세요`,
@@ -70,6 +75,8 @@ const T = {
   en: {
     agentIdle: 'Agent not connected', agentWaiting: 'Waiting for your feedback', agentSent: 'Sent — waiting for the agent',
     agentWorking: 'Working', agentDone: 'Done',
+    chipIdle: 'Offline', chipWaiting: 'Waiting', chipSent: 'Sent', chipWorking: 'Working', chipDone: 'Done', chipOff: 'Disconnected',
+    agentSentDetail: 'Waiting for the agent',
     disconnected: 'Disconnected — reconnecting',
     hintSend: 'Press Send to deliver', hintClick: 'Click an element on the page · Esc to exit',
     hintMore: (n: number) => `${n} selected · pick more or write a note`,
@@ -84,11 +91,13 @@ const T = {
     tipRemove: 'Remove this element',
   },
 }[LANG];
+const LABELS = { working: ['수정 중', 'Editing', 'Working'], done: ['완료', 'Done'] };
 const AGENT_TEXT: Record<AgentStatus, (t: string) => string> = {
-  idle: () => T.agentIdle, waiting: () => T.agentWaiting, sent: () => T.agentSent,
-  working: (t) => T.agentWorking + (t ? ': ' + t : ''), done: (t) => T.agentDone + (t ? ': ' + t : ''),
+  idle: () => T.agentIdle, waiting: () => T.agentWaiting, sent: () => T.agentSentDetail,
+  working: (t) => stripStatusLabel(t, LABELS.working), done: (t) => stripStatusLabel(t, LABELS.done),
 };
 const DOT_TITLE: Record<AgentStatus, string> = { idle: T.agentIdle, waiting: T.agentWaiting, sent: T.agentSent, working: T.agentWorking, done: T.agentDone };
+const CHIP_LABEL: Record<AgentStatus, string> = { idle: T.chipIdle, waiting: T.chipWaiting, sent: T.chipSent, working: T.chipWorking, done: T.chipDone };
 
 export function createUI(h: UIHandlers) {
   const host = document.createElement('div');
@@ -98,12 +107,15 @@ export function createUI(h: UIHandlers) {
   const style = document.createElement('style'); style.textContent = CSS;
   const toolbar = document.createElement('div'); toolbar.className = 'toolbar';
   const selectBtn = document.createElement('button'); selectBtn.textContent = 'Select'; selectBtn.title = T.tipSelect; selectBtn.onclick = () => h.onToggleSelect();
+  const chip = document.createElement('span'); chip.className = 'chip';
   const dot = document.createElement('span'); dot.className = 'dot'; dot.textContent = '●';
+  const chipLabel = document.createElement('span'); chipLabel.className = 'chip-label';
+  chip.append(dot, chipLabel);
   const status = document.createElement('span'); status.className = 'status';
   const statusIn = document.createElement('span'); statusIn.className = 'status-in';
   status.append(statusIn);
   const collapseBtn = document.createElement('button'); collapseBtn.textContent = 'Collapse'; collapseBtn.title = T.tipCollapse;
-  toolbar.append(selectBtn, dot, status, collapseBtn);
+  toolbar.append(selectBtn, chip, status, collapseBtn);
   const panel = document.createElement('div'); panel.className = 'panel';
   root.append(style, toolbar, panel);
   let collapsed = false; let lastVm: ViewModel | null = null; let lastHint: string | null = null;
@@ -153,15 +165,19 @@ export function createUI(h: UIHandlers) {
     selectBtn.classList.toggle('on', vm.selecting);
     const cur = vm.drafts[vm.drafts.length - 1];
     const hasElements = !!cur && cur.elements.length > 0;
-    const suffix = vm.strategy ? ` · ${T.refresh}: ${vm.strategy}` : '';
+    const strategyText = vm.strategy ? `${T.refresh}: ${vm.strategy}` : '';
     let hint: string;
     if (!vm.connected) hint = T.disconnected;
-    else if (vm.agent.status === 'sent' || vm.agent.status === 'working' || vm.agent.status === 'done') hint = AGENT_TEXT[vm.agent.status](vm.agent.text) + suffix;
-    else if (hasElements && cur!.note.trim() !== '') hint = T.hintSend + suffix;
-    else if (vm.selecting && !hasElements) hint = T.hintClick + suffix;
-    else if (vm.selecting) hint = T.hintMore(cur!.elements.length) + suffix;
-    else if (hasElements) hint = T.hintNote + suffix;
-    else hint = T.hintPick + suffix;
+    else {
+      let text: string;
+      if (vm.agent.status === 'sent' || vm.agent.status === 'working' || vm.agent.status === 'done') text = AGENT_TEXT[vm.agent.status](vm.agent.text);
+      else if (hasElements && cur!.note.trim() !== '') text = T.hintSend;
+      else if (vm.selecting && !hasElements) text = T.hintClick;
+      else if (vm.selecting) text = T.hintMore(cur!.elements.length);
+      else if (hasElements) text = T.hintNote;
+      else text = T.hintPick;
+      hint = [text, strategyText].filter(Boolean).join(' · ');
+    }
     if (hint !== lastHint) {
       lastHint = hint;
       if (!statusIn.classList.contains('scroll')) {
@@ -174,8 +190,10 @@ export function createUI(h: UIHandlers) {
     statusIn.title = hint;
     if (hovering) { applyHoverScroll(); if (statusIn.classList.contains('scroll')) statusIn.classList.remove('enter'); }
     status.classList.toggle('off', !vm.connected);
+    chip.classList.toggle('off', !vm.connected);
     dot.className = vm.connected ? 'dot ' + vm.agent.status : 'dot';
-    dot.title = vm.connected ? DOT_TITLE[vm.agent.status] : T.disconnected;
+    chipLabel.textContent = vm.connected ? CHIP_LABEL[vm.agent.status] : T.chipOff;
+    chip.title = vm.connected ? DOT_TITLE[vm.agent.status] : T.disconnected;
     const show = !collapsed && vm.drafts.length > 0;
     panel.classList.toggle('show', show);
     if (vm.drafts.length === 0) { panel.textContent = ''; textareas.clear(); return; }
