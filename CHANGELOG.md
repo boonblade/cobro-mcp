@@ -9,6 +9,9 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Changed
 - Toolbar: agent state is now a muted chip next to Select, with the agent's message as separate detail text — no more "Working: Working: …" duplication.
 - Toolbar buttons are icons (Material Symbols); the label unfolds on hover/focus.
+- Only the Select button unfolds its label on hover; ⚙ and Collapse stay icon-only (tooltips remain).
+### Fixed
+- Settings popover: unselected theme labels were invisible in dark mode; popover and panel now share one corner radius.
 
 ## [0.5.0] — 2026-09-10
 ### Changed

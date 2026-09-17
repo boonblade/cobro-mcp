@@ -1,4 +1,4 @@
-import { test, expect, HOST } from './helpers.js';
+import { test, expect, HOST, selectAt } from './helpers.js';
 
 type Box = { x: number; y: number; width: number; height: number };
 const union = (a: Box, b: Box): Box => {
@@ -64,5 +64,19 @@ test('toolbar and settings popover screenshots for each theme', async ({ cobroPa
     const pBox = (await pop.boundingBox())!;
     const u = union(tBox, pBox);
     await page.screenshot({ path: 'screenshots/settings-pop-light.png', clip: { x: u.x - 8, y: u.y - 8, width: u.width + 16, height: u.height + 16 } });
+  }
+  await page.keyboard.press('Escape');
+
+  await setTheme('dark');
+  await selectAt(page, '#target');
+  await gear.click();
+  await expect(pop).toHaveClass(/show/);
+  {
+    const panel = page.locator(`${HOST} .panel`);
+    const tBox = (await toolbar.boundingBox())!;
+    const pBox = (await pop.boundingBox())!;
+    const plBox = (await panel.boundingBox())!;
+    const u = union(union(tBox, pBox), plBox);
+    await page.screenshot({ path: 'screenshots/panel-pop-dark.png', clip: { x: u.x - 8, y: u.y - 8, width: u.width + 16, height: u.height + 16 } });
   }
 });
