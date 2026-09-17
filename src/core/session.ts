@@ -57,7 +57,8 @@ export class SessionCore extends EventEmitter {
     if (this.waiter) { const prev = this.waiter; this.waiter = null; prev.resolve({ status: 'pending' }); }
     const queued = this.queue.shift();
     if (queued) return Promise.resolve({ status: 'sent', ...queued });
-    const keep = (this.s.agent.status === 'done' || this.s.agent.status === 'waiting') ? this.s.agent.text : '';
+    // cancelWait는 idle을 text: ''로 두므로, idle의 text는 재시작 복구본뿐이다(R98)
+    const keep = (this.s.agent.status === 'sent' || this.s.agent.status === 'working') ? '' : this.s.agent.text;
     this.s.agent = { status: 'waiting', text: keep };
     this.commit();
     const tickMs = opts.tickMs ?? 30_000;
