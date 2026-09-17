@@ -6,6 +6,7 @@ import { randomBytes } from 'node:crypto';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { Store } from './core/store.js';
 import { createBridge } from './bridge.js';
+import { isTheme } from './core/settings.js';
 import { BrowserLauncher, parseEngine } from './browser/launcher.js';
 import { createMcpServer } from './mcp/server.js';
 import { startParentWatch } from './parent-watch.js';
@@ -15,6 +16,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const overlaySource = readFileSync(join(here, 'overlay.js'), 'utf8'); // build가 server.js 옆에 둔다
 const { version } = JSON.parse(readFileSync(join(here, '..', 'package.json'), 'utf8')) as { version: string };
 const stateDir = process.env.COBRO_STATE_DIR ?? join(process.cwd(), '.cobro');
+const settingsFile = join(homedir(), '.cobro', 'settings.json');
 const engine = parseEngine(process.env.COBRO_BROWSER);
 if (process.env.COBRO_BROWSER && engine !== process.env.COBRO_BROWSER) console.error(`[cobro] COBRO_BROWSER=${process.env.COBRO_BROWSER} 무시 — chromium|webkit|firefox 중 하나. chromium 사용`);
 const profileDir = join(process.env.COBRO_PROFILE_DIR ?? join(homedir(), '.cobro', 'profile'), engine);
@@ -28,6 +30,9 @@ const envInt = (v: string | undefined, min: number, name: string): number | unde
 };
 const defaultWaitSec = envInt(process.env.COBRO_WAIT_SEC, 5, 'COBRO_WAIT_SEC') ?? 1800;
 const tickMs = envInt(process.env.COBRO_TICK_MS, 1000, 'COBRO_TICK_MS');
+const envThemeRaw = process.env.COBRO_THEME;
+const envTheme = isTheme(envThemeRaw) ? envThemeRaw : undefined;
+if (envThemeRaw && !envTheme) console.error(`[cobro] COBRO_THEME=${envThemeRaw} 무시 — auto|dark|light|frost 중 하나`);
 const token = randomBytes(24).toString('hex');
 const store = new Store(stateDir);
 
@@ -51,7 +56,7 @@ const union = (rects: Rect[]): Rect | undefined => {
 
 let launcher: BrowserLauncher | null = null;
 const bridge = await createBridge({
-  store, token,
+  store, token, settingsFile, envTheme,
   screenshot: async (b) => launcher?.isAlive() ? launcher.screenshot({ rect: union(b.elements.filter((e) => !e.missing).map((e) => e.rect)), outPath: store.shotPath(b.id) }) : undefined,
   consoleEntries: () => launcher?.consoleEntries() ?? [],
 });

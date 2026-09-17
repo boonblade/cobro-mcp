@@ -1,3 +1,5 @@
+export const THEMES = ['auto', 'dark', 'light', 'frost'] as const;
+export type Theme = typeof THEMES[number];
 export type RefreshStrategy = 'none' | 'reload' | 'event';
 export type AgentStatus = 'idle' | 'waiting' | 'sent' | 'working' | 'done';
 export type BatchStatus = 'draft' | 'sent' | 'done' | 'unanswered'; // unanswered: done 없이 다음 Send가 오면 앞 묶음이 이 상태가 된다(R79)
@@ -27,6 +29,7 @@ export interface Payload {
   console: ConsoleEntry[]; refreshStrategy: RefreshStrategy;
 }
 export interface DoneInfo { summary: string; selectors: string[]; changedFiles: string[] }
+export interface UiPrefs { theme: Theme; themeLocked: boolean }
 
 // 오버레이 → 서버
 export type OverlayMsg =
@@ -34,10 +37,11 @@ export type OverlayMsg =
   | { type: 'page'; page: PageInfo; detected: RefreshStrategy }
   | { type: 'draft'; batches: Batch[] }            // status 'draft'인 것 전체 교체
   | { type: 'send'; batchIds: string[]; page: PageInfo }
-  | { type: 'resolved'; batchId: string; index: number; missing: boolean };
+  | { type: 'resolved'; batchId: string; index: number; missing: boolean }
+  | { type: 'settings'; patch: { theme?: Theme } };
 // 서버 → 오버레이
 export type ServerMsg =
-  | { type: 'state'; session: Session }
+  | { type: 'state'; session: Session; ui: UiPrefs }
   | { type: 'done'; info: DoneInfo; strategy: RefreshStrategy }
   | { type: 'error'; message: string };
 

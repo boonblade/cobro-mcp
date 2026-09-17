@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import WebSocket from 'ws';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Store } from '../../src/core/store.js';
@@ -104,6 +104,56 @@ describe('createBridge', () => {
     const calls = err.mock.calls.map((c) => String(c[0]));
     expect(calls.some((m) => m.startsWith('[cobro] send 처리 실패'))).toBe(true);
     expect(calls.some((m) => m.startsWith('[cobro] send 복구 실패'))).toBe(true);
+    err.mockRestore();
+    ws.close();
+  });
+
+  it('settings 메시지가 파일에 저장되고 state.ui로 브로드캐스트된다', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cobro-'));
+    const settingsFile = join(dir, 'settings.json');
+    b = await createBridge({ store: new Store(dir), token: 't', settingsFile });
+    const ws = new WebSocket(`ws://127.0.0.1:${b.port}`);
+    const msgs: { type: string; ui?: { theme: string; themeLocked: boolean } }[] = [];
+    ws.on('message', (d) => msgs.push(JSON.parse(d.toString())));
+    await new Promise((r) => ws.once('open', r));
+    ws.send(JSON.stringify({ type: 'hello', token: 't' }));
+    await new Promise((r) => setTimeout(r, 30));
+    ws.send(JSON.stringify({ type: 'settings', patch: { theme: 'light' } }));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(JSON.parse(readFileSync(settingsFile, 'utf8'))).toEqual({ theme: 'light' });
+    expect(b.ui()).toEqual({ theme: 'light', themeLocked: false });
+    expect(msgs.some((m) => m.type === 'state' && m.ui?.theme === 'light' && m.ui.themeLocked === false)).toBe(true);
+    ws.close();
+  });
+
+  it('COBRO_THEME(envTheme)이 있으면 settings 메시지를 무시하고 잠긴 상태를 유지한다', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const dir = mkdtempSync(join(tmpdir(), 'cobro-'));
+    const settingsFile = join(dir, 'settings.json');
+    b = await createBridge({ store: new Store(dir), token: 't', settingsFile, envTheme: 'dark' });
+    const ws = new WebSocket(`ws://127.0.0.1:${b.port}`);
+    await new Promise((r) => ws.once('open', r));
+    ws.send(JSON.stringify({ type: 'hello', token: 't' }));
+    await new Promise((r) => setTimeout(r, 30));
+    ws.send(JSON.stringify({ type: 'settings', patch: { theme: 'light' } }));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(b.ui()).toEqual({ theme: 'dark', themeLocked: true });
+    err.mockRestore();
+    ws.close();
+  });
+
+  it('theme 값이 아니면 settings 메시지를 무시한다', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const dir = mkdtempSync(join(tmpdir(), 'cobro-'));
+    const settingsFile = join(dir, 'settings.json');
+    b = await createBridge({ store: new Store(dir), token: 't', settingsFile });
+    const ws = new WebSocket(`ws://127.0.0.1:${b.port}`);
+    await new Promise((r) => ws.once('open', r));
+    ws.send(JSON.stringify({ type: 'hello', token: 't' }));
+    await new Promise((r) => setTimeout(r, 30));
+    ws.send(JSON.stringify({ type: 'settings', patch: { theme: 'neon' } }));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(b.ui()).toEqual({ theme: 'auto', themeLocked: false });
     err.mockRestore();
     ws.close();
   });
