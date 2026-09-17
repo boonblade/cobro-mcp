@@ -15,12 +15,12 @@ test('select → note → Send arrives in core.wait with selector, then done fla
   if (r.status !== 'sent') return;
   expect(r.payload.batches[0]).toMatchObject({ note: '버튼 작게', elements: [{ selector: '#target', tag: 'button' }] });
   expect(r.payload.page.url).toContain('basic.html');
-  await expect(page.locator(`${HOST} .chip`)).toContainText('전송됨');
+  await expect(page.locator(`${HOST} .chip:not(.strategy)`)).toContainText('전송됨');
   await expect(page.locator(`${HOST} .status`)).toContainText('에이전트 응답 대기');
   await expect(page.locator(`${HOST} .dot`)).toHaveClass(/sent/);
   await expect(page.locator(`${HOST} .els`)).toHaveCount(0); // 보낸 배치가 좀비 draft로 되살아나면 안 된다
   bridge.done({ summary: '폰트 12px', selectors: ['#target'], changedFiles: ['x.tsx'] });
-  await expect(page.locator(`${HOST} .chip`)).toContainText('완료');
+  await expect(page.locator(`${HOST} .chip:not(.strategy)`)).toContainText('완료');
   await expect.poll(() => page.evaluate(() => (window as unknown as { __doneEvents: unknown[] }).__doneEvents.length)).toBe(1);
 });
 
@@ -133,7 +133,7 @@ test.describe('en locale', () => {
     await expect(page.locator(`${HOST} .status`)).toContainText('Press Ctrl+Shift+F');
     const waiting = bridge.core.wait(10_000);
     void waiting; // 이 테스트는 응답을 기다리지 않는다 — 칩 라벨만 확인
-    await expect(page.locator(`${HOST} .chip`)).toContainText('Waiting');
+    await expect(page.locator(`${HOST} .chip:not(.strategy)`)).toContainText('Waiting');
     await selectAt(page, '#target');
     await expect(page.locator(`${HOST} .status`)).toContainText('selected');
     await expect(page.locator(`${HOST} .panel h4`)).toContainText('element');
@@ -204,7 +204,7 @@ test('panel has no batch tabs, Add batch, or history (R64)', async ({ cobroPage:
   expect(r.status).toBe('sent');
   if (r.status === 'sent') expect(r.payload.batches.length).toBe(1);
   bridge.done({ summary: 'ok', selectors: [], changedFiles: [] });
-  await expect(page.locator(`${HOST} .chip`)).toContainText('완료');
+  await expect(page.locator(`${HOST} .chip:not(.strategy)`)).toContainText('완료');
   await expect(page.locator(`${HOST} .hist`)).toHaveCount(0);
   await expect(page.locator(`${HOST} .panel`)).not.toBeVisible();
 });
@@ -240,12 +240,11 @@ test('handshake: Send disabled while agent works, enabled after done, no Unlock'
 });
 
 test('toolbar chip and detail are separate — no duplicated label', async ({ cobroPage: page, bridge }) => {
-  bridge.core.setStrategy('none');
-  await page.goto('http://127.0.0.1:4173/basic.html');
+  await page.goto('http://127.0.0.1:4173/basic.html'); // strategy 미지정 — 자동 감지된 실제 값(reload)이 칩에 뜬다
   await selectAt(page, '#target');
   await page.locator(`${HOST} textarea`).fill('메모');
   const waiting = bridge.core.wait(10_000);
-  await expect(page.locator(`${HOST} .chip`)).toContainText('대기 중');
+  await expect(page.locator(`${HOST} .chip:not(.strategy)`)).toContainText('대기 중');
   await expect(page.locator(`${HOST} .status`)).toContainText('Send로 전송하세요'); // 디바운스된 draft가 반영된 뒤(M1)
   await expect(page.locator(`${HOST} .status-in`)).not.toHaveClass(/enter/); // 슬라이드인 애니메이션이 끝난 뒤 촬영(M2)
   const waitingBox = (await page.locator(`${HOST} .toolbar`).boundingBox())!;
@@ -253,13 +252,14 @@ test('toolbar chip and detail are separate — no duplicated label', async ({ co
   await page.locator(`${HOST} button.send`).click();
   await waiting;
   bridge.core.setAgentText('수정 중: collab.py + page.tsx');
-  await expect(page.locator(`${HOST} .chip`)).toHaveText(/수정 중/);
+  await expect(page.locator(`${HOST} .chip:not(.strategy)`)).toHaveText(/수정 중/);
   await expect(page.locator(`${HOST} .status`)).toContainText('collab.py + page.tsx');
   await expect(page.locator(`${HOST} .status`)).not.toContainText('수정 중');
   await expect(page.locator(`${HOST} .status-in`)).not.toHaveClass(/enter/); // 슬라이드인 애니메이션이 끝난 뒤 촬영(M2)
   const workingBox = (await page.locator(`${HOST} .toolbar`).boundingBox())!;
   await page.screenshot({ path: 'screenshots/toolbar-working.png', clip: { x: workingBox.x - 8, y: workingBox.y - 8, width: workingBox.width + 16, height: workingBox.height + 16 } });
+  bridge.core.setStrategy('none'); // done의 reload가 이후 단언을 끊지 않도록
   bridge.done({ summary: '완료: ok', selectors: [], changedFiles: [] });
-  await expect(page.locator(`${HOST} .chip`)).toHaveText(/완료/);
+  await expect(page.locator(`${HOST} .chip:not(.strategy)`)).toHaveText(/완료/);
   await expect(page.locator(`${HOST} .status`)).toContainText('ok');
 });
