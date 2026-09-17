@@ -44,6 +44,9 @@ const CSS = `
 .els button{background:transparent;border-color:transparent;color:var(--fg-5);padding:0 6px}
 .els button:hover{background:var(--hover);color:var(--fg-hover)}
 .chip{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;background:var(--chip);border:1px solid transparent;color:var(--fg-3);white-space:nowrap;cursor:default;user-select:none}
+.chip[hidden]{display:none}
+.chip .ico{display:inline-flex;line-height:0}
+.chip.strategy .ico svg{width:12px;height:12px}
 .chip.off{color:var(--warn);border-color:var(--chip-off-border)}
 .dot{font-size:9px;line-height:1;color:var(--fg-5)}
 .dot.waiting{color:var(--ok)}
@@ -102,7 +105,7 @@ const T = {
     hintSend: 'Send로 전송하세요', hintClick: '페이지에서 요소를 클릭하세요 · Esc로 해제',
     hintMore: (n: number) => `요소 ${n}개 선택 · 더 고르거나 메모를 적으세요`,
     hintNote: '메모를 적고 Send를 누르세요', hintPick: 'Ctrl+Shift+F 또는 Select로 요소를 고르세요',
-    refresh: '갱신',
+    tipStrategy: (s: RefreshStrategy) => `갱신 전략: ${s} — ${{ none: 'HMR이 있어 done 뒤 새로고침 없음', reload: 'done 뒤 페이지 새로고침', event: '앱이 cobro:done 이벤트로 직접 갱신' }[s]}`,
     selCount: (n: number) => `요소 ${n}개 선택됨`,
     selNone: '선택된 요소 없음 · 메모만 보내도 됩니다',
     elMissing: '요소 없음', notePlaceholder: '수정 요청 메모…',
@@ -122,7 +125,7 @@ const T = {
     hintSend: 'Press Send to deliver', hintClick: 'Click an element on the page · Esc to exit',
     hintMore: (n: number) => `${n} selected · pick more or write a note`,
     hintNote: 'Write a note, then press Send', hintPick: 'Press Ctrl+Shift+F or Select to pick an element',
-    refresh: 'refresh',
+    tipStrategy: (s: RefreshStrategy) => `Refresh strategy: ${s} — ${{ none: 'HMR present — no reload after done', reload: 'page reloads after done', event: 'the app refreshes itself on cobro:done' }[s]}`,
     selCount: (n: number) => `${n} element(s) selected`,
     selNone: 'No element selected · a note alone is fine',
     elMissing: 'missing', notePlaceholder: 'Describe the change…',
@@ -163,6 +166,10 @@ export function createUI(h: UIHandlers) {
   const dot = document.createElement('span'); dot.className = 'dot'; dot.textContent = '●';
   const chipLabel = document.createElement('span'); chipLabel.className = 'chip-label';
   chip.append(dot, chipLabel);
+  const chip2 = document.createElement('span'); chip2.className = 'chip strategy';
+  const chip2Ico = document.createElement('span'); chip2Ico.className = 'ico'; chip2Ico.innerHTML = svg('sync');
+  const chip2Label = document.createElement('span'); chip2Label.className = 'chip-label';
+  chip2.append(chip2Ico, chip2Label);
   const status = document.createElement('span'); status.className = 'status';
   const statusIn = document.createElement('span'); statusIn.className = 'status-in';
   status.append(statusIn);
@@ -170,7 +177,7 @@ export function createUI(h: UIHandlers) {
   const gearBtn = gearParts.btn;
   const collapseParts = iconBtn('collapse', 'Collapse', T.tipCollapse, 'collapse', false);
   const collapseBtn = collapseParts.btn;
-  toolbar.append(selectBtn, chip, status, gearBtn, collapseBtn);
+  toolbar.append(selectBtn, chip, chip2, status, gearBtn, collapseBtn);
   const pop = document.createElement('div'); pop.className = 'pop';
   const popRow = document.createElement('div'); popRow.className = 'pop-row';
   const popLabel = document.createElement('span'); popLabel.className = 'pop-label'; popLabel.textContent = T.theme;
@@ -261,7 +268,6 @@ export function createUI(h: UIHandlers) {
     popNote.hidden = !vm.prefs.themeLocked;
     const cur = vm.drafts[vm.drafts.length - 1];
     const hasElements = !!cur && cur.elements.length > 0;
-    const strategyText = vm.strategy ? `${T.refresh}: ${vm.strategy}` : '';
     let hint: string;
     if (!vm.connected) hint = T.disconnected;
     else {
@@ -272,7 +278,7 @@ export function createUI(h: UIHandlers) {
       else if (vm.selecting) text = T.hintMore(cur!.elements.length);
       else if (hasElements) text = T.hintNote;
       else text = T.hintPick;
-      hint = [text, strategyText].filter(Boolean).join(' · ');
+      hint = text;
     }
     if (hint !== lastHint) {
       lastHint = hint;
@@ -290,6 +296,8 @@ export function createUI(h: UIHandlers) {
     dot.className = vm.connected ? 'dot ' + vm.agent.status : 'dot';
     chipLabel.textContent = vm.connected ? CHIP_LABEL[vm.agent.status] : T.chipOff;
     chip.title = vm.connected ? DOT_TITLE[vm.agent.status] : T.disconnected;
+    chip2.hidden = !vm.strategy;
+    if (vm.strategy) { chip2Label.textContent = vm.strategy; chip2.title = T.tipStrategy(vm.strategy); }
     const show = !collapsed && vm.drafts.length > 0;
     panel.classList.toggle('show', show);
     if (vm.drafts.length === 0) { panel.textContent = ''; textareas.clear(); return; }

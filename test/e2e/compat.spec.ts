@@ -38,7 +38,32 @@ test('detects none on Vite dev and reload on static', async ({ cobroPage: page, 
   await page.goto('http://127.0.0.1:4174/');
   await expect(page.locator('#h')).toHaveAttribute('data-ready', '1');
   await expect.poll(() => bridge.core.session.detected).toBe('none');
-  await expect(page.locator('[data-cobro-host] .status')).toContainText('갱신: none');
+  await expect(page.locator('[data-cobro-host] .chip.strategy')).toHaveText('none');
+  await expect(page.locator('[data-cobro-host] .status')).not.toContainText('갱신');
   await page.goto('http://127.0.0.1:4173/basic.html');
   await expect.poll(() => bridge.core.session.detected).toBe('reload');
+});
+
+test('refresh strategy is a chip, not hint text', async ({ cobroPage: page, bridge }) => {
+  await page.goto('http://127.0.0.1:4174/');
+  await expect(page.locator('#h')).toHaveAttribute('data-ready', '1');
+  const chip2 = page.locator('[data-cobro-host] .chip.strategy');
+  await expect(chip2).toBeVisible();
+  await expect(chip2).toHaveText(/^(none|reload|event)$/);
+  await expect(chip2).toHaveAttribute('title', /(none|reload|event)/);
+  bridge.core.setStrategy('event');
+  await expect(chip2).toHaveText('event');
+  await expect(chip2).toHaveAttribute('title', /event/);
+  await expect(page.locator('[data-cobro-host] .status')).not.toContainText('갱신');
+  await expect(page.locator('[data-cobro-host] .status')).not.toContainText('refresh');
+});
+
+test('hidden strategy chip stays display:none (B1)', async ({ cobroPage: page }) => {
+  await page.goto('http://127.0.0.1:4174/');
+  const chip2 = page.locator('[data-cobro-host] .chip.strategy');
+  await expect(chip2).toBeVisible();
+  await chip2.evaluate((el) => { (el as HTMLElement).hidden = true; });
+  await expect(chip2).toBeHidden();
+  await chip2.evaluate((el) => { (el as HTMLElement).hidden = false; });
+  await expect(chip2).toBeVisible();
 });
