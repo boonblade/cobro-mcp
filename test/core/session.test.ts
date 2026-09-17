@@ -20,9 +20,16 @@ describe('SessionCore', () => {
     const again = new SessionCore(store);
     expect(again.session.batches.map((b) => b.id)).toEqual(['1']);
   });
-  it('restart normalizes waiting to idle but keeps the done text (M1)', () => {
+  it('restart normalizes waiting to idle but keeps the done text (M1)', async () => {
+    vi.useFakeTimers();
     store.save({ ...emptySession(), agent: { status: 'waiting', text: '요약' } });
-    expect(new SessionCore(store).session.agent.text).toBe('요약');
+    const restarted = new SessionCore(store);
+    expect(restarted.session.agent.text).toBe('요약');
+    const p = restarted.wait(1000);
+    expect(restarted.session.agent).toEqual({ status: 'waiting', text: '요약' });
+    await vi.advanceTimersByTimeAsync(1000);
+    await p;
+    vi.useRealTimers();
   });
   it('setDrafts replaces only drafts', () => {
     core.setDrafts([draft('1'), draft('2')]);
