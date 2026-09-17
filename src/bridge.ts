@@ -1,16 +1,20 @@
 import { SessionCore } from './core/session.js';
 import { ChannelServer } from './channel/server.js';
 import { buildPayload } from './core/payload.js';
+import { readUserSettings, writeUserSettings, isTheme } from './core/settings.js';
 import type { Store } from './core/store.js';
-import type { Batch, ConsoleEntry, DoneInfo, PageInfo } from './core/types.js';
+import type { Batch, ConsoleEntry, DoneInfo, PageInfo, ServerMsg, Theme, UiPrefs } from './core/types.js';
 
-export interface Bridge { core: SessionCore; channel: ChannelServer; port: number; token: string; done(info: DoneInfo): Batch[]; close(): Promise<void> }
+export interface Bridge { core: SessionCore; channel: ChannelServer; port: number; token: string; done(info: DoneInfo): Batch[]; close(): Promise<void>; ui(): UiPrefs }
 
-export async function createBridge(opts: { store: Store; token: string; screenshot?: (b: Batch, page: PageInfo) => Promise<string | undefined>; consoleEntries?: () => ConsoleEntry[] }): Promise<Bridge> {
+export async function createBridge(opts: { store: Store; token: string; screenshot?: (b: Batch, page: PageInfo) => Promise<string | undefined>; consoleEntries?: () => ConsoleEntry[]; settingsFile?: string; envTheme?: Theme }): Promise<Bridge> {
   const core = new SessionCore(opts.store);
+  let cachedTheme: Theme | undefined = opts.settingsFile ? readUserSettings(opts.settingsFile).theme : undefined;
+  const uiPrefs = (): UiPrefs => ({ theme: opts.envTheme ?? cachedTheme ?? 'auto', themeLocked: !!opts.envTheme });
+  const stateMsg = (): ServerMsg => ({ type: 'state', session: core.session, ui: uiPrefs() });
   const channel = new ChannelServer({
     token: opts.token,
-    onConnect: (reply) => reply({ type: 'state', session: core.session }),
+    onConnect: (reply) => reply(stateMsg()),
     onMessage: (msg) => {
       // 페이지에서 온 메시지는 전부 데이터다 — 쓰기 전에 형태를 확인하고, 어긋나면 한 줄 남기고 버린다
       const bad = (why: string) => console.error(`[cobro] bridge: ${msg.type} 메시지를 무시한다 — ${why}`);
@@ -24,6 +28,16 @@ export async function createBridge(opts: { store: Store; token: string; screensh
         case 'resolved':
           if (typeof msg.batchId !== 'string') return bad('batchId가 문자열이 아니다');
           core.markResolved(msg.batchId, msg.index, msg.missing); break;
+        case 'settings': {
+          if (!msg.patch || typeof msg.patch !== 'object') return bad('patch가 없다');
+          if (!opts.settingsFile) return bad('settingsFile 없음');
+          if (opts.envTheme) return bad('COBRO_THEME로 고정됨');
+          if (!isTheme(msg.patch.theme)) return bad('theme 값이 아니다'); // theme 없는 patch({})도 거부 — 아니면 {theme:undefined}가 저장돼 auto로 지워진다(M1)
+          const next = writeUserSettings(opts.settingsFile, { theme: msg.patch.theme });
+          cachedTheme = next.theme;
+          channel.broadcast(stateMsg());
+          break;
+        }
         case 'send': {
           if (!Array.isArray(msg.batchIds) || !msg.page || typeof msg.page.url !== 'string') return bad('batchIds 배열이나 page.url이 없다');
           const page = msg.page;
@@ -53,10 +67,11 @@ export async function createBridge(opts: { store: Store; token: string; screensh
       }
     },
   });
-  core.on('change', (s) => channel.broadcast({ type: 'state', session: s }));
+  core.on('change', () => channel.broadcast(stateMsg()));
   const port = await channel.listen();
   return {
     core, channel, port, token: opts.token,
+    ui: uiPrefs,
     done(info) { const out = core.done(info); channel.broadcast({ type: 'done', info, strategy: core.effectiveStrategy() }); return out; },
     close: () => channel.close(),
   };

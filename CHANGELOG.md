@@ -5,8 +5,10 @@ All notable changes to this project are documented here. The format follows [Kee
 ## [Unreleased]
 ### Added
 - README: `Payload` section — field rules and an example of what `wait` returns after Send.
+- Settings popover (⚙) on the toolbar with theme selection: auto / dark / light / frost. Saved per user in `~/.cobro/settings.json`; `COBRO_THEME` pins it.
 ### Changed
 - Toolbar: agent state is now a muted chip next to Select, with the agent's message as separate detail text — no more "Working: Working: …" duplication.
+- Toolbar buttons are icons (Material Symbols); the label unfolds on hover/focus.
 
 ## [0.5.0] — 2026-09-10
 ### Changed

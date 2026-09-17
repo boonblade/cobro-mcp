@@ -1,55 +1,93 @@
-import type { AgentStatus, Batch, RefreshStrategy } from '../core/types.js';
+import type { AgentStatus, Batch, RefreshStrategy, Theme, UiPrefs } from '../core/types.js';
+import { THEMES } from '../core/types.js';
 import { stripStatusLabel } from './status-text.js';
+import type { ResolvedTheme } from './theme.js';
+import { svg } from './icons.js';
+type IconName = Parameters<typeof svg>[0];
 
-export interface ViewModel { selecting: boolean; connected: boolean; agent: { status: AgentStatus; text: string }; strategy: RefreshStrategy | null; drafts: Batch[]; locked: boolean }
-export interface UIHandlers { onToggleSelect(): void; onNoteInput(id: string, note: string): void; onRemoveElement(id: string, index: number): void; onSend(): void }
+export interface ViewModel { selecting: boolean; connected: boolean; agent: { status: AgentStatus; text: string }; strategy: RefreshStrategy | null; drafts: Batch[]; locked: boolean; prefs: UiPrefs }
+export interface UIHandlers { onToggleSelect(): void; onNoteInput(id: string, note: string): void; onRemoveElement(id: string, index: number): void; onSend(): void; onSettings(patch: { theme?: Theme }): void }
 
 const CSS = `
-:host{position:fixed;inset:0;margin:0;padding:0;border:0;background:transparent;width:100vw;height:100vh;overflow:visible;pointer-events:none;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;color:#e8ecf5}
+:host{
+  --bg:#0e111a;--bg-2:#171b28;--bg-3:#232c42;--chip:#161b2a;--border:#2a3350;--border-2:#3a4a72;
+  --hover:#2e3a58;--hover-border:#4c5f92;--fg:#e8ecf5;--fg-2:#cdd8f0;--fg-3:#aab6d0;--fg-4:#8a97b5;--fg-5:#8291b0;
+  --accent:#e35d5d;--warn:#f0b429;--ok:#4fd18b;--info:#9db8ef;--badge-bg:#1c2333;--fg-on-accent:#fff;--fg-hover:#fff;
+  --chip-off-border:#4a3a1a;--shadow:0 4px 16px rgba(0,0,0,.5);--blur:none;
+  position:fixed;inset:0;margin:0;padding:0;border:0;background:transparent;width:100vw;height:100vh;overflow:visible;pointer-events:none;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;color:var(--fg)
+}
+:host([data-theme="light"]){
+  --bg:#ffffff;--bg-2:#f4f6fb;--bg-3:#e6eaf3;--chip:#eef1f7;--border:#cfd6e4;--border-2:#b8c2d6;
+  --hover:#dde3ef;--hover-border:#9fadc8;--fg:#171b28;--fg-2:#2a3350;--fg-3:#4b5670;--fg-4:#5f6b86;--fg-5:#6f7c97;
+  --accent:#d9453f;--warn:#b7791f;--ok:#1f8f57;--info:#3b6fd6;--badge-bg:#ffffff;--fg-hover:#171b28;
+  --chip-off-border:#e6d29c;--shadow:0 4px 16px rgba(20,30,60,.18);--blur:none;
+}
+:host([data-theme="frost"]){
+  --bg:rgba(14,17,26,.78);--bg-2:#171b28;--bg-3:rgba(255,255,255,.10);--chip:rgba(255,255,255,.06);
+  --border:rgba(255,255,255,.14);--border-2:rgba(255,255,255,.22);--hover:rgba(255,255,255,.16);--hover-border:rgba(255,255,255,.30);
+  --fg:#e8ecf5;--fg-2:#cdd8f0;--fg-3:#aab6d0;--fg-4:#9aa6c2;--fg-5:#8291b0;
+  --accent:#e35d5d;--warn:#f0b429;--ok:#4fd18b;--info:#9db8ef;--badge-bg:#1c2333;--fg-hover:#fff;
+  --chip-off-border:rgba(240,180,41,.35);--shadow:0 8px 24px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.08);--blur:blur(18px) saturate(140%);
+}
+@supports not (backdrop-filter: blur(1px)) { :host([data-theme="frost"]) { --bg:#0e111a; --blur:none } }
 :host::backdrop{display:none}
 *{box-sizing:border-box}
 .glass{position:fixed;inset:0;pointer-events:auto;cursor:crosshair;display:none}
-.hover-box{position:fixed;display:none;border:2px solid #e35d5d;background:rgba(227,93,93,.08);border-radius:2px;pointer-events:none}
-.hover-badge{position:fixed;display:none;background:#1c2333;border:1px solid #e35d5d;border-radius:4px;padding:4px 8px;white-space:pre;color:#fff;pointer-events:none;max-width:480px}
-.band{position:fixed;display:none;border:1.5px dashed #e35d5d;background:rgba(227,93,93,.06);pointer-events:none}
-.toolbar{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:6px;align-items:center;background:#0e111a;border:1px solid #2a3350;border-radius:999px;padding:6px 10px;box-shadow:0 4px 16px rgba(0,0,0,.5);pointer-events:auto}
-.toolbar button,.panel button{font:inherit;color:#cdd8f0;background:#232c42;border:1px solid #3a4a72;border-radius:999px;padding:4px 10px;cursor:pointer}
-.toolbar button:hover,.panel button:hover{background:#2e3a58;border-color:#4c5f92;color:#fff}
-.toolbar button:focus-visible,.panel button:focus-visible{outline:2px solid #9db8ef;outline-offset:1px}
-.toolbar button.on{color:#fff;background:#e35d5d;border-color:#e35d5d}
-.els button{background:transparent;border-color:transparent;color:#8291b0;padding:0 6px}
-.els button:hover{background:#2e3a58;color:#fff}
-.chip{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;background:#161b2a;border:1px solid transparent;color:#aab6d0;white-space:nowrap;cursor:default;user-select:none}
-.chip.off{color:#f0b429;border-color:#4a3a1a}
-.dot{font-size:9px;line-height:1;color:#8291b0}
-.dot.waiting{color:#4fd18b}
-.dot.sent{color:#f0b429}
-.dot.working{color:#9db8ef}
-.dot.done{color:#4fd18b}
-.status{max-width:440px;overflow:hidden;color:#8a97b5}
-.status.off{color:#f0b429}
+.hover-box{position:fixed;display:none;border:2px solid var(--accent);background:color-mix(in srgb, var(--accent) 8%, transparent);border-radius:2px;pointer-events:none}
+.hover-badge{position:fixed;display:none;background:var(--badge-bg);border:1px solid var(--accent);border-radius:4px;padding:4px 8px;white-space:pre;color:var(--fg-on-accent);pointer-events:none;max-width:480px}
+.band{position:fixed;display:none;border:1.5px dashed var(--accent);background:color-mix(in srgb, var(--accent) 6%, transparent);pointer-events:none}
+.toolbar{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:6px;align-items:center;background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:6px 10px;box-shadow:var(--shadow);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);pointer-events:auto}
+.toolbar button,.panel button{font:inherit;color:var(--fg-2);background:var(--bg-3);border:1px solid var(--border-2);border-radius:999px;padding:4px 10px;cursor:pointer}
+.toolbar button:hover,.panel button:hover{background:var(--hover);border-color:var(--hover-border);color:var(--fg-hover)}
+.toolbar button:focus-visible,.panel button:focus-visible{outline:2px solid var(--info);outline-offset:1px}
+.toolbar button.on{color:var(--fg-on-accent);background:var(--accent);border-color:var(--accent)}
+.els button{background:transparent;border-color:transparent;color:var(--fg-5);padding:0 6px}
+.els button:hover{background:var(--hover);color:var(--fg-hover)}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;background:var(--chip);border:1px solid transparent;color:var(--fg-3);white-space:nowrap;cursor:default;user-select:none}
+.chip.off{color:var(--warn);border-color:var(--chip-off-border)}
+.dot{font-size:9px;line-height:1;color:var(--fg-5)}
+.dot.waiting{color:var(--ok)}
+.dot.sent{color:var(--warn)}
+.dot.working{color:var(--info)}
+.dot.done{color:var(--ok)}
+.status{max-width:440px;overflow:hidden;color:var(--fg-4)}
+.status.off{color:var(--warn)}
 .status-in{display:inline-block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;transition:transform .2s ease-out}
 .status-in.scroll{max-width:none;overflow:visible;text-overflow:clip}
 .status-in.enter{animation:cobroin .15s ease-out}
 @keyframes cobroin{from{opacity:.4;transform:translateX(-6px)}to{opacity:1;transform:translateX(0)}}
 @media (prefers-reduced-motion: reduce){.status-in{transition:none}.status-in.enter{animation:none}}
-.panel{position:fixed;right:14px;bottom:60px;width:320px;background:#171b28;border:1px solid #e35d5d;border-radius:8px;padding:10px 12px;box-shadow:0 4px 16px rgba(0,0,0,.5);pointer-events:auto;display:none}
+.panel{position:fixed;right:14px;bottom:60px;width:320px;background:var(--bg-2);border:1px solid var(--accent);border-radius:8px;padding:10px 12px;box-shadow:var(--shadow);pointer-events:auto;display:none}
 .panel.show{display:block}
-.panel h4{margin:0 0 6px;color:#e8ecf5;font-size:12px;font-weight:400}
-.panel h4 .mark{color:#e35d5d;margin-right:4px}
-.els{max-height:110px;overflow:auto;margin-bottom:8px;color:#aab6d0;font-size:11px}
+.panel h4{margin:0 0 6px;color:var(--fg);font-size:12px;font-weight:400}
+.panel h4 .mark{color:var(--accent);margin-right:4px}
+.els{max-height:110px;overflow:auto;margin-bottom:8px;color:var(--fg-3);font-size:11px}
 .els div{display:flex;justify-content:space-between;gap:6px;word-break:break-all}
-.els .missing{color:#f0b429}
-textarea{width:100%;height:54px;resize:none;font:inherit;color:#e8ecf5;background:#0e111a;border:1px solid #3a4a72;border-radius:4px;padding:4px 6px;margin-bottom:8px}
+.els .missing{color:var(--warn)}
+textarea{width:100%;height:54px;resize:none;font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--border-2);border-radius:4px;padding:4px 6px;margin-bottom:8px}
 .row{display:flex;justify-content:flex-end;gap:6px;align-items:center}
-.row .send{color:#fff;background:#e35d5d;border-color:#e35d5d;font-weight:700}
+.row .send{color:var(--fg-on-accent);background:var(--accent);border-color:var(--accent);font-weight:700}
 .row .send:disabled{opacity:.4;cursor:not-allowed}
-.flash{position:fixed;border:2px solid #4fd18b;border-radius:2px;pointer-events:none;animation:cobroflash 1.6s ease-out forwards}
+.flash{position:fixed;border:2px solid var(--ok);border-radius:2px;pointer-events:none;animation:cobroflash 1.6s ease-out forwards}
 @keyframes cobroflash{0%{opacity:1}100%{opacity:0}}
 /* shadow root의 자식은 모두 position:fixed 형제 — picker가 glass를 toolbar/panel 뒤에 append하므로 쌓임 순서를 명시한다 */
 .glass{z-index:0}
 .hover-box,.hover-badge,.band,.flash{z-index:1}
-.toolbar,.panel{z-index:2}
+.toolbar,.pop,.panel{z-index:2}
+.pop{position:fixed;bottom:56px;left:50%;transform:translateX(-50%);display:none;min-width:260px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;box-shadow:var(--shadow);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);pointer-events:auto;color:var(--fg-2)}
+.pop.show{display:block}
+.pop-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.pop-label{color:var(--fg-3)}
+.seg{display:inline-flex;gap:2px;background:var(--chip);border-radius:999px;padding:2px}
+.seg button{border:1px solid transparent;background:transparent;padding:2px 9px;font:inherit;cursor:pointer}
+.seg button.on{background:var(--bg-3);color:var(--fg)}
+.seg button:disabled{opacity:.5;cursor:not-allowed}
+.pop-note{margin-top:6px;color:var(--warn);font-size:11px}
+.ib{display:inline-flex;align-items:center;padding:4px 7px}
+.ib .ico{display:inline-flex;line-height:0}
+.ib .lbl{max-width:0;opacity:0;overflow:hidden;white-space:nowrap;margin-left:0;transition:max-width .1s ease-in,opacity .1s ease-in,margin-left .1s ease-in}
+.ib:hover .lbl,.ib:focus-visible .lbl{max-width:9ch;opacity:1;margin-left:5px;transition-duration:.15s;transition-timing-function:ease-out}
+@media (prefers-reduced-motion: reduce){.ib .lbl{transition:none}}
 `;
 
 const LANG = navigator.language.toLowerCase().startsWith('ko') ? 'ko' : 'en';
@@ -71,6 +109,8 @@ const T = {
     tipSend: '선택한 요소와 메모를 에이전트에 전송',
     tipSendLocked: '에이전트가 작업 중 — done 뒤에 보낼 수 있습니다',
     tipRemove: '이 요소 빼기',
+    tipSettings: '설정', theme: '테마', themeAuto: '자동', themeDark: '어둡게', themeLight: '밝게', themeFrost: '유리',
+    themeLocked: 'COBRO_THEME 환경 변수로 고정됨',
   },
   en: {
     agentIdle: 'Agent not connected', agentWaiting: 'Waiting for your feedback', agentSent: 'Sent — waiting for the agent',
@@ -89,8 +129,11 @@ const T = {
     tipSend: 'Send the selected elements and note to the agent',
     tipSendLocked: 'Agent is working — you can send after done',
     tipRemove: 'Remove this element',
+    tipSettings: 'Settings', theme: 'Theme', themeAuto: 'Auto', themeDark: 'Dark', themeLight: 'Light', themeFrost: 'Frost',
+    themeLocked: 'Pinned by COBRO_THEME',
   },
 }[LANG];
+const THEME_LABEL: Record<Theme, string> = { auto: T.themeAuto, dark: T.themeDark, light: T.themeLight, frost: T.themeFrost };
 const LABELS = { working: ['수정 중', 'Editing', 'Working'], done: ['완료', 'Done'] };
 const AGENT_TEXT: Record<AgentStatus, (t: string) => string> = {
   idle: () => T.agentIdle, waiting: () => T.agentWaiting, sent: () => T.agentSentDetail,
@@ -106,7 +149,15 @@ export function createUI(h: UIHandlers) {
   const root = host.attachShadow({ mode: 'open' });
   const style = document.createElement('style'); style.textContent = CSS;
   const toolbar = document.createElement('div'); toolbar.className = 'toolbar';
-  const selectBtn = document.createElement('button'); selectBtn.textContent = 'Select'; selectBtn.title = T.tipSelect; selectBtn.onclick = () => h.onToggleSelect();
+  const iconBtn = (icon: IconName, label: string, title: string, extraClass: string) => {
+    const btn = document.createElement('button'); btn.className = `ib ${extraClass}`; btn.title = title; btn.setAttribute('aria-label', label);
+    const ico = document.createElement('span'); ico.className = 'ico'; ico.innerHTML = svg(icon);
+    const lbl = document.createElement('span'); lbl.className = 'lbl'; lbl.textContent = label;
+    btn.append(ico, lbl);
+    return { btn, ico, lbl };
+  };
+  const selectParts = iconBtn('select', 'Select', T.tipSelect, 'select');
+  const selectBtn = selectParts.btn; selectBtn.onclick = () => { closePop(); h.onToggleSelect(); };
   const chip = document.createElement('span'); chip.className = 'chip';
   const dot = document.createElement('span'); dot.className = 'dot'; dot.textContent = '●';
   const chipLabel = document.createElement('span'); chipLabel.className = 'chip-label';
@@ -114,12 +165,53 @@ export function createUI(h: UIHandlers) {
   const status = document.createElement('span'); status.className = 'status';
   const statusIn = document.createElement('span'); statusIn.className = 'status-in';
   status.append(statusIn);
-  const collapseBtn = document.createElement('button'); collapseBtn.textContent = 'Collapse'; collapseBtn.title = T.tipCollapse;
-  toolbar.append(selectBtn, chip, status, collapseBtn);
+  const gearParts = iconBtn('settings', T.tipSettings, T.tipSettings, 'gear');
+  const gearBtn = gearParts.btn;
+  const collapseParts = iconBtn('collapse', 'Collapse', T.tipCollapse, 'collapse');
+  const collapseBtn = collapseParts.btn;
+  toolbar.append(selectBtn, chip, status, gearBtn, collapseBtn);
+  const pop = document.createElement('div'); pop.className = 'pop';
+  const popRow = document.createElement('div'); popRow.className = 'pop-row';
+  const popLabel = document.createElement('span'); popLabel.className = 'pop-label'; popLabel.textContent = T.theme;
+  const seg = document.createElement('div'); seg.className = 'seg';
+  const segButtons = THEMES.map((key) => {
+    const btn = document.createElement('button'); btn.textContent = THEME_LABEL[key]; btn.dataset.theme = key;
+    btn.onclick = () => h.onSettings({ theme: key });
+    return btn;
+  });
+  seg.append(...segButtons);
+  popRow.append(popLabel, seg);
+  const popNote = document.createElement('div'); popNote.className = 'pop-note'; popNote.textContent = T.themeLocked;
+  pop.append(popRow, popNote);
+  let popOpen = false;
+  let popCloseListeners: { doc: (e: Event) => void; key: (e: KeyboardEvent) => void } | null = null;
+  const closePop = () => {
+    if (!popOpen) return;
+    pop.classList.remove('show');
+    popOpen = false;
+    if (popCloseListeners) { document.removeEventListener('pointerdown', popCloseListeners.doc, true); window.removeEventListener('keydown', popCloseListeners.key, true); popCloseListeners = null; }
+  };
+  const openPop = () => {
+    pop.classList.add('show');
+    popOpen = true;
+    const onDocPointerDown = (e: Event) => { const path = e.composedPath(); if (!path.includes(pop) && !path.includes(gearBtn)) closePop(); };
+    // 선택 모드 진입이 항상 closePop()을 부르므로(B1) pop이 열려 있는 동안 picker는 비활성 — Escape가 pop·picker 양쪽에서 동시에 처리될 일이 없다(M3)
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') closePop(); };
+    document.addEventListener('pointerdown', onDocPointerDown, true);
+    window.addEventListener('keydown', onKeyDown, true);
+    popCloseListeners = { doc: onDocPointerDown, key: onKeyDown };
+  };
+  gearBtn.onclick = () => { if (popOpen) closePop(); else openPop(); };
   const panel = document.createElement('div'); panel.className = 'panel';
-  root.append(style, toolbar, panel);
+  root.append(style, toolbar, pop, panel);
   let collapsed = false; let lastVm: ViewModel | null = null; let lastHint: string | null = null;
-  collapseBtn.onclick = () => { collapsed = !collapsed; collapseBtn.textContent = collapsed ? 'Expand' : 'Collapse'; if (lastVm) render(lastVm); };
+  collapseBtn.onclick = () => {
+    collapsed = !collapsed;
+    collapseParts.lbl.textContent = collapsed ? 'Expand' : 'Collapse';
+    collapseBtn.setAttribute('aria-label', collapsed ? 'Expand' : 'Collapse');
+    collapseParts.ico.innerHTML = svg(collapsed ? 'expand' : 'collapse');
+    if (lastVm) render(lastVm);
+  };
   const textareas = new Map<string, HTMLTextAreaElement>();
 
   let leaveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -163,6 +255,8 @@ export function createUI(h: UIHandlers) {
     const wasTa = active instanceof HTMLTextAreaElement ? active : null;
     const sel: [number, number] | null = wasTa ? [wasTa.selectionStart, wasTa.selectionEnd] : null;
     selectBtn.classList.toggle('on', vm.selecting);
+    for (const btn of segButtons) { btn.classList.toggle('on', btn.dataset.theme === vm.prefs.theme); btn.disabled = vm.prefs.themeLocked; }
+    popNote.hidden = !vm.prefs.themeLocked;
     const cur = vm.drafts[vm.drafts.length - 1];
     const hasElements = !!cur && cur.elements.length > 0;
     const strategyText = vm.strategy ? `${T.refresh}: ${vm.strategy}` : '';
@@ -219,7 +313,7 @@ export function createUI(h: UIHandlers) {
     const row = el('div', 'row');
     const send = el('button', 'send', 'Send') as HTMLButtonElement; send.disabled = vm.locked;
     send.title = vm.locked ? T.tipSendLocked : T.tipSend;
-    send.onclick = () => h.onSend();
+    send.onclick = () => { closePop(); h.onSend(); };
     row.append(send);
     panel.append(row);
     for (const id of [...textareas.keys()]) if (!vm.drafts.some((b) => b.id === id)) textareas.delete(id);
@@ -238,5 +332,6 @@ export function createUI(h: UIHandlers) {
     }
   }
   function focusNote() { const ta = panel.querySelector('textarea'); ta?.focus(); }
-  return { host, root, render, flash, focusNote };
+  function setTheme(t: ResolvedTheme): void { host.dataset.theme = t; }
+  return { host, root, render, flash, focusNote, setTheme, closePop };
 }
