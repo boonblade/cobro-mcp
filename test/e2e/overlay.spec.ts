@@ -15,11 +15,12 @@ test('select → note → Send arrives in core.wait with selector, then done fla
   if (r.status !== 'sent') return;
   expect(r.payload.batches[0]).toMatchObject({ note: '버튼 작게', elements: [{ selector: '#target', tag: 'button' }] });
   expect(r.payload.page.url).toContain('basic.html');
-  await expect(page.locator(`${HOST} .status`)).toContainText('전송됨');
+  await expect(page.locator(`${HOST} .chip`)).toContainText('전송됨');
+  await expect(page.locator(`${HOST} .status`)).toContainText('에이전트 응답 대기');
   await expect(page.locator(`${HOST} .dot`)).toHaveClass(/sent/);
   await expect(page.locator(`${HOST} .els`)).toHaveCount(0); // 보낸 배치가 좀비 draft로 되살아나면 안 된다
   bridge.done({ summary: '폰트 12px', selectors: ['#target'], changedFiles: ['x.tsx'] });
-  await expect(page.locator(`${HOST} .status`)).toContainText('완료');
+  await expect(page.locator(`${HOST} .chip`)).toContainText('완료');
   await expect.poll(() => page.evaluate(() => (window as unknown as { __doneEvents: unknown[] }).__doneEvents.length)).toBe(1);
 });
 
@@ -127,9 +128,11 @@ test('toolbar hint guides the next action', async ({ cobroPage: page }) => {
 
 test.describe('en locale', () => {
   test.use({ locale: 'en-US' });
-  test('shows English hints and labels', async ({ cobroPage: page }) => {
+  test('shows English hints and labels', async ({ cobroPage: page, bridge }) => {
     await page.goto('http://127.0.0.1:4173/basic.html');
     await expect(page.locator(`${HOST} .status`)).toContainText('Press Ctrl+Shift+F');
+    bridge.core.wait(10_000);
+    await expect(page.locator(`${HOST} .chip`)).toContainText('Waiting');
     await selectAt(page, '#target');
     await expect(page.locator(`${HOST} .status`)).toContainText('selected');
     await expect(page.locator(`${HOST} .panel h4`)).toContainText('element');
@@ -153,6 +156,7 @@ test('status scrolls on hover only when it overflows', async ({ cobroPage: page,
 });
 
 test('scroll state clears when the hint shortens while still hovering', async ({ cobroPage: page, bridge }) => {
+  bridge.core.setStrategy('none'); // done이 페이지를 reload하면 아래 evaluate가 실행 컨텍스트 파괴와 경합한다
   await page.goto('http://127.0.0.1:4173/basic.html');
   bridge.core.setAgentText('x'.repeat(200));
   await expect.poll(() => page.locator(`${HOST} .status`).textContent()).toContain('x'.repeat(200));
@@ -160,7 +164,8 @@ test('scroll state clears when the hint shortens while still hovering', async ({
   const inner = page.locator(`${HOST} .status-in`);
   await expect(inner).toHaveClass(/scroll/);
   bridge.done({ summary: 'ok', selectors: [], changedFiles: [] });
-  await expect(page.locator(`${HOST} .status`)).toContainText('완료: ok');
+  await expect(page.locator(`${HOST} .status`)).toContainText('ok');
+  await expect(page.locator(`${HOST} .status`)).not.toContainText('완료:');
   await expect(inner).not.toHaveClass(/scroll/);
   await expect.poll(() => inner.evaluate((el) => getComputedStyle(el).transform)).toBe('none');
 });
@@ -198,7 +203,7 @@ test('panel has no batch tabs, Add batch, or history (R64)', async ({ cobroPage:
   expect(r.status).toBe('sent');
   if (r.status === 'sent') expect(r.payload.batches.length).toBe(1);
   bridge.done({ summary: 'ok', selectors: [], changedFiles: [] });
-  await expect(page.locator(`${HOST} .status`)).toContainText('완료');
+  await expect(page.locator(`${HOST} .chip`)).toContainText('완료');
   await expect(page.locator(`${HOST} .hist`)).toHaveCount(0);
   await expect(page.locator(`${HOST} .panel`)).not.toBeVisible();
 });
@@ -231,4 +236,25 @@ test('handshake: Send disabled while agent works, enabled after done, no Unlock'
   if (r2.status === 'sent') expect(r2.payload.batches[0]?.note).toBe('b');
 
   expect(bridge.core.session.batches.filter((b) => b.status === 'unanswered')).toHaveLength(0);
+});
+
+test('toolbar chip and detail are separate — no duplicated label', async ({ cobroPage: page, bridge }) => {
+  bridge.core.setStrategy('none');
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await selectAt(page, '#target');
+  await page.locator(`${HOST} textarea`).fill('메모');
+  const waitingBox = (await page.locator(`${HOST} .toolbar`).boundingBox())!;
+  await page.screenshot({ path: 'screenshots/toolbar-waiting.png', clip: { x: waitingBox.x - 8, y: waitingBox.y - 8, width: waitingBox.width + 16, height: waitingBox.height + 16 } });
+  const waiting = bridge.core.wait(10_000);
+  await page.locator(`${HOST} button.send`).click();
+  await waiting;
+  bridge.core.setAgentText('수정 중: collab.py + page.tsx');
+  await expect(page.locator(`${HOST} .chip`)).toHaveText(/수정 중/);
+  await expect(page.locator(`${HOST} .status`)).toContainText('collab.py + page.tsx');
+  await expect(page.locator(`${HOST} .status`)).not.toContainText('수정 중');
+  const workingBox = (await page.locator(`${HOST} .toolbar`).boundingBox())!;
+  await page.screenshot({ path: 'screenshots/toolbar-working.png', clip: { x: workingBox.x - 8, y: workingBox.y - 8, width: workingBox.width + 16, height: workingBox.height + 16 } });
+  bridge.done({ summary: '완료: ok', selectors: [], changedFiles: [] });
+  await expect(page.locator(`${HOST} .chip`)).toHaveText(/완료/);
+  await expect(page.locator(`${HOST} .status`)).toContainText('ok');
 });

@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows [Kee
 ## [Unreleased]
 ### Added
 - README: `Payload` section — field rules and an example of what `wait` returns after Send.
+### Changed
+- Toolbar: agent state is now a muted chip next to Select, with the agent's message as separate detail text — no more "Working: Working: …" duplication.
 
 ## [0.5.0] — 2026-09-10
 ### Changed
