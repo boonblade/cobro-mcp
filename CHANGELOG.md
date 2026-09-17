@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [Unreleased]
+### Changed
+- `close` deletes screenshots of finished batches and the manual screenshot folder; manual screenshots are capped at 50 during a session.
+
 ## [0.6.0] — 2026-09-17
 ### Added
 - README: `Payload` section — field rules and an example of what `wait` returns after Send.

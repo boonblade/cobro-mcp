@@ -160,4 +160,18 @@ describe('SessionCore', () => {
     await p3;
     vi.useRealTimers();
   });
+  it('closeSession clears screenshots of done batches only, keeping unfinished batches\' shots (R81)', () => {
+    core.setDrafts([draft('1')]);
+    core.markSent(['1'], page);
+    core.done({ summary: 'ok', selectors: [], changedFiles: [] });
+    core.setScreenshot('1', store.shotPath('1'));
+    core.setDrafts([draft('2')]);
+    core.markSent(['2'], page);
+    core.setScreenshot('2', store.shotPath('2'));
+    const spy = vi.spyOn(store, 'clearShots');
+    core.closeSession();
+    expect(spy).toHaveBeenCalledWith(['2']);
+    expect(core.session.batches.find((b) => b.id === '1')!.screenshot).toBeUndefined();
+    expect(core.session.batches.find((b) => b.id === '2')!.screenshot).toBe(store.shotPath('2'));
+  });
 });

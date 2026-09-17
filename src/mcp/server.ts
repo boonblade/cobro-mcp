@@ -79,6 +79,7 @@ export function createMcpServer(deps: { core: SessionCore; browser: BrowserLike;
   server.registerTool('close', { description: '브라우저를 닫고 세션을 정리한다.', inputSchema: {} },
     async () => {
       core.cancelWait();
+      core.closeSession();
       try { await browser.close(); } catch (e) { console.error('[cobro] browser close failed', (e as Error).message); } finally { await deps.onClose?.(); }
       return text({ ok: true });
     });
