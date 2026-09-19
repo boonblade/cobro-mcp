@@ -68,6 +68,8 @@ const CSS = `
 .panel h4{margin:0 0 12px;color:var(--fg);font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px;cursor:grab;user-select:none}
 .panel.dragging h4{cursor:grabbing}
 .panel h4 .mark{color:var(--accent);margin-right:4px}
+.panel h4 .grip{display:inline-flex;width:14px;height:16px;color:var(--fg-4);flex:none;margin-right:-2px}
+.panel h4 .grip svg{width:14px;height:16px;fill:currentColor;display:block}
 .panel h4 .close{margin-left:auto;background:transparent;border-color:transparent;color:var(--fg-5);padding:0 6px}
 .panel h4 .close:hover{background:var(--hover);color:var(--fg-hover)}
 .els{max-height:min(40vh,172px);overflow:auto;margin-bottom:8px;color:var(--fg-3);font-size:11px}
@@ -363,6 +365,7 @@ export function createUI(h: UIHandlers) {
     panel.textContent = '';
     if (cur) {
       const h4 = el('h4');
+      const g = el('span', 'grip'); g.innerHTML = svg('drag'); g.setAttribute('aria-hidden', 'true'); h4.append(g);
       h4.append(el('span', 'mark', '▮'), document.createTextNode(cur.regions?.length ? T.selCountMixed(cur.elements.length, cur.regions.length) : cur.elements.length > 0 ? T.selCount(cur.elements.length) : T.selNone));
       const close = el('button', 'close', '✕'); close.title = T.tipCollapse; close.setAttribute('aria-label', 'Collapse'); close.onclick = () => toggleCollapse();
       h4.append(close);

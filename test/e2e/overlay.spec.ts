@@ -534,6 +534,7 @@ test('rows carry a type chip; region chip is marked', async ({ cobroPage: page }
 test('panel drags by its header and stays put across re-render', async ({ cobroPage: page }) => {
   await page.goto('http://127.0.0.1:4173/basic.html');
   await selectAt(page, '#target');
+  await expect(page.locator(`${HOST} .panel h4 .grip svg`)).toBeVisible();
   await expect(page.locator(`${HOST} .panel h4 .close`)).toBeVisible();
   const before = (await page.locator(`${HOST} .panel`).boundingBox())!;
   const h4 = (await page.locator(`${HOST} .panel h4`).boundingBox())!;
