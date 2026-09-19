@@ -6,6 +6,9 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Added
 - README: Quick start — the six steps from dev server to the first Send, with the sentence to type in the chat.
 
+### Fixed
+- Pick mode: elements under the bottom toolbar could not be picked. While picking, the toolbar now lets clicks through and dims its chips and status text; its buttons (Select, settings, collapse) stay active.
+
 ## [0.6.1] — 2026-09-18
 ### Added
 - README: demo GIF of the core loop (pick → note → Send → done) and a note that React 19 reports `react.component` without `source`.
