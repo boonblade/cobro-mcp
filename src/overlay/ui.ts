@@ -80,9 +80,6 @@ textarea{width:100%;height:54px;resize:none;font:inherit;color:var(--fg);backgro
 .glass{z-index:0}
 .hover-box,.hover-badge,.band,.flash{z-index:1}
 .toolbar,.pop,.panel{z-index:2}
-.toolbar.selecting{pointer-events:none}
-.toolbar.selecting>:not(button){opacity:.45}
-.toolbar.selecting button{pointer-events:auto}
 .pop{position:fixed;bottom:56px;left:50%;transform:translateX(-50%);display:none;min-width:260px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;box-shadow:var(--shadow);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);pointer-events:auto;color:var(--fg-2)}
 .pop.show{display:block}
 .pop-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
@@ -285,7 +282,6 @@ export function createUI(h: UIHandlers) {
     const wasTa = active instanceof HTMLTextAreaElement ? active : null;
     const sel: [number, number] | null = wasTa ? [wasTa.selectionStart, wasTa.selectionEnd] : null;
     selectBtn.classList.toggle('on', vm.selecting);
-    toolbar.classList.toggle('selecting', vm.selecting);
     for (const btn of segButtons) { btn.classList.toggle('on', btn.dataset.theme === vm.prefs.theme); btn.disabled = vm.prefs.themeLocked; }
     popNote.hidden = !vm.prefs.themeLocked;
     const cur = vm.drafts[vm.drafts.length - 1];
