@@ -63,16 +63,25 @@ const CSS = `
 .status-in.enter{animation:cobroin .15s ease-out}
 @keyframes cobroin{from{opacity:.4;transform:translateX(-6px)}to{opacity:1;transform:translateX(0)}}
 @media (prefers-reduced-motion: reduce){.status-in{transition:none}.status-in.enter{animation:none}}
-.panel{position:fixed;right:14px;bottom:60px;width:320px;background:var(--bg-2);border:1px solid var(--accent);border-radius:var(--radius);padding:10px 12px;box-shadow:var(--shadow);pointer-events:auto;display:none}
+.panel{position:fixed;right:14px;bottom:60px;width:320px;background:var(--bg-2);border:1px solid var(--accent);border-radius:var(--radius);padding:16px 16px 14px;box-shadow:var(--shadow);pointer-events:auto;display:none}
 .panel.show{display:block}
-.panel h4{margin:0 0 6px;color:var(--fg);font-size:12px;font-weight:400}
+.panel h4{margin:0 0 12px;color:var(--fg);font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px;cursor:grab;user-select:none}
+.panel.dragging h4{cursor:grabbing}
 .panel h4 .mark{color:var(--accent);margin-right:4px}
-.els{max-height:110px;overflow:auto;margin-bottom:8px;color:var(--fg-3);font-size:11px}
-.els div{display:flex;justify-content:space-between;gap:6px;word-break:break-all}
+.panel h4 .close{margin-left:auto;background:transparent;border-color:transparent;color:var(--fg-5);padding:0 6px}
+.panel h4 .close:hover{background:var(--hover);color:var(--fg-hover)}
+.els{max-height:min(40vh,172px);overflow:auto;margin-bottom:8px;color:var(--fg-3);font-size:11px}
+.els div{display:flex;align-items:center;gap:8px;padding:8px 10px;margin-bottom:8px;background:var(--bg-3);border:1px solid var(--border);border-radius:8px;word-break:break-all}
+.els div:last-child{margin-bottom:0}
 .els .missing{color:var(--warn)}
-textarea{width:100%;height:54px;resize:none;font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--border-2);border-radius:var(--radius-sm);padding:4px 6px;margin-bottom:8px}
-.row{display:flex;justify-content:flex-end;gap:6px;align-items:center}
-.row .send{color:var(--fg-on-accent);background:var(--accent);border-color:var(--accent);font-weight:700}
+.els .num{color:var(--accent);font-weight:700;flex:none}
+.els .label{flex:1;min-width:0}
+.els .kind{flex:none;font-size:10px;line-height:16px;padding:0 6px;border-radius:999px;background:var(--chip);border:1px solid var(--border);color:var(--fg-4)}
+.els .kind.region{color:var(--accent);border-color:color-mix(in srgb, var(--accent) 45%, transparent);background:color-mix(in srgb, var(--accent) 10%, transparent)}
+textarea{width:100%;min-height:80px;resize:none;font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--border-2);border-radius:8px;padding:10px;margin-bottom:8px}
+.row{display:flex;justify-content:space-between;margin-top:12px;gap:6px;align-items:center}
+.row .sends{color:var(--fg-5);font-size:11px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .send{color:var(--fg-on-accent);background:var(--accent);border-color:var(--accent);font-weight:700;flex:none;white-space:nowrap}
 .row .send:disabled{opacity:.4;cursor:not-allowed}
 .marker{position:fixed;border:2px solid var(--accent);border-radius:2px;pointer-events:none;box-sizing:border-box}
 .marker.region{border-style:dashed;background:color-mix(in srgb, var(--accent) 6%, transparent)}
@@ -124,6 +133,7 @@ const T = {
     elMissing: '요소 없음', notePlaceholder: '수정 요청 메모…',
     notePlaceholderMulti: '번호로 구분해 적을 수 있어요 — 1: … 2: …',
     tipSelect: '요소 선택 모드 (Ctrl+Shift+F)', tipCollapse: '패널 접기 / 펼치기', tipDrag: '툴바 이동',
+    sends: '선택자 · 스타일 · 스크린샷 · 콘솔',
     tipSend: '선택한 요소와 메모를 에이전트에 전송',
     tipSendLocked: '에이전트가 작업 중 — done 뒤에 보낼 수 있습니다',
     tipRemove: '이 요소 빼기',
@@ -149,6 +159,7 @@ const T = {
     elMissing: 'missing', notePlaceholder: 'Describe the change…',
     notePlaceholderMulti: 'Number them if they differ — 1: … 2: …',
     tipSelect: 'Pick mode (Ctrl+Shift+F)', tipCollapse: 'Collapse / expand the panel', tipDrag: 'Move toolbar',
+    sends: 'Sends selector · styles · shot · console',
     tipSend: 'Send the selected elements and note to the agent',
     tipSendLocked: 'Agent is working — you can send after done',
     tipRemove: 'Remove this element',
@@ -164,6 +175,25 @@ const AGENT_TEXT: Record<AgentStatus, (t: string) => string> = {
 };
 const DOT_TITLE: Record<AgentStatus, string> = { idle: T.agentIdle, waiting: T.agentWaiting, sent: T.agentSent, working: T.agentWorking, done: T.agentDone };
 const CHIP_LABEL: Record<AgentStatus, string> = { idle: T.chipIdle, waiting: T.chipWaiting, sent: T.chipSent, working: T.chipWorking, done: T.chipDone };
+
+// 드래그: CSS translate로 오프셋만 얹는다(transform의 -50% 중앙 정렬과 독립). 저장 없음(R101)
+// off는 target.style.translate에서 읽어 시작한다 — 재호출(패널처럼 매 render마다 새 handle에 다시 붙는 경우)에도
+// DOM에 이미 남아 있는 오프셋을 이어받는다.
+function makeDraggable(target: HTMLElement, handle: HTMLElement, opts?: { ignore?: (e: Event) => boolean }) {
+  const current = target.style.translate.split(' ').map((v) => parseFloat(v) || 0);
+  let off = { x: current[0] ?? 0, y: current[1] ?? 0 };
+  let drag: { sx: number; sy: number; ox: number; oy: number } | null = null;
+  const clamp = (x: number, y: number) => {
+    const r = target.getBoundingClientRect(); const bx = r.left - off.x, by = r.top - off.y; // 오프셋 0일 때의 위치
+    return { x: Math.min(Math.max(x, -bx + 4), innerWidth - r.width - bx - 4), y: Math.min(Math.max(y, -by + 4), innerHeight - r.height - by - 4) };
+  };
+  handle.addEventListener('pointerdown', (e) => { if (e.button !== 0 || opts?.ignore?.(e)) return; e.preventDefault(); handle.setPointerCapture(e.pointerId); drag = { sx: e.clientX, sy: e.clientY, ox: off.x, oy: off.y }; target.classList.add('dragging'); });
+  handle.addEventListener('pointermove', (e) => { if (!drag) return; off = clamp(drag.ox + e.clientX - drag.sx, drag.oy + e.clientY - drag.sy); target.style.translate = `${off.x}px ${off.y}px`; });
+  const endDrag = () => { drag = null; target.classList.remove('dragging'); };
+  handle.addEventListener('pointerup', endDrag); handle.addEventListener('pointercancel', endDrag);
+  handle.addEventListener('click', (e) => { if (opts?.ignore?.(e)) return; e.preventDefault(); });
+  window.addEventListener('resize', () => { off = clamp(off.x, off.y); target.style.translate = `${off.x}px ${off.y}px`; });
+}
 
 export function createUI(h: UIHandlers) {
   const host = document.createElement('div');
@@ -198,18 +228,7 @@ export function createUI(h: UIHandlers) {
   const collapseBtn = collapseParts.btn;
   const gripParts = iconBtn('drag', 'Move', T.tipDrag, 'grip', false); const grip = gripParts.btn; grip.setAttribute('aria-label', 'Move toolbar');
   toolbar.append(grip, selectBtn, chip, chip2, status, gearBtn, collapseBtn);
-  // 드래그: CSS translate로 오프셋만 얹는다(transform의 -50% 중앙 정렬과 독립). 저장 없음(R101)
-  let drag: { sx: number; sy: number; ox: number; oy: number } | null = null; let off = { x: 0, y: 0 };
-  const clamp = (x: number, y: number) => {
-    const r = toolbar.getBoundingClientRect(); const bx = r.left - off.x, by = r.top - off.y; // 오프셋 0일 때의 위치
-    return { x: Math.min(Math.max(x, -bx + 4), innerWidth - r.width - bx - 4), y: Math.min(Math.max(y, -by + 4), innerHeight - r.height - by - 4) };
-  };
-  grip.addEventListener('pointerdown', (e) => { if (e.button !== 0) return; e.preventDefault(); grip.setPointerCapture(e.pointerId); drag = { sx: e.clientX, sy: e.clientY, ox: off.x, oy: off.y }; toolbar.classList.add('dragging'); });
-  grip.addEventListener('pointermove', (e) => { if (!drag) return; off = clamp(drag.ox + e.clientX - drag.sx, drag.oy + e.clientY - drag.sy); toolbar.style.translate = `${off.x}px ${off.y}px`; });
-  const endDrag = () => { drag = null; toolbar.classList.remove('dragging'); };
-  grip.addEventListener('pointerup', endDrag); grip.addEventListener('pointercancel', endDrag);
-  grip.addEventListener('click', (e) => e.preventDefault());
-  window.addEventListener('resize', () => { off = clamp(off.x, off.y); toolbar.style.translate = `${off.x}px ${off.y}px`; });
+  makeDraggable(toolbar, grip);
   const pop = document.createElement('div'); pop.className = 'pop';
   const popRow = document.createElement('div'); popRow.className = 'pop-row';
   const popLabel = document.createElement('span'); popLabel.className = 'pop-label'; popLabel.textContent = T.theme;
@@ -244,8 +263,12 @@ export function createUI(h: UIHandlers) {
   gearBtn.onclick = () => { if (popOpen) closePop(); else openPop(); };
   const panel = document.createElement('div'); panel.className = 'panel';
   root.append(style, toolbar, pop, panel);
+  // handle을 h4가 아니라 panel 자체로 둔다 — h4는 render마다 다시 만들어지므로(panel.textContent='') h4에
+  // 직접 붙이면 makeDraggable을 매번 재호출해야 하고, 그러면 window resize 리스너가 쌓인다(라운드 1 R0 교정).
+  // panel에 한 번만 붙이고 ignore로 위임: h4 밖이거나 버튼 위면 드래그를 시작하지 않는다.
+  makeDraggable(panel, panel, { ignore: (e) => { const t = e.target as Element; return !t.closest('h4') || t.closest('button') !== null; } });
   let collapsed = false; let lastVm: ViewModel | null = null; let lastHint: string | null = null;
-  collapseBtn.onclick = () => {
+  const toggleCollapse = () => {
     collapsed = !collapsed;
     const label = collapsed ? 'Expand' : 'Collapse';
     collapseBtn.setAttribute('aria-label', label);
@@ -253,6 +276,7 @@ export function createUI(h: UIHandlers) {
     collapseParts.ico.innerHTML = svg(collapsed ? 'expand' : 'collapse');
     if (lastVm) render(lastVm);
   };
+  collapseBtn.onclick = toggleCollapse;
   const textareas = new Map<string, HTMLTextAreaElement>();
 
   let leaveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -340,18 +364,24 @@ export function createUI(h: UIHandlers) {
     if (cur) {
       const h4 = el('h4');
       h4.append(el('span', 'mark', '▮'), document.createTextNode(cur.regions?.length ? T.selCountMixed(cur.elements.length, cur.regions.length) : cur.elements.length > 0 ? T.selCount(cur.elements.length) : T.selNone));
+      const close = el('button', 'close', '✕'); close.title = T.tipCollapse; close.setAttribute('aria-label', 'Collapse'); close.onclick = () => toggleCollapse();
+      h4.append(close);
       panel.append(h4);
       const list = el('div', 'els');
       cur.elements.forEach((e, i) => {
         const row = el('div', e.missing ? 'missing' : '');
-        row.append(el('span', '', `${i + 1}. ${e.selector.split(' > ').pop()}${e.react ? ' · ' + e.react.component : ''}${e.missing ? ' · ' + T.elMissing : ''}`));
+        row.append(el('span', 'num', `${i + 1}.`));
+        row.append(el('span', 'label', `${e.selector.split(' > ').pop()}${e.react ? ' · ' + e.react.component : ''}${e.missing ? ' · ' + T.elMissing : ''}`));
+        row.append(el('span', 'kind', e.tag));
         const x = el('button', '', '✕'); x.title = T.tipRemove; x.onclick = () => h.onRemoveElement(cur.id, i); row.append(x);
         list.append(row);
       });
       cur.regions?.forEach((r, i) => {
         const n = cur.elements.length + i + 1;
         const row = el('div', '');
-        row.append(el('span', '', `${n}. ${T.regionRow(r.rect.w, r.rect.h)}${r.within ? T.regionIn(r.within.split(' > ').pop()!) : ''}`));
+        row.append(el('span', 'num', `${n}.`));
+        row.append(el('span', 'label', `${T.regionRow(r.rect.w, r.rect.h)}${r.within ? T.regionIn(r.within.split(' > ').pop()!) : ''}`));
+        row.append(el('span', 'kind region', 'region'));
         const x = el('button', '', '✕'); x.title = T.tipRemove; x.onclick = () => h.onRemoveRegion(cur.id, i); row.append(x);
         list.append(row);
       });
@@ -363,10 +393,10 @@ export function createUI(h: UIHandlers) {
       panel.append(ta);
     }
     const row = el('div', 'row');
-    const send = el('button', 'send', 'Send') as HTMLButtonElement; send.disabled = vm.locked;
+    const send = el('button', 'send', 'Send →') as HTMLButtonElement; send.disabled = vm.locked;
     send.title = vm.locked ? T.tipSendLocked : T.tipSend;
     send.onclick = () => { closePop(); h.onSend(); };
-    row.append(send);
+    row.append(el('span', 'sends', T.sends), send);
     panel.append(row);
     for (const id of [...textareas.keys()]) if (!vm.drafts.some((b) => b.id === id)) textareas.delete(id);
     // 다시 붙은 textarea가 아까 그 textarea면(= 현재 배치의 것) 포커스와 선택 범위를 되돌린다
