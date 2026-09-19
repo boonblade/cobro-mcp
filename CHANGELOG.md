@@ -6,6 +6,7 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Added
 - README: Quick start — the six steps from dev server to the first Send, with the sentence to type in the chat.
 - Toolbar: drag it anywhere by the handle on its left. The position is not saved — it returns to the bottom center on reload.
+- Picked elements are marked on the page with a numbered badge that matches the panel list; the note placeholder suggests "1: …, 2: …" when several are picked, and the agent is told notes may refer to elements by number.
 
 ## [0.6.1] — 2026-09-18
 ### Added

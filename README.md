@@ -54,7 +54,7 @@ The whole loop is the GIF at the top. No copy-paste, no "check my annotations" �
 
 ## Usage
 
-- **Human**: on the page, press `Ctrl+Shift+F` to toggle pick mode (`Esc` to exit) → click an element (drag selects the topmost elements inside the band) → write a note → **Send**. The toolbar status line tells you what to do next. Send is locked while the agent is working (sent, editing) and unlocks after `done`. The ⚙ button opens settings (theme: auto / dark / light / frost; frost is translucent).
+- **Human**: on the page, press `Ctrl+Shift+F` to toggle pick mode (`Esc` to exit) → click an element (drag selects the topmost elements inside the band) → (each picked element gets a numbered marker; with several, write "1: …, 2: …") → write a note → **Send**. The toolbar status line tells you what to do next. Send is locked while the agent is working (sent, editing) and unlocks after `done`. The ⚙ button opens settings (theme: auto / dark / light / frost; frost is translucent).
 - **Agent**: `open(url)` → `wait()` → read only `batches[].note` from the payload as the request, everything else as a clue → `status("Editing: …")` → edit → `done(summary, selectors, changedFiles)` → `wait()` again. Call `close()` to end the session.
 
 There are exactly six fixed tools. If you need more observation or control, pair Cobro with another MCP.

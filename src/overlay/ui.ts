@@ -74,11 +74,13 @@ textarea{width:100%;height:54px;resize:none;font:inherit;color:var(--fg);backgro
 .row{display:flex;justify-content:flex-end;gap:6px;align-items:center}
 .row .send{color:var(--fg-on-accent);background:var(--accent);border-color:var(--accent);font-weight:700}
 .row .send:disabled{opacity:.4;cursor:not-allowed}
+.marker{position:fixed;border:2px solid var(--accent);border-radius:2px;pointer-events:none;box-sizing:border-box}
+.marker .n{position:absolute;left:-2px;top:-2px;transform:translate(-50%,-50%);min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--accent);color:#fff;font:700 11px/18px ui-monospace,Menlo,Consolas,monospace;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.4)}
 .flash{position:fixed;border:2px solid var(--ok);border-radius:2px;pointer-events:none;animation:cobroflash 1.6s ease-out forwards}
 @keyframes cobroflash{0%{opacity:1}100%{opacity:0}}
 /* shadow root의 자식은 모두 position:fixed 형제 — picker가 glass를 toolbar/panel 뒤에 append하므로 쌓임 순서를 명시한다 */
 .glass{z-index:0}
-.hover-box,.hover-badge,.band,.flash{z-index:1}
+.hover-box,.hover-badge,.band,.flash,.marker{z-index:1}
 .toolbar,.pop,.panel{z-index:2}
 .pop{position:fixed;bottom:56px;left:50%;transform:translateX(-50%);display:none;min-width:260px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;box-shadow:var(--shadow);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);pointer-events:auto;color:var(--fg-2)}
 .pop.show{display:block}
@@ -113,6 +115,7 @@ const T = {
     selCount: (n: number) => `요소 ${n}개 선택됨`,
     selNone: '선택된 요소 없음 · 메모만 보내도 됩니다',
     elMissing: '요소 없음', notePlaceholder: '수정 요청 메모…',
+    notePlaceholderMulti: '번호로 구분해 적을 수 있어요 — 1: … 2: …',
     tipSelect: '요소 선택 모드 (Ctrl+Shift+F)', tipCollapse: '패널 접기 / 펼치기', tipDrag: '툴바 이동',
     tipSend: '선택한 요소와 메모를 에이전트에 전송',
     tipSendLocked: '에이전트가 작업 중 — done 뒤에 보낼 수 있습니다',
@@ -134,6 +137,7 @@ const T = {
     selCount: (n: number) => `${n} element(s) selected`,
     selNone: 'No element selected · a note alone is fine',
     elMissing: 'missing', notePlaceholder: 'Describe the change…',
+    notePlaceholderMulti: 'Number them if they differ — 1: … 2: …',
     tipSelect: 'Pick mode (Ctrl+Shift+F)', tipCollapse: 'Collapse / expand the panel', tipDrag: 'Move toolbar',
     tipSend: 'Send the selected elements and note to the agent',
     tipSendLocked: 'Agent is working — you can send after done',
@@ -277,6 +281,7 @@ export function createUI(h: UIHandlers) {
 
   function render(vm: ViewModel) {
     lastVm = vm;
+    renderMarkers(vm); // 패널이 접혀 있거나 draft가 비어도(= 이른 return) 마커는 매번 갱신(R103)
     // panel을 통째로 다시 그리므로 textarea가 분리되면서 포커스·캐럿이 날아간다(디바운스된 draft 왕복마다 발생) → 복원
     const active = root.activeElement;
     const wasTa = active instanceof HTMLTextAreaElement ? active : null;
@@ -335,7 +340,8 @@ export function createUI(h: UIHandlers) {
       });
       panel.append(list);
       let ta = textareas.get(cur.id);
-      if (!ta) { ta = document.createElement('textarea'); ta.placeholder = T.notePlaceholder; const id = cur.id; ta.addEventListener('input', () => h.onNoteInput(id, ta!.value)); textareas.set(id, ta); }
+      if (!ta) { ta = document.createElement('textarea'); const id = cur.id; ta.addEventListener('input', () => h.onNoteInput(id, ta!.value)); textareas.set(id, ta); }
+      ta.placeholder = cur.elements.length >= 2 ? T.notePlaceholderMulti : T.notePlaceholder;
       if (ta.value !== cur.note) ta.value = cur.note;
       panel.append(ta);
     }
@@ -348,6 +354,27 @@ export function createUI(h: UIHandlers) {
     for (const id of [...textareas.keys()]) if (!vm.drafts.some((b) => b.id === id)) textareas.delete(id);
     // 다시 붙은 textarea가 아까 그 textarea면(= 현재 배치의 것) 포커스와 선택 범위를 되돌린다
     if (wasTa && sel && wasTa.isConnected) { wasTa.focus(); wasTa.setSelectionRange(sel[0], sel[1]); }
+  }
+  // 선택 마커 — 현재 초안의 요소마다 테두리+번호. 매 render와 scroll/resize에서 전부 다시 그린다(R103)
+  let markerFrame = 0;
+  function renderMarkers(vm: ViewModel) {
+    cancelAnimationFrame(markerFrame);
+    markerFrame = requestAnimationFrame(() => {
+      root.querySelectorAll('.marker').forEach((m) => m.remove());
+      const cur = vm.drafts.length ? vm.drafts[vm.drafts.length - 1] : null;
+      if (!cur) return;
+      cur.elements.forEach((e, i) => {
+        if (e.missing) return;
+        let target: Element | null = null;
+        try { target = document.querySelector(e.selector); } catch { /* 선택자 불량 */ }
+        if (!target) return;
+        const r = target.getBoundingClientRect();
+        const m = el('div', 'marker');
+        Object.assign(m.style, { left: r.left - 2 + 'px', top: r.top - 2 + 'px', width: r.width + 4 + 'px', height: r.height + 4 + 'px' });
+        m.append(el('span', 'n', String(i + 1)));
+        root.append(m);
+      });
+    });
   }
   function flash(selectors: string[]) {
     for (const s of selectors) {
@@ -362,5 +389,5 @@ export function createUI(h: UIHandlers) {
   }
   function focusNote() { const ta = panel.querySelector('textarea'); ta?.focus(); }
   function setTheme(t: ResolvedTheme): void { host.dataset.theme = t; }
-  return { host, root, render, flash, focusNote, setTheme, closePop };
+  return { host, root, render, renderMarkers, flash, focusNote, setTheme, closePop };
 }
