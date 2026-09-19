@@ -10,7 +10,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - Drag a band over empty space to send that area as a region (page rect + enclosing element); the screenshot covers it and it gets a dashed numbered marker. Bands that contain elements behave as before.
 
 ### Changed
-- Feedback panel: rows are cards with an accent number and a type chip (tag or "region"), a roomier note box, a "Sends selector · styles · shot · console" hint next to Send, and an ✕ in the header that collapses the panel (same as the toolbar button). The panel itself can be dragged by its header; like the toolbar, the position is not saved.
+- Feedback panel: rows are cards with an accent number and a type chip (tag or "region"), a roomier note box, a "Sends selector · styles · shot · console" hint next to Send, and an ✕ in the header that collapses the panel (same as the toolbar button). The panel itself can be dragged by its header (there is a grip icon on the left); like the toolbar, the position is not saved.
 
 ## [0.6.1] — 2026-09-18
 ### Added
