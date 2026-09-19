@@ -38,6 +38,9 @@ const CSS = `
 .band{position:fixed;display:none;border:1.5px dashed var(--accent);background:color-mix(in srgb, var(--accent) 6%, transparent);pointer-events:none}
 .toolbar{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:6px;align-items:center;background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:6px 10px;box-shadow:var(--shadow);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);pointer-events:auto}
 .toolbar button,.panel button{font:inherit;color:var(--fg-2);background:var(--bg-3);border:1px solid var(--border-2);border-radius:999px;padding:4px 10px;cursor:pointer}
+.toolbar .grip{padding:4px 4px;cursor:grab;color:var(--fg-4);background:transparent;border-color:transparent;touch-action:none}
+.toolbar .grip:active,.toolbar.dragging .grip{cursor:grabbing}
+.toolbar.dragging{user-select:none}
 .toolbar button:hover,.panel button:hover{background:var(--hover);border-color:var(--hover-border);color:var(--fg-hover)}
 .toolbar button:focus-visible,.panel button:focus-visible{outline:2px solid var(--info);outline-offset:1px}
 .toolbar button.on{color:var(--fg-on-accent);background:var(--accent);border-color:var(--accent)}
@@ -113,7 +116,7 @@ const T = {
     selCount: (n: number) => `요소 ${n}개 선택됨`,
     selNone: '선택된 요소 없음 · 메모만 보내도 됩니다',
     elMissing: '요소 없음', notePlaceholder: '수정 요청 메모…',
-    tipSelect: '요소 선택 모드 (Ctrl+Shift+F)', tipCollapse: '패널 접기 / 펼치기',
+    tipSelect: '요소 선택 모드 (Ctrl+Shift+F)', tipCollapse: '패널 접기 / 펼치기', tipDrag: '툴바 이동',
     tipSend: '선택한 요소와 메모를 에이전트에 전송',
     tipSendLocked: '에이전트가 작업 중 — done 뒤에 보낼 수 있습니다',
     tipRemove: '이 요소 빼기',
@@ -134,7 +137,7 @@ const T = {
     selCount: (n: number) => `${n} element(s) selected`,
     selNone: 'No element selected · a note alone is fine',
     elMissing: 'missing', notePlaceholder: 'Describe the change…',
-    tipSelect: 'Pick mode (Ctrl+Shift+F)', tipCollapse: 'Collapse / expand the panel',
+    tipSelect: 'Pick mode (Ctrl+Shift+F)', tipCollapse: 'Collapse / expand the panel', tipDrag: 'Move toolbar',
     tipSend: 'Send the selected elements and note to the agent',
     tipSendLocked: 'Agent is working — you can send after done',
     tipRemove: 'Remove this element',
@@ -182,7 +185,20 @@ export function createUI(h: UIHandlers) {
   const gearBtn = gearParts.btn;
   const collapseParts = iconBtn('collapse', 'Collapse', T.tipCollapse, 'collapse', false);
   const collapseBtn = collapseParts.btn;
-  toolbar.append(selectBtn, chip, chip2, status, gearBtn, collapseBtn);
+  const gripParts = iconBtn('drag', 'Move', T.tipDrag, 'grip', false); const grip = gripParts.btn; grip.setAttribute('aria-label', 'Move toolbar');
+  toolbar.append(grip, selectBtn, chip, chip2, status, gearBtn, collapseBtn);
+  // 드래그: CSS translate로 오프셋만 얹는다(transform의 -50% 중앙 정렬과 독립). 저장 없음(R101)
+  let drag: { sx: number; sy: number; ox: number; oy: number } | null = null; let off = { x: 0, y: 0 };
+  const clamp = (x: number, y: number) => {
+    const r = toolbar.getBoundingClientRect(); const bx = r.left - off.x, by = r.top - off.y; // 오프셋 0일 때의 위치
+    return { x: Math.min(Math.max(x, -bx + 4), innerWidth - r.width - bx - 4), y: Math.min(Math.max(y, -by + 4), innerHeight - r.height - by - 4) };
+  };
+  grip.addEventListener('pointerdown', (e) => { if (e.button !== 0) return; e.preventDefault(); grip.setPointerCapture(e.pointerId); drag = { sx: e.clientX, sy: e.clientY, ox: off.x, oy: off.y }; toolbar.classList.add('dragging'); });
+  grip.addEventListener('pointermove', (e) => { if (!drag) return; off = clamp(drag.ox + e.clientX - drag.sx, drag.oy + e.clientY - drag.sy); toolbar.style.translate = `${off.x}px ${off.y}px`; });
+  const endDrag = () => { drag = null; toolbar.classList.remove('dragging'); };
+  grip.addEventListener('pointerup', endDrag); grip.addEventListener('pointercancel', endDrag);
+  grip.addEventListener('click', (e) => e.preventDefault());
+  window.addEventListener('resize', () => { off = clamp(off.x, off.y); toolbar.style.translate = `${off.x}px ${off.y}px`; });
   const pop = document.createElement('div'); pop.className = 'pop';
   const popRow = document.createElement('div'); popRow.className = 'pop-row';
   const popLabel = document.createElement('span'); popLabel.className = 'pop-label'; popLabel.textContent = T.theme;

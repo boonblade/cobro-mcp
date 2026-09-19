@@ -5,6 +5,7 @@ All notable changes to this project are documented here. The format follows [Kee
 ## [Unreleased]
 ### Added
 - README: Quick start — the six steps from dev server to the first Send, with the sentence to type in the chat.
+- Toolbar: drag it anywhere by the handle on its left. The position is not saved — it returns to the bottom center on reload.
 
 ### Fixed
 - Pick mode: elements under the bottom toolbar could not be picked. While picking, the toolbar now lets clicks through and dims its chips and status text; its buttons (Select, settings, collapse) stay active.
