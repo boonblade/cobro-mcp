@@ -28,6 +28,30 @@ Registering with `-s user` makes it available from any repository on this machin
 
 **Skill (optional)**: to invoke it explicitly with `/cobro`, place [`skills/claude-code/SKILL.md`](skills/claude-code/SKILL.md) at `~/.claude/skills/cobro/SKILL.md`.
 
+## Quick start
+
+1. Start your dev server as usual (say `http://localhost:5173`).
+2. Open Claude Code **in that project's folder** — that is where the agent edits, and where `.cobro/` gets created.
+3. Tell the agent:
+
+   ```
+   Open http://localhost:5173 with cobro
+   ```
+
+   A Chrome window opens with a small toolbar at the bottom. The agent is now waiting for you.
+
+4. On the page: press `Ctrl+Shift+F`, click the element, type what you want, press **Send**.
+
+   ```
+   Make this button green and label it "Book now"
+   ```
+
+5. Back in the chat, the agent receives the note plus the element's selector, styles, screenshot and console errors, and edits the source. The page shows **Working: Editing src/components/RoomCard.tsx**, then reloads (or your HMR kicks in) and highlights the changed element with **Done**. Send the next request the same way.
+
+6. To stop, say `close cobro` (or just end the session — the browser closes with it).
+
+The whole loop is the GIF at the top. No copy-paste, no "check my annotations" — **Send** is the message.
+
 ## Usage
 
 - **Human**: on the page, press `Ctrl+Shift+F` to toggle pick mode (`Esc` to exit) → click an element (drag selects the topmost elements inside the band) → write a note → **Send**. The toolbar status line tells you what to do next. Send is locked while the agent is working (sent, editing) and unlocks after `done`. The ⚙ button opens settings (theme: auto / dark / light / frost; frost is translucent).

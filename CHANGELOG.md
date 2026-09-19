@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [Unreleased]
+### Added
+- README: Quick start — the six steps from dev server to the first Send, with the sentence to type in the chat.
+
 ## [0.6.1] — 2026-09-18
 ### Added
 - README: demo GIF of the core loop (pick → note → Send → done) and a note that React 19 reports `react.component` without `source`.

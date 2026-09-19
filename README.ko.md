@@ -28,6 +28,30 @@ claude mcp add -s user cobro -- npx -y cobro-mcp@latest
 
 **스킬(선택)**: `/cobro`로 명시 호출하고 싶으면 [`skills/claude-code/SKILL.md`](skills/claude-code/SKILL.md)를 `~/.claude/skills/cobro/SKILL.md`에 둔다.
 
+## 빠른 시작
+
+1. 평소처럼 dev 서버를 띄운다(예: `http://localhost:5173`).
+2. Claude Code를 **그 프로젝트 폴더에서** 연다 — 에이전트가 고치는 곳이자 `.cobro/`가 생기는 곳이다.
+3. 에이전트에게 말한다:
+
+   ```
+   cobro로 http://localhost:5173 열어줘
+   ```
+
+   아래에 작은 툴바가 붙은 Chrome 창이 열린다. 에이전트는 이제 기다리는 중이다.
+
+4. 페이지에서: `Ctrl+Shift+F` → 요소 클릭 → 원하는 것을 적고 **Send**.
+
+   ```
+   이 버튼 초록색으로 바꾸고 라벨은 "지금 예약"으로
+   ```
+
+5. 채팅으로 돌아오면 에이전트가 메모와 함께 요소의 선택자·스타일·스크린샷·콘솔 에러를 받아 소스를 고친다. 화면에는 **수정 중: src/components/RoomCard.tsx**가 뜨고, 새로고침(HMR이 있으면 HMR)된 뒤 바뀐 요소가 **완료**로 강조된다. 다음 요청도 같은 방법으로 보낸다.
+
+6. 끝낼 때는 `cobro 닫아줘`(또는 세션을 끝내면 브라우저도 같이 닫힌다).
+
+이 루프 전체가 맨 위 GIF다. 복사·붙여넣기도, "주석 확인해줘"도 없다 — **Send**가 곧 메시지다.
+
 ## 사용법
 
 - **사람**: 페이지에서 `Ctrl+Shift+F`로 선택 모드(`Esc`로 해제) → 요소 클릭(드래그는 밴드 안 최상위 요소들) → 메모 → **Send**. 툴바 상태 줄이 다음에 할 일을 알려준다. 에이전트가 작업 중(전송됨·수정 중)이면 Send가 잠기고 `done` 뒤 풀린다. ⚙ 버튼에서 설정을 연다(테마: auto / dark / light / frost, frost는 반투명).
