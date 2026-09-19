@@ -74,7 +74,7 @@ test('layers share one radius', async ({ cobroPage: page }) => {
   await page.locator(`${HOST} .ib.gear`).click();
   await expect(page.locator(`${HOST} .pop`)).toHaveCSS('border-radius', '12px');
   await expect(page.locator(`${HOST} .panel`)).toHaveCSS('border-radius', '12px');
-  await expect(page.locator(`${HOST} textarea`)).toHaveCSS('border-radius', '6px');
+  await expect(page.locator(`${HOST} textarea`)).toHaveCSS('border-radius', '8px');
   await expect(page.locator(`${HOST} .toolbar`)).toHaveCSS('border-radius', '999px');
 });
 

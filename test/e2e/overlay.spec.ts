@@ -502,3 +502,103 @@ test('region marker numbers continue after elements', async ({ cobroPage: page }
   await expect(page.locator(`${HOST} .marker .n`)).toHaveText(['1', '2']);
   await expect(page.locator(`${HOST} .marker`).nth(1)).toHaveClass(/region/);
 });
+
+test('header ✕ collapses the panel and keeps the selection', async ({ cobroPage: page }) => {
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await selectAt(page, '#target');
+  await page.locator(`${HOST} .panel h4 .close`).click();
+  await expect(page.locator(`${HOST} .panel`)).not.toHaveClass(/show/);
+  await page.locator(`${HOST} button.collapse`).click();
+  await expect(page.locator(`${HOST} .panel`)).toHaveClass(/show/);
+  await expect(page.locator(`${HOST} .els`)).toContainText('#target');
+});
+
+test('rows carry a type chip; region chip is marked', async ({ cobroPage: page }) => {
+  await page.goto('http://127.0.0.1:4173/region.html');
+  await selectAt(page, '#ba');
+  const a = (await page.locator('#a').boundingBox())!;
+  const b = (await page.locator('#b').boundingBox())!;
+  const left = a.x + a.width + 10;
+  const right = b.x - 10;
+  const midY = a.y + a.height / 2;
+  await page.mouse.move(left, midY - 20);
+  await page.mouse.down();
+  await page.mouse.move((left + right) / 2, midY, { steps: 5 });
+  await page.mouse.move(right, midY + 20, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.locator(`${HOST} .els div:nth-child(1) .kind`)).toHaveText('button');
+  await expect(page.locator(`${HOST} .els div:nth-child(2) .kind`)).toHaveClass(/region/);
+  await expect(page.locator(`${HOST} .els div:nth-child(1) .num`)).toHaveText('1.');
+});
+
+test('panel drags by its header and stays put across re-render', async ({ cobroPage: page }) => {
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await selectAt(page, '#target');
+  await expect(page.locator(`${HOST} .panel h4 .close`)).toBeVisible();
+  const before = (await page.locator(`${HOST} .panel`).boundingBox())!;
+  const h4 = (await page.locator(`${HOST} .panel h4`).boundingBox())!;
+  const hx = h4.x + 20;
+  const hy = h4.y + h4.height / 2;
+  await page.mouse.move(hx, hy);
+  await page.mouse.down();
+  await page.mouse.move(hx - 300, hy - 200, { steps: 5 });
+  await page.mouse.up();
+  const after = (await page.locator(`${HOST} .panel`).boundingBox())!;
+  expect(Math.abs(after.x - before.x + 300)).toBeLessThanOrEqual(2);
+  expect(Math.abs(after.y - before.y + 200)).toBeLessThanOrEqual(2);
+  await page.locator(`${HOST} textarea`).click();
+  await page.keyboard.type('abc');
+  await page.waitForTimeout(600);
+  const after2 = (await page.locator(`${HOST} .panel`).boundingBox())!;
+  expect(Math.abs(after2.x - after.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(after2.y - after.y)).toBeLessThanOrEqual(1);
+});
+
+test('header ✕ still collapses (click on button does not start a drag)', async ({ cobroPage: page }) => {
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await selectAt(page, '#target');
+  await expect(page.locator(`${HOST} .panel h4 .close`)).toBeVisible();
+  const h4 = (await page.locator(`${HOST} .panel h4`).boundingBox())!;
+  const hx = h4.x + 20;
+  const hy = h4.y + h4.height / 2;
+  await page.mouse.move(hx, hy);
+  await page.mouse.down();
+  await page.mouse.move(hx - 300, hy - 200, { steps: 5 });
+  await page.mouse.up();
+  const moved = (await page.locator(`${HOST} .panel`).boundingBox())!;
+  await page.locator(`${HOST} .panel h4 .close`).click();
+  await expect(page.locator(`${HOST} .panel`)).not.toHaveClass(/show/);
+  await page.locator(`${HOST} button.collapse`).click();
+  await expect(page.locator(`${HOST} .panel`)).toHaveClass(/show/);
+  const after = (await page.locator(`${HOST} .panel`).boundingBox())!;
+  expect(Math.abs(after.x - moved.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(after.y - moved.y)).toBeLessThanOrEqual(1);
+});
+
+test('dragging the panel twice moves it by the same amount each time (no duplicated drag listeners)', async ({ cobroPage: page }) => {
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await selectAt(page, '#target');
+  await expect(page.locator(`${HOST} .panel h4 .close`)).toBeVisible();
+  await page.locator(`${HOST} textarea`).click();
+  await page.keyboard.type('12345678901234567890'); // 20자 — 디바운스 재렌더를 여러 번 유발
+  await page.waitForTimeout(600);
+  const before = (await page.locator(`${HOST} .panel`).boundingBox())!;
+  const h4a = (await page.locator(`${HOST} .panel h4`).boundingBox())!;
+  await page.mouse.move(h4a.x + 20, h4a.y + h4a.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(h4a.x + 20 - 80, h4a.y + h4a.height / 2 - 40, { steps: 5 });
+  await page.mouse.up();
+  const mid = (await page.locator(`${HOST} .panel`).boundingBox())!;
+  const delta1 = { x: mid.x - before.x, y: mid.y - before.y };
+  expect(Math.abs(delta1.x + 80)).toBeLessThanOrEqual(2); // 절대 이동량 — 드래그가 죽어도(delta1=0) 통과하지 않도록(M1)
+  expect(Math.abs(delta1.y + 40)).toBeLessThanOrEqual(2);
+  const h4b = (await page.locator(`${HOST} .panel h4`).boundingBox())!;
+  await page.mouse.move(h4b.x + 20, h4b.y + h4b.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(h4b.x + 20 - 80, h4b.y + h4b.height / 2 - 40, { steps: 5 });
+  await page.mouse.up();
+  const after2 = (await page.locator(`${HOST} .panel`).boundingBox())!;
+  const delta2 = { x: after2.x - mid.x, y: after2.y - mid.y };
+  expect(Math.abs(delta2.x - delta1.x)).toBeLessThanOrEqual(2);
+  expect(Math.abs(delta2.y - delta1.y)).toBeLessThanOrEqual(2);
+});
