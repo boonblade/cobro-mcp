@@ -282,3 +282,36 @@ test('done summary stays in the detail while waiting, until a new draft starts (
   await selectAt(page, '#card');
   await expect(page.locator(`${HOST} .status`)).not.toContainText('완료');
 });
+
+test('pick mode lets clicks through the toolbar to a fixed bottom CTA', async ({ cobroPage: page }) => {
+  await page.goto('http://127.0.0.1:4173/bottom-cta.html');
+  await page.keyboard.press('Control+Shift+F');
+  const status = (await page.locator(`${HOST} .status`).boundingBox())!;
+  const x = status.x + status.width / 2;
+  const y = status.y + status.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.click(x, y);
+  await expect(page.locator(`${HOST} .els`)).toContainText('#cta');
+  const statusOpacity = await page.locator(`${HOST} .status`).evaluate((el) => getComputedStyle(el).opacity);
+  expect(statusOpacity).toBe('0.45');
+  const selectOpacity = await page.locator(`${HOST} button.select`).evaluate((el) => getComputedStyle(el).opacity);
+  expect(selectOpacity).toBe('1');
+  const box = (await page.locator(`${HOST} .toolbar`).boundingBox())!;
+  await page.screenshot({ path: 'screenshots/toolbar-passthrough.png', clip: { x: box.x - 8, y: box.y - 60, width: box.width + 16, height: box.height + 68 } });
+});
+
+test('Select button still exits pick mode while the toolbar is pass-through', async ({ cobroPage: page }) => {
+  await page.goto('http://127.0.0.1:4173/bottom-cta.html');
+  await page.keyboard.press('Control+Shift+F');
+  await page.locator(`${HOST} .ib.gear`).click();
+  await expect(page.locator(`${HOST} .pop`)).toBeVisible();
+  await page.locator(`${HOST} button.select`).click();
+  await expect(page.locator(`${HOST} .toolbar`)).not.toHaveClass(/selecting/);
+  await expect(page.locator(`${HOST} button.select`)).not.toHaveClass(/on/);
+  const status = (await page.locator(`${HOST} .status`).boundingBox())!;
+  const x = status.x + status.width / 2;
+  const y = status.y + status.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.click(x, y);
+  await expect(page.locator(`${HOST} .els`)).toHaveCount(0);
+});
