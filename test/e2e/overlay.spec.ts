@@ -1,4 +1,13 @@
 import { test, expect, HOST, selectAt } from './helpers.js';
+import type { Page } from '@playwright/test';
+
+// selectAt는 매번 Ctrl+Shift+F로 선택 모드를 토글한다 — 이미 선택 모드인 상태에서 두 번째
+// 요소를 고를 때는 토글 없이 클릭만 한다.
+async function pickAt(page: Page, selector: string) {
+  const b = (await page.locator(selector).boundingBox())!;
+  await page.mouse.move(b.x + 3, b.y + 3);
+  await page.mouse.click(b.x + 3, b.y + 3);
+}
 
 test('select → note → Send arrives in core.wait with selector, then done flashes and dispatches event', async ({ cobroPage: page, bridge }) => {
   bridge.core.setStrategy('none'); // done이 페이지를 reload하면 __doneEvents가 사라진다
@@ -336,4 +345,55 @@ test('position resets on reload', async ({ cobroPage: page }) => {
   const after = (await page.locator(`${HOST} .toolbar`).boundingBox())!;
   expect(Math.abs(after.x - before.x)).toBeLessThanOrEqual(1);
   expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(1);
+});
+
+test('picked elements get numbered markers that renumber on remove', async ({ cobroPage: page }) => {
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await selectAt(page, '#target');
+  await expect(page.locator(`${HOST} .marker`)).toHaveCount(1);
+  await expect(page.locator(`${HOST} .marker .n`)).toHaveText('1');
+  await pickAt(page, '#title');
+  await expect(page.locator(`${HOST} .marker`)).toHaveCount(2);
+  await expect(page.locator(`${HOST} .marker .n`).nth(1)).toHaveText('2');
+  await page.locator(`${HOST} .els button`).first().click();
+  await expect(page.locator(`${HOST} .marker`)).toHaveCount(1);
+  await expect(page.locator(`${HOST} .marker .n`)).toHaveText('1');
+  const markerBox = (await page.locator(`${HOST} .marker`).boundingBox())!;
+  const titleBox = (await page.locator('#title').boundingBox())!;
+  expect(Math.abs(markerBox.x - titleBox.x)).toBeLessThanOrEqual(3);
+  expect(Math.abs(markerBox.y - titleBox.y)).toBeLessThanOrEqual(3);
+});
+
+test('markers follow scroll', async ({ cobroPage: page }) => {
+  await page.goto('http://127.0.0.1:4173/markers.html');
+  await page.locator('#bottom').scrollIntoViewIfNeeded();
+  await selectAt(page, '#bottom');
+  const before = (await page.locator('#bottom').boundingBox())!;
+  const markerBefore = (await page.locator(`${HOST} .marker`).boundingBox())!;
+  expect(Math.abs(markerBefore.x - before.x)).toBeLessThanOrEqual(3);
+  expect(Math.abs(markerBefore.y - before.y)).toBeLessThanOrEqual(3);
+  await page.mouse.wheel(0, -600);
+  await page.waitForTimeout(150);
+  const after = (await page.locator('#bottom').boundingBox())!;
+  const markerAfter = (await page.locator(`${HOST} .marker`).boundingBox())!;
+  expect(Math.abs(markerAfter.x - after.x)).toBeLessThanOrEqual(3);
+  expect(Math.abs(markerAfter.y - after.y)).toBeLessThanOrEqual(3);
+});
+
+test('markers clear on Send', async ({ cobroPage: page, bridge }) => {
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await selectAt(page, '#target');
+  await page.locator(`${HOST} textarea`).fill('버튼 작게');
+  const waiting = bridge.core.wait(10_000);
+  await page.locator(`${HOST} button.send`).click();
+  await waiting;
+  await expect(page.locator(`${HOST} .marker`)).toHaveCount(0);
+});
+
+test('placeholder switches to numbering hint with 2+ elements', async ({ cobroPage: page }) => {
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await selectAt(page, '#target');
+  await expect(page.locator(`${HOST} textarea`)).toHaveAttribute('placeholder', '수정 요청 메모…');
+  await pickAt(page, '#title');
+  await expect(page.locator(`${HOST} textarea`)).toHaveAttribute('placeholder', '번호로 구분해 적을 수 있어요 — 1: … 2: …');
 });

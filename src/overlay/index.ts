@@ -80,6 +80,9 @@ declare const __COBRO_TOKEN__: string;
       if (e.ctrlKey && e.shiftKey && e.code === 'KeyF') { e.preventDefault(); ui.closePop(); picker.setActive(!picker.isActive()); render(); }
       else if (e.key === 'Escape' && picker.isActive()) { picker.setActive(false); render(); }
     }, true);
+    const onViewport = () => ui.renderMarkers(vm());
+    window.addEventListener('scroll', onViewport, { capture: true, passive: true });
+    window.addEventListener('resize', onViewport, { passive: true });
     installGuards(ui.host); // 반드시 위 리스너들 뒤
 
     const onMessage = (m: ServerMsg) => {
