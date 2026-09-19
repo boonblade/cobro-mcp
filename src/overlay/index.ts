@@ -4,6 +4,7 @@ import { createPicker } from './picker.js';
 import { installGuards } from './guard.js';
 import { connectChannel } from './channel.js';
 import { inspectElement } from './inspect.js';
+import { uniqueSelector } from './selector.js';
 import { detectStrategy, applyDone } from './refresh.js';
 import { resolveTheme } from './theme.js';
 
@@ -55,8 +56,9 @@ declare const __COBRO_TOKEN__: string;
       onToggleSelect: () => { picker.setActive(!picker.isActive()); render(); },
       onNoteInput: (id, note) => { const b = drafts?.find((d) => d.id === id); if (b) { b.note = note; pushDraft(); } },
       onRemoveElement: (id, i) => { const b = drafts?.find((d) => d.id === id); if (b) { b.elements.splice(i, 1); pushDraft(); render(); } },
+      onRemoveRegion: (id, i) => { const b = drafts?.find((d) => d.id === id); if (b?.regions) { b.regions.splice(i, 1); pushDraft(); render(); } },
       onSend: () => {
-        const ready = (drafts ?? []).filter((b) => b.elements.length && b.note.trim());
+        const ready = (drafts ?? []).filter((b) => (b.elements.length || (b.regions?.length ?? 0)) && b.note.trim());
         if (!ready.length) { ui.focusNote(); return; }
         flushDraft();
         chan.send({ type: 'send', batchIds: ready.map((b) => b.id), page: pageInfo() });
@@ -74,7 +76,17 @@ declare const __COBRO_TOKEN__: string;
     const picker = createPicker({
       root: ui.root, host: ui.host,
       onPick: (el) => { addEl(ensureCurrent(), el, true); pushDraft(); render(); ui.focusNote(); },
-      onBandPick: (els) => { const b = ensureCurrent(); for (const el of els) addEl(b, el, false); pushDraft(); render(); },
+      onBandPick: (els, band) => {
+        const b = ensureCurrent();
+        if (els.length) { for (const el of els) addEl(b, el, false); }
+        else if (band.right - band.left >= 8 && band.bottom - band.top >= 8) {
+          const cx = (band.left + band.right) / 2, cy = (band.top + band.bottom) / 2;
+          const hit = document.elementsFromPoint(cx, cy).find((el) => el !== ui.host && !ui.host.contains(el) && el !== document.documentElement && el !== document.body);
+          const rect = { x: Math.round(band.left + scrollX), y: Math.round(band.top + scrollY), w: Math.round(band.right - band.left), h: Math.round(band.bottom - band.top) };
+          (b.regions ??= []).push(hit ? { rect, within: uniqueSelector(hit) } : { rect });
+        }
+        pushDraft(); render();
+      },
     });
     window.addEventListener('keydown', (e) => {
       if (e.ctrlKey && e.shiftKey && e.code === 'KeyF') { e.preventDefault(); ui.closePop(); picker.setActive(!picker.isActive()); render(); }

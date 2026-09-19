@@ -57,7 +57,7 @@ const union = (rects: Rect[]): Rect | undefined => {
 let launcher: BrowserLauncher | null = null;
 const bridge = await createBridge({
   store, token, settingsFile, envTheme,
-  screenshot: async (b) => launcher?.isAlive() ? launcher.screenshot({ rect: union(b.elements.filter((e) => !e.missing).map((e) => e.rect)), outPath: store.shotPath(b.id) }) : undefined,
+  screenshot: async (b) => launcher?.isAlive() ? launcher.screenshot({ rect: union([...b.elements.filter((e) => !e.missing).map((e) => e.rect), ...(b.regions ?? []).map((r) => r.rect)]), outPath: store.shotPath(b.id) }) : undefined,
   consoleEntries: () => launcher?.consoleEntries() ?? [],
 });
 const fixed = configStrategy();

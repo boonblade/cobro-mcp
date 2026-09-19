@@ -10,11 +10,15 @@ import type { Theme } from '../../src/core/types.js';
 const overlaySrc = readFileSync('dist/overlay.js', 'utf8');
 export const injected = (port: number, token: string) => overlaySrc.replace(/__COBRO_PORT__/g, String(port)).replace(/__COBRO_TOKEN__/g, JSON.stringify(token));
 
-export const test = base.extend<{ bridge: Bridge; cobroPage: Page; envTheme: Theme | undefined }>({
+export const test = base.extend<{ bridge: Bridge; cobroPage: Page; envTheme: Theme | undefined; shotEnabled: boolean }>({
   envTheme: [undefined, { option: true }],
-  bridge: async ({ envTheme }, use) => {
+  shotEnabled: [false, { option: true }],
+  bridge: async ({ envTheme, shotEnabled }, use) => {
     const dir = mkdtempSync(join(tmpdir(), 'cobro-'));
-    const bridge = await createBridge({ store: new Store(dir), token: randomBytes(16).toString('hex'), settingsFile: join(dir, 'settings.json'), envTheme });
+    const bridge = await createBridge({
+      store: new Store(dir), token: randomBytes(16).toString('hex'), settingsFile: join(dir, 'settings.json'), envTheme,
+      screenshot: shotEnabled ? async (b) => `/tmp/cobro-shot-${b.id}.png` : undefined,
+    });
     await use(bridge); await bridge.close();
   },
   cobroPage: async ({ browser, bridge, locale }, use) => {

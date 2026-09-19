@@ -397,3 +397,108 @@ test('placeholder switches to numbering hint with 2+ elements', async ({ cobroPa
   await pickAt(page, '#title');
   await expect(page.locator(`${HOST} textarea`)).toHaveAttribute('placeholder', '번호로 구분해 적을 수 있어요 — 1: … 2: …');
 });
+
+test.describe('region with screenshot capture', () => {
+  test.use({ shotEnabled: true });
+
+  test('a band over empty space becomes a region with within', async ({ cobroPage: page, bridge }) => {
+    await page.goto('http://127.0.0.1:4173/region.html');
+    await page.keyboard.press('Control+Shift+F');
+    const a = (await page.locator('#a').boundingBox())!;
+    const b = (await page.locator('#b').boundingBox())!;
+    const left = a.x + a.width + 10;
+    const right = b.x - 10;
+    const midY = a.y + a.height / 2;
+    await page.mouse.move(left, midY - 20);
+    await page.mouse.down();
+    await page.mouse.move((left + right) / 2, midY, { steps: 5 });
+    await page.mouse.move(right, midY + 20, { steps: 5 });
+    await page.mouse.up();
+    const lastRow = page.locator(`${HOST} .els div`).last();
+    await expect(lastRow).toContainText('▭');
+    await expect(lastRow).toContainText('#grid');
+    await expect(page.locator(`${HOST} .marker.region`)).toHaveCount(1);
+    await expect(page.locator(`${HOST} .marker .n`)).toHaveText('1');
+    // I1: a region-only draft still guides to note → Send (hasElements counts regions too)
+    await page.keyboard.press('Escape');
+    await expect(page.locator(`${HOST} .status`)).toContainText('메모를 적고 Send를 누르세요');
+    await page.locator(`${HOST} textarea`).fill('여백 줄여줘');
+    await expect(page.locator(`${HOST} .status`)).toContainText('Send로 전송하세요');
+    const waiting = bridge.core.wait(10_000);
+    await page.locator(`${HOST} button.send`).click();
+    const r = await waiting;
+    expect(r.status).toBe('sent');
+    if (r.status === 'sent') {
+      const region = r.payload.batches[0]?.regions?.[0];
+      expect(region).toBeDefined();
+      expect(Math.abs(region!.rect.w - 100)).toBeLessThanOrEqual(3);
+      expect(region!.within).toBe('#grid');
+      expect(r.payload.batches[0]?.elements.length).toBe(0);
+      expect(r.payload.batches[0]?.screenshot).toBeTruthy();
+    }
+
+    // M2: page rect.y must include scrollY — the #a/#b gap (208px page-y) can't survive a
+    // 300px scroll (grid total height ~208px), so this second region is drawn on the
+    // 1500px spacer added below the grid, which stays in view after scrolling.
+    await page.keyboard.press('Control+Shift+F');
+    await page.mouse.wheel(0, 300);
+    await page.waitForTimeout(100);
+    const scrollY = await page.evaluate(() => window.scrollY);
+    const bandLeft = 100, bandTop = 100, bandRight = 200, bandBottom = 140;
+    await page.mouse.move(bandLeft, bandTop);
+    await page.mouse.down();
+    await page.mouse.move((bandLeft + bandRight) / 2, (bandTop + bandBottom) / 2, { steps: 5 });
+    await page.mouse.move(bandRight, bandBottom, { steps: 5 });
+    await page.mouse.up();
+    await page.locator(`${HOST} textarea`).fill('스크롤 확인');
+    const waiting2 = bridge.core.wait(10_000);
+    await page.locator(`${HOST} button.send`).click();
+    const r2 = await waiting2;
+    expect(r2.status).toBe('sent');
+    if (r2.status === 'sent') {
+      const region2 = r2.payload.batches[0]?.regions?.[0];
+      expect(region2).toBeDefined();
+      expect(Math.abs(region2!.rect.y - (bandTop + scrollY))).toBeLessThanOrEqual(3);
+    }
+  });
+});
+
+test('a band that contains an element yields elements, no region', async ({ cobroPage: page, bridge }) => {
+  await page.goto('http://127.0.0.1:4173/region.html');
+  await page.keyboard.press('Control+Shift+F');
+  const b = (await page.locator('#ba').boundingBox())!;
+  const pad = 4;
+  await page.mouse.move(b.x - pad, b.y - pad);
+  await page.mouse.down();
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 5 });
+  await page.mouse.move(b.x + b.width + pad, b.y + b.height + pad, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.locator(`${HOST} .els div`)).toHaveCount(1);
+  await expect(page.locator(`${HOST} .els`)).toContainText('#ba');
+  await page.locator(`${HOST} textarea`).fill('x');
+  const waiting = bridge.core.wait(10_000);
+  await page.locator(`${HOST} button.send`).click();
+  const r = await waiting;
+  expect(r.status).toBe('sent');
+  if (r.status === 'sent') {
+    expect(r.payload.batches[0]?.elements[0]?.selector).toBe('#ba');
+    expect('regions' in r.payload.batches[0]!).toBe(false);
+  }
+});
+
+test('region marker numbers continue after elements', async ({ cobroPage: page }) => {
+  await page.goto('http://127.0.0.1:4173/region.html');
+  await selectAt(page, '#ba');
+  const a = (await page.locator('#a').boundingBox())!;
+  const b = (await page.locator('#b').boundingBox())!;
+  const left = a.x + a.width + 10;
+  const right = b.x - 10;
+  const midY = a.y + a.height / 2;
+  await page.mouse.move(left, midY - 20);
+  await page.mouse.down();
+  await page.mouse.move((left + right) / 2, midY, { steps: 5 });
+  await page.mouse.move(right, midY + 20, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.locator(`${HOST} .marker .n`)).toHaveText(['1', '2']);
+  await expect(page.locator(`${HOST} .marker`).nth(1)).toHaveClass(/region/);
+});

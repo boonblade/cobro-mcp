@@ -17,7 +17,7 @@ export function buildPayload(input: { page: PageInfo; batches: Batch[]; console:
     origin: 'human',
     sentAt: (input.now ?? new Date()).toISOString(),
     page: input.page,
-    batches: input.batches.map((b) => ({ id: b.id, note: b.note, elements: b.elements, ...(b.screenshot ? { screenshot: b.screenshot } : {}) })),
+    batches: input.batches.map((b) => ({ id: b.id, note: b.note, elements: b.elements, ...(b.screenshot ? { screenshot: b.screenshot } : {}), ...(b.regions?.length ? { regions: b.regions } : {}) })),
     console: input.console,
     refreshStrategy: input.refreshStrategy,
   };

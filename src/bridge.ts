@@ -57,7 +57,7 @@ export async function createBridge(opts: { store: Store; token: string; screensh
               if (batches.length === 0) batches = core.session.batches.filter((b) => batchIds.includes(b.id));
               core.deliver({
                 origin: 'human', sentAt: new Date().toISOString(), page,
-                batches: batches.map((b) => ({ id: b.id, note: b.note, elements: b.elements })),
+                batches: batches.map((b) => ({ id: b.id, note: b.note, elements: b.elements, ...(b.regions?.length ? { regions: b.regions } : {}) })),
                 console: [], refreshStrategy: core.effectiveStrategy(),
               });
             }
