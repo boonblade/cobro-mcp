@@ -7,6 +7,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - README: Quick start — the six steps from dev server to the first Send, with the sentence to type in the chat.
 - Toolbar: drag it anywhere by the handle on its left. The position is not saved — it returns to the bottom center on reload.
 - Picked elements are marked on the page with a numbered badge that matches the panel list; the note placeholder suggests "1: …, 2: …" when several are picked, and the agent is told notes may refer to elements by number.
+- Drag a band over empty space to send that area as a region (page rect + enclosing element); the screenshot covers it and it gets a dashed numbered marker. Bands that contain elements behave as before.
 
 ## [0.6.1] — 2026-09-18
 ### Added

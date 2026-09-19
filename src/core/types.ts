@@ -11,9 +11,11 @@ export interface ElementInfo {
   react?: { component: string; source?: string };
   missing?: boolean; // 재주입 후 선택자로 못 찾음
 }
+export interface RegionInfo { rect: Rect; within?: string }
 export interface Batch {
   id: string; note: string; elements: ElementInfo[]; status: BatchStatus;
   createdAt: string; sentAt?: string; doneAt?: string; screenshot?: string; summary?: string;
+  regions?: RegionInfo[];
 }
 export interface PageInfo { url: string; title: string; viewport: { w: number; h: number } }
 export interface Session {
@@ -25,7 +27,7 @@ export interface Session {
 export interface ConsoleEntry { level: 'error' | 'warning' | 'pageerror' | 'requestfailed'; text: string; count: number; last: string }
 export interface Payload {
   origin: 'human'; sentAt: string; page: PageInfo;
-  batches: Array<Pick<Batch, 'id' | 'note' | 'elements' | 'screenshot'>>;
+  batches: Array<Pick<Batch, 'id' | 'note' | 'elements' | 'screenshot' | 'regions'>>;
   console: ConsoleEntry[]; refreshStrategy: RefreshStrategy;
 }
 export interface DoneInfo { summary: string; selectors: string[]; changedFiles: string[] }

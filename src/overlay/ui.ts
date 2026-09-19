@@ -6,7 +6,7 @@ import { svg } from './icons.js';
 type IconName = Parameters<typeof svg>[0];
 
 export interface ViewModel { selecting: boolean; connected: boolean; agent: { status: AgentStatus; text: string }; strategy: RefreshStrategy | null; drafts: Batch[]; locked: boolean; prefs: UiPrefs }
-export interface UIHandlers { onToggleSelect(): void; onNoteInput(id: string, note: string): void; onRemoveElement(id: string, index: number): void; onSend(): void; onSettings(patch: { theme?: Theme }): void }
+export interface UIHandlers { onToggleSelect(): void; onNoteInput(id: string, note: string): void; onRemoveElement(id: string, index: number): void; onRemoveRegion(id: string, index: number): void; onSend(): void; onSettings(patch: { theme?: Theme }): void }
 
 const CSS = `
 :host{
@@ -75,7 +75,11 @@ textarea{width:100%;height:54px;resize:none;font:inherit;color:var(--fg);backgro
 .row .send{color:var(--fg-on-accent);background:var(--accent);border-color:var(--accent);font-weight:700}
 .row .send:disabled{opacity:.4;cursor:not-allowed}
 .marker{position:fixed;border:2px solid var(--accent);border-radius:2px;pointer-events:none;box-sizing:border-box}
+.marker.region{border-style:dashed;background:color-mix(in srgb, var(--accent) 6%, transparent)}
 .marker .n{position:absolute;left:-2px;top:-2px;transform:translate(-50%,-50%);min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--accent);color:#fff;font:700 11px/18px ui-monospace,Menlo,Consolas,monospace;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+.marker.inside-x .n{transform:translate(4px,-50%)}
+.marker.inside-y .n{transform:translate(-50%,4px)}
+.marker.inside-x.inside-y .n{transform:translate(4px,4px)}
 .flash{position:fixed;border:2px solid var(--ok);border-radius:2px;pointer-events:none;animation:cobroflash 1.6s ease-out forwards}
 @keyframes cobroflash{0%{opacity:1}100%{opacity:0}}
 /* shadow root의 자식은 모두 position:fixed 형제 — picker가 glass를 toolbar/panel 뒤에 append하므로 쌓임 순서를 명시한다 */
@@ -113,6 +117,9 @@ const T = {
     hintNote: '메모를 적고 Send를 누르세요', hintPick: 'Ctrl+Shift+F 또는 Select로 요소를 고르세요',
     tipStrategy: (s: RefreshStrategy) => `갱신 전략: ${s} — ${{ none: 'HMR이 있어 done 뒤 새로고침 없음', reload: 'done 뒤 페이지 새로고침', event: '앱이 cobro:done 이벤트로 직접 갱신' }[s]}`,
     selCount: (n: number) => `요소 ${n}개 선택됨`,
+    selCountMixed: (n: number, m: number) => `요소 ${n}개 + 영역 ${m}개 선택됨`,
+    regionRow: (w: number, h: number) => `▭ ${w}×${h}`,
+    regionIn: (s: string) => ` · ${s} 안`,
     selNone: '선택된 요소 없음 · 메모만 보내도 됩니다',
     elMissing: '요소 없음', notePlaceholder: '수정 요청 메모…',
     notePlaceholderMulti: '번호로 구분해 적을 수 있어요 — 1: … 2: …',
@@ -135,6 +142,9 @@ const T = {
     hintNote: 'Write a note, then press Send', hintPick: 'Press Ctrl+Shift+F or Select to pick an element',
     tipStrategy: (s: RefreshStrategy) => `Refresh strategy: ${s} — ${{ none: 'HMR present — no reload after done', reload: 'page reloads after done', event: 'the app refreshes itself on cobro:done' }[s]}`,
     selCount: (n: number) => `${n} element(s) selected`,
+    selCountMixed: (n: number, m: number) => `${n} element(s) + ${m} region(s) selected`,
+    regionRow: (w: number, h: number) => `▭ ${w}×${h}`,
+    regionIn: (s: string) => ` · in ${s}`,
     selNone: 'No element selected · a note alone is fine',
     elMissing: 'missing', notePlaceholder: 'Describe the change…',
     notePlaceholderMulti: 'Number them if they differ — 1: … 2: …',
@@ -290,7 +300,7 @@ export function createUI(h: UIHandlers) {
     for (const btn of segButtons) { btn.classList.toggle('on', btn.dataset.theme === vm.prefs.theme); btn.disabled = vm.prefs.themeLocked; }
     popNote.hidden = !vm.prefs.themeLocked;
     const cur = vm.drafts[vm.drafts.length - 1];
-    const hasElements = !!cur && cur.elements.length > 0;
+    const hasElements = !!cur && (cur.elements.length + (cur.regions?.length ?? 0)) > 0;
     let hint: string;
     if (!vm.connected) hint = T.disconnected;
     else {
@@ -299,7 +309,7 @@ export function createUI(h: UIHandlers) {
       else if (vm.agent.status === 'waiting' && vm.agent.text && !hasElements && (cur?.note.trim() ?? '') === '') text = T.doneResult(stripStatusLabel(vm.agent.text, LABELS.done));
       else if (hasElements && cur!.note.trim() !== '') text = T.hintSend;
       else if (vm.selecting && !hasElements) text = T.hintClick;
-      else if (vm.selecting) text = T.hintMore(cur!.elements.length);
+      else if (vm.selecting) text = T.hintMore(cur!.elements.length + (cur!.regions?.length ?? 0));
       else if (hasElements) text = T.hintNote;
       else text = T.hintPick;
       hint = text;
@@ -329,7 +339,7 @@ export function createUI(h: UIHandlers) {
     panel.textContent = '';
     if (cur) {
       const h4 = el('h4');
-      h4.append(el('span', 'mark', '▮'), document.createTextNode(cur.elements.length > 0 ? T.selCount(cur.elements.length) : T.selNone));
+      h4.append(el('span', 'mark', '▮'), document.createTextNode(cur.regions?.length ? T.selCountMixed(cur.elements.length, cur.regions.length) : cur.elements.length > 0 ? T.selCount(cur.elements.length) : T.selNone));
       panel.append(h4);
       const list = el('div', 'els');
       cur.elements.forEach((e, i) => {
@@ -338,10 +348,17 @@ export function createUI(h: UIHandlers) {
         const x = el('button', '', '✕'); x.title = T.tipRemove; x.onclick = () => h.onRemoveElement(cur.id, i); row.append(x);
         list.append(row);
       });
+      cur.regions?.forEach((r, i) => {
+        const n = cur.elements.length + i + 1;
+        const row = el('div', '');
+        row.append(el('span', '', `${n}. ${T.regionRow(r.rect.w, r.rect.h)}${r.within ? T.regionIn(r.within.split(' > ').pop()!) : ''}`));
+        const x = el('button', '', '✕'); x.title = T.tipRemove; x.onclick = () => h.onRemoveRegion(cur.id, i); row.append(x);
+        list.append(row);
+      });
       panel.append(list);
       let ta = textareas.get(cur.id);
       if (!ta) { ta = document.createElement('textarea'); const id = cur.id; ta.addEventListener('input', () => h.onNoteInput(id, ta!.value)); textareas.set(id, ta); }
-      ta.placeholder = cur.elements.length >= 2 ? T.notePlaceholderMulti : T.notePlaceholder;
+      ta.placeholder = (cur.elements.length + (cur.regions?.length ?? 0)) >= 2 ? T.notePlaceholderMulti : T.notePlaceholder;
       if (ta.value !== cur.note) ta.value = cur.note;
       panel.append(ta);
     }
@@ -363,16 +380,23 @@ export function createUI(h: UIHandlers) {
       root.querySelectorAll('.marker').forEach((m) => m.remove());
       const cur = vm.drafts.length ? vm.drafts[vm.drafts.length - 1] : null;
       if (!cur) return;
+      const place = (m: HTMLElement, left: number, top: number, width: number, height: number, n: number) => {
+        Object.assign(m.style, { left: left + 'px', top: top + 'px', width: width + 'px', height: height + 'px' });
+        if (left < 12) m.classList.add('inside-x');
+        if (top < 12) m.classList.add('inside-y');
+        m.append(el('span', 'n', String(n)));
+        root.append(m);
+      };
       cur.elements.forEach((e, i) => {
         if (e.missing) return;
         let target: Element | null = null;
         try { target = document.querySelector(e.selector); } catch { /* 선택자 불량 */ }
         if (!target) return;
         const r = target.getBoundingClientRect();
-        const m = el('div', 'marker');
-        Object.assign(m.style, { left: r.left - 2 + 'px', top: r.top - 2 + 'px', width: r.width + 4 + 'px', height: r.height + 4 + 'px' });
-        m.append(el('span', 'n', String(i + 1)));
-        root.append(m);
+        place(el('div', 'marker'), r.left - 2, r.top - 2, r.width + 4, r.height + 4, i + 1);
+      });
+      cur.regions?.forEach((r, i) => {
+        place(el('div', 'marker region'), r.rect.x - scrollX, r.rect.y - scrollY, r.rect.w, r.rect.h, cur.elements.length + i + 1);
       });
     });
   }

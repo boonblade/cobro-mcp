@@ -1,4 +1,4 @@
-export function createPicker(opts: { root: ShadowRoot; host: HTMLElement; onPick(el: Element): void; onBandPick(els: Element[]): void }) {
+export function createPicker(opts: { root: ShadowRoot; host: HTMLElement; onPick(el: Element): void; onBandPick(els: Element[], band: { left: number; top: number; right: number; bottom: number }): void }) {
   const { root, host } = opts;
   const glass = document.createElement('div');
   glass.className = 'glass';
@@ -52,7 +52,7 @@ export function createPicker(opts: { root: ShadowRoot; host: HTMLElement; onPick
   glass.addEventListener('mouseup', (e) => {
     if (!dragging) { dragStart = null; return; }
     e.preventDefault();
-    opts.onBandPick(inBand(rectOf(e)));
+    const b = rectOf(e); opts.onBandPick(inBand(b), b);
     band.style.display = 'none'; dragStart = null; dragging = false; suppressClick = true;
   });
   glass.addEventListener('click', (e) => {

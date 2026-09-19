@@ -28,4 +28,18 @@ describe('buildPayload', () => {
     expect(p.batches[0]).toEqual({ id: 'b', note: 'n', elements: [], screenshot: '/s/b.png' });
     expect('summary' in p.batches[0]!).toBe(false);
   });
+
+  it('keeps regions only when present', () => {
+    const p = buildPayload({
+      page, refreshStrategy: 'none', console: [], now: new Date('2026-09-08T00:00:00Z'),
+      batches: [
+        { id: 'b1', note: 'n', status: 'sent', createdAt: 't', elements: [], regions: [{ rect: { x: 1, y: 2, w: 3, h: 4 }, within: '#g' }] },
+        { id: 'b2', note: 'n', status: 'sent', createdAt: 't', elements: [], regions: [] },
+        { id: 'b3', note: 'n', status: 'sent', createdAt: 't', elements: [] },
+      ],
+    });
+    expect(p.batches[0]).toEqual({ id: 'b1', note: 'n', elements: [], regions: [{ rect: { x: 1, y: 2, w: 3, h: 4 }, within: '#g' }] });
+    expect('regions' in p.batches[1]!).toBe(false);
+    expect('regions' in p.batches[2]!).toBe(false);
+  });
 });
