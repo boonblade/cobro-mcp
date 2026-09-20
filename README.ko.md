@@ -166,6 +166,10 @@ window.addEventListener('cobro:done', (e) => { const { summary, changedFiles, se
 - 선택 모드 단축키 `Ctrl+Shift+F`는 바꿀 수 없다. WebKit 빌드는 실제 Safari와 폰트·스크롤바가 다르다.
 - 브라우저 프로필은 한 번에 한 세션만 쓴다 — 다른 세션이 쓰는 중이면 `open`이 "프로필 사용 중"으로 실패한다(`COBRO_PROFILE_DIR`로 따로 지정 가능).
 
+## 배포
+
+배포는 GitHub Actions가 npm Trusted Publishing으로 한다(토큰·수동 2FA 없음): `CHANGELOG.md` 확정 → `npm version x.y.z --no-git-tag-version` → 커밋 → `vx.y.z` 태그 → 태그 푸시. 워크플로(`.github/workflows/publish.yml`)가 태그와 `package.json` 버전 일치를 확인하고 타입체크·린트·단위 테스트·빌드 뒤 provenance와 함께 publish한다. E2E는 태그 전 로컬 게이트로 유지.
+
 ## 라이선스
 
 [Apache License 2.0](LICENSE) · 고지는 [NOTICE](NOTICE). "Cobro"라는 이름과 슬로건은 상표로 이 라이선스가 사용을 허락하지 않는다(§6) — 포크는 다른 이름을 쓴다. 기여는 [DCO](https://developercertificate.org/)(`git commit -s`).

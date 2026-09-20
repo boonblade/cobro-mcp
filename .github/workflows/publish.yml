@@ -1,0 +1,31 @@
+# 태그 v* 푸시 → npm Trusted Publishing(OIDC, 토큰·2FA 없음)으로 배포.
+# npm 쪽 등록: 패키지 Settings → Trusted publisher → GitHub Actions(owner boonblade / repo cobro-mcp / workflow publish.yml).
+name: Publish to npm
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  id-token: write # OIDC 토큰 발급 — trusted publishing 필수
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: npm >= 11.5.1 (trusted publishing)
+        run: npm install -g npm@latest && npm --version
+      - run: npm ci
+      - name: Tag must match package.json version
+        run: node -e "const v=require('./package.json').version; if ('v'+v!==process.env.TAG){console.error(`tag ${process.env.TAG} != package.json ${v}`);process.exit(1)}"
+        env:
+          TAG: ${{ github.ref_name }}
+      - run: npm run check
+      - run: npm test
+      - run: npm publish # prepublishOnly가 빌드한다. provenance는 OIDC 경로에서 자동

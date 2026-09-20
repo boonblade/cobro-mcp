@@ -166,6 +166,10 @@ window.addEventListener('cobro:done', (e) => { const { summary, changedFiles, se
 - The pick-mode shortcut `Ctrl+Shift+F` cannot be changed. The WebKit build differs from real Safari in fonts and scrollbars.
 - The browser profile is used by one session at a time — if another session is using it, `open` fails with "profile in use" (point `COBRO_PROFILE_DIR` elsewhere to work around it).
 
+## Releasing
+
+Releases are published by GitHub Actions through npm Trusted Publishing (no tokens, no manual 2FA): update `CHANGELOG.md`, run `npm version x.y.z --no-git-tag-version`, commit, tag `vx.y.z`, push the tag. The workflow (`.github/workflows/publish.yml`) checks that the tag matches `package.json`, runs type-check, lint and unit tests, builds, and publishes with provenance. End-to-end tests stay a local gate before tagging.
+
 ## License
 
 [Apache License 2.0](LICENSE) · notices in [NOTICE](NOTICE). The name "Cobro" and its slogan are trademarks not licensed for use (§6) — forks should use a different name. Contributions require a [DCO](https://developercertificate.org/) (`git commit -s`).
