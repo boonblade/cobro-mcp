@@ -6,7 +6,7 @@ import { svg } from './icons.js';
 type IconName = Parameters<typeof svg>[0];
 
 export interface ViewModel { selecting: boolean; connected: boolean; agent: { status: AgentStatus; text: string }; strategy: RefreshStrategy | null; drafts: Batch[]; locked: boolean; prefs: UiPrefs }
-export interface UIHandlers { onToggleSelect(): void; onNoteInput(id: string, note: string): void; onRemoveElement(id: string, index: number): void; onRemoveRegion(id: string, index: number): void; onSend(): void; onSettings(patch: { theme?: Theme }): void }
+export interface UIHandlers { onToggleSelect(): void; onNoteInput(id: string, note: string): void; onRemoveElement(id: string, index: number): void; onRemoveRegion(id: string, index: number): void; onSend(): void; onSettings(patch: { theme?: Theme }): void; onNoteOnly(): void }
 
 const CSS = `
 :host{
@@ -125,16 +125,17 @@ const T = {
     disconnected: '연결 끊김 — 재연결 중',
     hintSend: 'Send로 전송하세요', hintClick: '페이지에서 요소를 클릭하세요 · Esc로 해제',
     hintMore: (n: number) => `요소 ${n}개 선택 · 더 고르거나 메모를 적으세요`,
-    hintNote: '메모를 적고 Send를 누르세요', hintPick: 'Ctrl+Shift+F 또는 Select로 요소를 고르세요',
+    hintNote: '메모를 적고 Send를 누르세요', hintPick: 'Ctrl+Shift+F 요소 선택 · Ctrl+Shift+M 메모만',
     tipStrategy: (s: RefreshStrategy) => `갱신 전략: ${s} — ${{ none: 'HMR이 있어 done 뒤 새로고침 없음', reload: 'done 뒤 페이지 새로고침', event: '앱이 cobro:done 이벤트로 직접 갱신' }[s]}`,
     selCount: (n: number) => `요소 ${n}개 선택됨`,
     selCountMixed: (n: number, m: number) => `요소 ${n}개 + 영역 ${m}개 선택됨`,
     regionRow: (w: number, h: number) => `▭ ${w}×${h}`,
     regionIn: (s: string) => ` · ${s} 안`,
-    selNone: '선택된 요소 없음 · 메모만 보내도 됩니다',
+    selNone: '요소 없음 · 메모만 보내도 됩니다',
     elMissing: '요소 없음', notePlaceholder: '수정 요청 메모…',
     notePlaceholderMulti: '번호로 구분해 적을 수 있어요 — 1: … 2: …',
     tipSelect: '요소 선택 모드 (Ctrl+Shift+F)', tipCollapse: '패널 접기 / 펼치기', tipDrag: '툴바 이동',
+    tipNote: '메모만 보내기 (Ctrl+Shift+M)',
     sends: '선택자 · 스타일 · 스크린샷 · 콘솔',
     tipSend: '선택한 요소와 메모를 에이전트에 전송',
     tipSendLocked: '에이전트가 작업 중 — done 뒤에 보낼 수 있습니다',
@@ -151,16 +152,17 @@ const T = {
     disconnected: 'Disconnected — reconnecting',
     hintSend: 'Press Send to deliver', hintClick: 'Click an element on the page · Esc to exit',
     hintMore: (n: number) => `${n} selected · pick more or write a note`,
-    hintNote: 'Write a note, then press Send', hintPick: 'Press Ctrl+Shift+F or Select to pick an element',
+    hintNote: 'Write a note, then press Send', hintPick: 'Ctrl+Shift+F pick · Ctrl+Shift+M note only',
     tipStrategy: (s: RefreshStrategy) => `Refresh strategy: ${s} — ${{ none: 'HMR present — no reload after done', reload: 'page reloads after done', event: 'the app refreshes itself on cobro:done' }[s]}`,
     selCount: (n: number) => `${n} element(s) selected`,
     selCountMixed: (n: number, m: number) => `${n} element(s) + ${m} region(s) selected`,
     regionRow: (w: number, h: number) => `▭ ${w}×${h}`,
     regionIn: (s: string) => ` · in ${s}`,
-    selNone: 'No element selected · a note alone is fine',
+    selNone: 'No element · note alone is fine',
     elMissing: 'missing', notePlaceholder: 'Describe the change…',
     notePlaceholderMulti: 'Number them if they differ — 1: … 2: …',
     tipSelect: 'Pick mode (Ctrl+Shift+F)', tipCollapse: 'Collapse / expand the panel', tipDrag: 'Move toolbar',
+    tipNote: 'Note only (Ctrl+Shift+M)',
     sends: 'Sends selector · styles · shot · console',
     tipSend: 'Send the selected elements and note to the agent',
     tipSendLocked: 'Agent is working — you can send after done',
@@ -213,6 +215,8 @@ export function createUI(h: UIHandlers) {
   };
   const selectParts = iconBtn('select', 'Select', T.tipSelect, 'select', true);
   const selectBtn = selectParts.btn; selectBtn.onclick = () => { closePop(); h.onToggleSelect(); };
+  const noteParts = iconBtn('note', 'Note', T.tipNote, 'note', false); const noteBtn = noteParts.btn;
+  noteBtn.onclick = () => { closePop(); h.onNoteOnly(); };
   const chip = document.createElement('span'); chip.className = 'chip';
   const dot = document.createElement('span'); dot.className = 'dot'; dot.textContent = '●';
   const chipLabel = document.createElement('span'); chipLabel.className = 'chip-label';
@@ -229,7 +233,7 @@ export function createUI(h: UIHandlers) {
   const collapseParts = iconBtn('collapse', 'Collapse', T.tipCollapse, 'collapse', false);
   const collapseBtn = collapseParts.btn;
   const gripParts = iconBtn('drag', 'Move', T.tipDrag, 'grip', false); const grip = gripParts.btn; grip.setAttribute('aria-label', 'Move toolbar');
-  toolbar.append(grip, selectBtn, chip, chip2, status, gearBtn, collapseBtn);
+  toolbar.append(grip, selectBtn, noteBtn, chip, chip2, status, gearBtn, collapseBtn);
   makeDraggable(toolbar, grip);
   const pop = document.createElement('div'); pop.className = 'pop';
   const popRow = document.createElement('div'); popRow.className = 'pop-row';
@@ -270,14 +274,15 @@ export function createUI(h: UIHandlers) {
   // panel에 한 번만 붙이고 ignore로 위임: h4 밖이거나 버튼 위면 드래그를 시작하지 않는다.
   makeDraggable(panel, panel, { ignore: (e) => { const t = e.target as Element; return !t.closest('h4') || t.closest('button') !== null; } });
   let collapsed = false; let lastVm: ViewModel | null = null; let lastHint: string | null = null;
-  const toggleCollapse = () => {
-    collapsed = !collapsed;
+  const setCollapsed = (v: boolean) => {
+    collapsed = v;
     const label = collapsed ? 'Expand' : 'Collapse';
     collapseBtn.setAttribute('aria-label', label);
     collapseBtn.title = label;
     collapseParts.ico.innerHTML = svg(collapsed ? 'expand' : 'collapse');
     if (lastVm) render(lastVm);
   };
+  const toggleCollapse = () => setCollapsed(!collapsed);
   collapseBtn.onclick = toggleCollapse;
   const textareas = new Map<string, HTMLTextAreaElement>();
 
@@ -333,7 +338,7 @@ export function createUI(h: UIHandlers) {
       let text: string;
       if (vm.agent.status === 'sent' || vm.agent.status === 'working' || vm.agent.status === 'done') text = AGENT_TEXT[vm.agent.status](vm.agent.text);
       else if (vm.agent.status === 'waiting' && vm.agent.text && !hasElements && (cur?.note.trim() ?? '') === '') text = T.doneResult(stripStatusLabel(vm.agent.text, LABELS.done));
-      else if (hasElements && cur!.note.trim() !== '') text = T.hintSend;
+      else if (cur && cur.note.trim() !== '') text = T.hintSend;
       else if (vm.selecting && !hasElements) text = T.hintClick;
       else if (vm.selecting) text = T.hintMore(cur!.elements.length + (cur!.regions?.length ?? 0));
       else if (hasElements) text = T.hintNote;
@@ -447,5 +452,6 @@ export function createUI(h: UIHandlers) {
   }
   function focusNote() { const ta = panel.querySelector('textarea'); ta?.focus(); }
   function setTheme(t: ResolvedTheme): void { host.dataset.theme = t; }
-  return { host, root, render, renderMarkers, flash, focusNote, setTheme, closePop };
+  function expand(): void { if (collapsed) setCollapsed(false); }
+  return { host, root, render, renderMarkers, flash, focusNote, setTheme, closePop, expand };
 }

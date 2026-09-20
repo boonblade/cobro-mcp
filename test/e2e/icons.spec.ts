@@ -3,9 +3,9 @@ import { test, expect, HOST } from './helpers.js';
 test('toolbar buttons are icon buttons whose labels unfold on hover', async ({ cobroPage: page }) => {
   await page.goto('http://127.0.0.1:4173/basic.html');
   const ibs = page.locator(`${HOST} .ib`);
-  await expect(ibs).toHaveCount(4);
-  await expect(ibs.locator('svg')).toHaveCount(4);
-  for (const cls of ['select', 'collapse', 'gear', 'grip']) await expect(page.locator(`${HOST} .ib.${cls}`)).toHaveCount(1);
+  await expect(ibs).toHaveCount(5);
+  await expect(ibs.locator('svg')).toHaveCount(5);
+  for (const cls of ['select', 'note', 'collapse', 'gear', 'grip']) await expect(page.locator(`${HOST} .ib.${cls}`)).toHaveCount(1);
   await expect(page.locator(`${HOST} .ib.gear`)).toHaveAttribute('aria-label', '설정');
   await expect(page.locator(`${HOST} .ib.gear .lbl`)).toHaveCount(0);
   const selectBtn = page.locator(`${HOST} .ib.select`);
