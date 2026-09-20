@@ -1,7 +1,9 @@
 // React 19 react.source 복원(R112) — 오버레이는 _debugStack 프레임만 싣고, 서버가 소스맵으로 역변환한다
 // pickUserFrame은 의존성 0인 ./frame.js에 있다(I3) — 여기서 재수출하지 않는다(overlay 번들에 trace-mapping 유입 방지)
 import { TraceMap, originalPositionFor } from '@jridgewell/trace-mapping';
-import type { Batch, ElementInfo, PageInfo } from './types.js';
+import type { Batch, ComponentInfo, ElementInfo, PageInfo } from './types.js';
+
+const FRAMEWORK_KEYS = ['react', 'vue'] as const;
 
 /** 모듈 텍스트 끝의 sourceMappingURL을 찾는다 — data:면 그대로, 아니면 모듈 URL 기준 절대 URL로 */
 export function findSourceMapUrl(moduleText: string, moduleUrl: string): string | undefined {
@@ -27,12 +29,17 @@ export function resolveOriginal(mapJson: unknown, opts: { moduleUrl: string; map
   return `${path}:${pos.line}`;
 }
 
-/** react.frame을 페이로드로 내보내지 않는다(R112·R65 계약 불변) — frame이 없으면 바이트 동일 */
+/** react·vue 어느 쪽 frame도 페이로드로 내보내지 않는다(R112·R65 계약 불변) — frame이 없으면 바이트 동일 */
 export function stripFrame(e: ElementInfo): ElementInfo {
-  if (!e.react?.frame) return e;
-  const rest: NonNullable<ElementInfo['react']> = { component: e.react.component };
-  if (e.react.source) rest.source = e.react.source;
-  return { ...e, react: rest };
+  let out = e;
+  for (const key of FRAMEWORK_KEYS) {
+    const info = out[key];
+    if (!info?.frame) continue;
+    const rest: ComponentInfo = { component: info.component };
+    if (info.source) rest.source = info.source;
+    out = { ...out, [key]: rest };
+  }
+  return out;
 }
 
 function sameOrigin(a: string, b: string): boolean {

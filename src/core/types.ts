@@ -5,10 +5,13 @@ export type AgentStatus = 'idle' | 'waiting' | 'sent' | 'working' | 'done';
 export type BatchStatus = 'draft' | 'sent' | 'done' | 'unanswered'; // unanswered: done 없이 다음 Send가 오면 앞 묶음이 이 상태가 된다(R79)
 
 export interface Rect { x: number; y: number; w: number; h: number } // 페이지 좌표
+// frame: React 19 _debugStack 첫 사용자 프레임, 서버가 source로 해석 후 페이로드에서 제거(R112). Vue는 채우지 않는다(행 정보 없음, R114)
+export interface ComponentInfo { component: string; source?: string; frame?: { url: string; line: number; col: number } }
 export interface ElementInfo {
   selector: string; tag: string; classes: string[]; text: string; rect: Rect;
   styles: Record<string, string>;
-  react?: { component: string; source?: string; frame?: { url: string; line: number; col: number } }; // frame: React 19 _debugStack 첫 사용자 프레임, 서버가 source로 해석 후 페이로드에서 제거(R112)
+  react?: ComponentInfo;
+  vue?: ComponentInfo;
   missing?: boolean; // 재주입 후 선택자로 못 찾음
 }
 export interface RegionInfo { rect: Rect; within?: string }

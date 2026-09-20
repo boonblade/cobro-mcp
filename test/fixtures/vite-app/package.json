@@ -1,1 +1,1 @@
-{ "name": "cobro-vite-fixture", "private": true, "type": "module", "scripts": { "dev": "vite --port 4174 --strictPort" }, "devDependencies": { "vite": "^5.4.0", "@vitejs/plugin-react": "^5", "react": "^19", "react-dom": "^19" } }
+{ "name": "cobro-vite-fixture", "private": true, "type": "module", "scripts": { "dev": "vite --port 4174 --strictPort" }, "devDependencies": { "vite": "^5.4.0", "@vitejs/plugin-react": "^5", "react": "^19", "react-dom": "^19", "vue": "^3", "@vitejs/plugin-vue": "^6" } }

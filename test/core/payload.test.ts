@@ -53,4 +53,14 @@ describe('buildPayload', () => {
     expect(p.batches[0]!.elements[0]!.react).toEqual({ component: 'Cta', source: 'src/react.jsx:4' });
     expect(p.batches[0]!.elements[1]).toBe(noFrame);
   });
+
+  it('strips vue.frame too (same contract as react)', () => {
+    const withFrame = { selector: '#a', tag: 'button', classes: [], text: '', rect: { x: 0, y: 0, w: 0, h: 0 }, styles: {}, vue: { component: 'Cta', source: 'src/Cta.vue', frame: { url: 'http://x/a.js', line: 1, col: 2 } } };
+    const p = buildPayload({
+      page, refreshStrategy: 'none', console: [], now: new Date('2026-09-08T00:00:00Z'),
+      batches: [{ id: 'b', note: 'n', status: 'sent', createdAt: 't', elements: [withFrame] }],
+    });
+    expect(p.batches[0]!.elements[0]!.vue).toEqual({ component: 'Cta', source: 'src/Cta.vue' });
+    expect(JSON.stringify(p)).not.toContain('"frame"');
+  });
 });
