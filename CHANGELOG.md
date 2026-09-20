@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [Unreleased]
+### Added
+- Send a note with no element: the new Note button (Ctrl+Shift+M) opens the panel directly; the agent receives an empty elements list and a full-viewport screenshot.
+
 ## [0.8.1] — 2026-09-21
 ### Changed
 - README: changelog link, a drag hint for the toolbar and panel, and the demo GIF now shows the agent transcript alongside the browser.

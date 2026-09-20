@@ -77,7 +77,7 @@ test('overlay stays above max z-index header and survives a later native dialog'
 
 test('works on a strict-CSP page (bypassCSP context)', async ({ cobroPage: page, bridge }) => {
   await page.goto('http://127.0.0.1:4173/csp.html');
-  await expect(page.locator(`${HOST} .status`)).toContainText('요소를 고르세요');
+  await expect(page.locator(`${HOST} .status`)).toContainText('요소 선택');
   await expect.poll(() => bridge.channel.clientCount()).toBe(1);
 });
 
@@ -122,7 +122,7 @@ test('drag-select picks only the top-most fully contained element', async ({ cob
 
 test('toolbar hint guides the next action', async ({ cobroPage: page }) => {
   await page.goto('http://127.0.0.1:4173/basic.html');
-  await expect(page.locator(`${HOST} .status`)).toContainText('Ctrl+Shift+F 또는 Select로 요소를 고르세요');
+  await expect(page.locator(`${HOST} .status`)).toContainText('요소 선택');
   await page.locator(`${HOST} button`, { hasText: 'Select' }).click();
   await expect(page.locator(`${HOST} .status`)).toContainText('페이지에서 요소를 클릭하세요');
   const b = (await page.locator('#target').boundingBox())!;
@@ -139,7 +139,7 @@ test.describe('en locale', () => {
   test.use({ locale: 'en-US' });
   test('shows English hints and labels', async ({ cobroPage: page, bridge }) => {
     await page.goto('http://127.0.0.1:4173/basic.html');
-    await expect(page.locator(`${HOST} .status`)).toContainText('Press Ctrl+Shift+F');
+    await expect(page.locator(`${HOST} .status`)).toContainText('Ctrl+Shift+F pick');
     const waiting = bridge.core.wait(10_000);
     void waiting; // 이 테스트는 응답을 기다리지 않는다 — 칩 라벨만 확인
     await expect(page.locator(`${HOST} .chip:not(.strategy)`)).toContainText('Waiting');
@@ -611,4 +611,40 @@ test('footer sits 8px under the textarea', async ({ cobroPage: page }) => {
   const row = (await page.locator(`${HOST} .panel .row`).boundingBox())!;
   expect(row.y - (textarea.y + textarea.height)).toBeGreaterThanOrEqual(7);
   expect(row.y - (textarea.y + textarea.height)).toBeLessThanOrEqual(9);
+});
+
+async function focusedTag(page: Page): Promise<string | undefined> {
+  return page.evaluate((host) => {
+    const h = document.querySelector(host);
+    return (h as (Element & { shadowRoot: ShadowRoot }) | null)?.shadowRoot?.activeElement?.tagName;
+  }, HOST);
+}
+
+test('note-only: Ctrl+Shift+M opens the panel and Send delivers a note with no elements', async ({ cobroPage: page, bridge }) => {
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await page.keyboard.press('Control+Shift+M');
+  await expect(page.locator(`${HOST} .panel`)).toHaveClass(/show/);
+  expect(await focusedTag(page)).toBe('TEXTAREA');
+  await expect(page.locator(`${HOST} button.select`)).not.toHaveClass(/on/);
+  await page.keyboard.type('Whole page feels slow');
+  await expect(page.locator(`${HOST} .status`)).toContainText('Send로 전송하세요');
+  const waiting = bridge.core.wait(10_000);
+  await page.locator(`${HOST} button.send`).click();
+  const r = await waiting;
+  expect(r.status).toBe('sent');
+  if (r.status !== 'sent') return;
+  expect(r.payload.batches[0]!.elements.length).toBe(0);
+  expect(r.payload.batches[0]).not.toHaveProperty('regions');
+  expect(r.payload.batches[0]!.note).toBe('Whole page feels slow');
+});
+
+test('note-only: toolbar Note button works while collapsed', async ({ cobroPage: page }) => {
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await selectAt(page, '#target');
+  await page.locator(`${HOST} button.collapse`).click();
+  await expect(page.locator(`${HOST} .panel`)).not.toHaveClass(/show/);
+  await page.locator(`${HOST} button.note`).click();
+  await expect(page.locator(`${HOST} .panel`)).toHaveClass(/show/);
+  expect(await focusedTag(page)).toBe('TEXTAREA');
+  await expect(page.locator(`${HOST} .els`)).toContainText('#target');
 });

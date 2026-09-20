@@ -40,6 +40,7 @@ declare const __COBRO_TOKEN__: string;
       prefs,
     });
     const render = () => ui.render(vm());
+    const onNoteOnly = () => { ensureCurrent(); ui.expand(); render(); ui.focusNote(); };
     const addEl = (b: Batch, el: Element, toggle: boolean) => {
       const info = inspectElement(el);
       const i = b.elements.findIndex((e) => e.selector === info.selector);
@@ -57,8 +58,9 @@ declare const __COBRO_TOKEN__: string;
       onNoteInput: (id, note) => { const b = drafts?.find((d) => d.id === id); if (b) { b.note = note; pushDraft(); } },
       onRemoveElement: (id, i) => { const b = drafts?.find((d) => d.id === id); if (b) { b.elements.splice(i, 1); pushDraft(); render(); } },
       onRemoveRegion: (id, i) => { const b = drafts?.find((d) => d.id === id); if (b?.regions) { b.regions.splice(i, 1); pushDraft(); render(); } },
+      onNoteOnly,
       onSend: () => {
-        const ready = (drafts ?? []).filter((b) => (b.elements.length || (b.regions?.length ?? 0)) && b.note.trim());
+        const ready = (drafts ?? []).filter((b) => b.note.trim());
         if (!ready.length) { ui.focusNote(); return; }
         flushDraft();
         chan.send({ type: 'send', batchIds: ready.map((b) => b.id), page: pageInfo() });
@@ -90,6 +92,7 @@ declare const __COBRO_TOKEN__: string;
     });
     window.addEventListener('keydown', (e) => {
       if (e.ctrlKey && e.shiftKey && e.code === 'KeyF') { e.preventDefault(); ui.closePop(); picker.setActive(!picker.isActive()); render(); }
+      else if (e.ctrlKey && e.shiftKey && e.code === 'KeyM') { e.preventDefault(); ui.closePop(); onNoteOnly(); }
       else if (e.key === 'Escape' && picker.isActive()) { picker.setActive(false); render(); }
     }, true);
     const onViewport = () => ui.renderMarkers(vm());
