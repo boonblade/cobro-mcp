@@ -6,6 +6,9 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Added
 - Send a note with no element: the new Note button (Ctrl+Shift+M) opens the panel directly; the agent receives an empty elements list and a full-viewport screenshot.
 
+### Changed
+- Toolbar: the status line has a fixed width (320px), so the toolbar no longer jumps as hints change; very long messages are cut at 160 characters (full text in the tooltip). Hover still scrolls the line to the end.
+
 ## [0.8.1] — 2026-09-21
 ### Changed
 - README: changelog link, a drag hint for the toolbar and panel, and the demo GIF now shows the agent transcript alongside the browser.
