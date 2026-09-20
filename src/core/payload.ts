@@ -1,4 +1,5 @@
 import type { Batch, ConsoleEntry, PageInfo, Payload, RefreshStrategy } from './types.js';
+import { stripFrame } from './sourcemap.js';
 
 export function dedupeConsole(entries: Array<{ level: ConsoleEntry['level']; text: string; at: string }>, max = 10): ConsoleEntry[] {
   const map = new Map<string, ConsoleEntry>();
@@ -17,7 +18,7 @@ export function buildPayload(input: { page: PageInfo; batches: Batch[]; console:
     origin: 'human',
     sentAt: (input.now ?? new Date()).toISOString(),
     page: input.page,
-    batches: input.batches.map((b) => ({ id: b.id, note: b.note, elements: b.elements, ...(b.screenshot ? { screenshot: b.screenshot } : {}), ...(b.regions?.length ? { regions: b.regions } : {}) })),
+    batches: input.batches.map((b) => ({ id: b.id, note: b.note, elements: b.elements.map(stripFrame), ...(b.screenshot ? { screenshot: b.screenshot } : {}), ...(b.regions?.length ? { regions: b.regions } : {}) })),
     console: input.console,
     refreshStrategy: input.refreshStrategy,
   };
