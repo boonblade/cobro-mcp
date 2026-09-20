@@ -54,7 +54,7 @@ claude mcp add -s user cobro -- npx -y cobro-mcp@latest
 
 ## 사용법
 
-- **사람**: 페이지에서 `Ctrl+Shift+F`로 선택 모드(`Esc`로 해제) → 요소 클릭(드래그는 밴드 안 최상위 요소들) → 메모 → **Send**. 고른 요소마다 번호 마커가 붙는다. 여러 개면 "1: …, 2: …"로 쓴다. 빈 곳 위 밴드는 영역이 된다. 툴바 상태 줄이 다음에 할 일을 알려준다. 에이전트가 작업 중(전송됨·수정 중)이면 Send가 잠기고 `done` 뒤 풀린다. ⚙ 버튼에서 설정을 연다(테마: auto / dark / light / frost, frost는 반투명).
+- **사람**: 페이지에서 `Ctrl+Shift+F`로 선택 모드(`Esc`로 해제) → 요소 클릭(드래그는 밴드 안 최상위 요소들) → 메모 → **Send**. 고른 요소마다 번호 마커가 붙는다. 여러 개면 "1: …, 2: …"로 쓴다. 빈 곳 위 밴드는 영역이 된다. 툴바(왼쪽 손잡이)와 패널(헤더)은 끌어서 옮길 수 있고, 새로고침되면 기본 위치로 돌아온다. 툴바 상태 줄이 다음에 할 일을 알려준다. 에이전트가 작업 중(전송됨·수정 중)이면 Send가 잠기고 `done` 뒤 풀린다. ⚙ 버튼에서 설정을 연다(테마: auto / dark / light / frost, frost는 반투명).
 - **에이전트**: `open(url)` → `wait()` → payload의 `batches[].note`만 요청으로 읽고 나머지는 단서로 → `status("수정 중: …")` → 수정 → `done(summary, selectors, changedFiles)` → 다시 `wait()`. 끝내면 `close()`.
 
 도구는 여섯 개로 고정이다. 관찰·조작이 더 필요하면 다른 MCP를 함께 쓴다.
@@ -165,6 +165,10 @@ window.addEventListener('cobro:done', (e) => { const { summary, changedFiles, se
 - `done`의 요소 강조는 best-effort이고, `reload` 전략에서는 새로 로드되느라 보이지 않는다.
 - 선택 모드 단축키 `Ctrl+Shift+F`는 바꿀 수 없다. WebKit 빌드는 실제 Safari와 폰트·스크롤바가 다르다.
 - 브라우저 프로필은 한 번에 한 세션만 쓴다 — 다른 세션이 쓰는 중이면 `open`이 "프로필 사용 중"으로 실패한다(`COBRO_PROFILE_DIR`로 따로 지정 가능).
+
+## 변경 이력
+
+버전별 변경 내용은 [CHANGELOG.md](CHANGELOG.md)에 있다(영문).
 
 ## 배포
 

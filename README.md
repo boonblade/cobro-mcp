@@ -54,7 +54,7 @@ The whole loop is the GIF at the top. No copy-paste, no "check my annotations" �
 
 ## Usage
 
-- **Human**: on the page, press `Ctrl+Shift+F` to toggle pick mode (`Esc` to exit) → click an element (drag selects the topmost elements inside the band) → write a note → **Send**. Each picked element gets a numbered marker; with several, write "1: …, 2: …". A band over empty space becomes a region. The toolbar status line tells you what to do next. Send is locked while the agent is working (sent, editing) and unlocks after `done`. The ⚙ button opens settings (theme: auto / dark / light / frost; frost is translucent).
+- **Human**: on the page, press `Ctrl+Shift+F` to toggle pick mode (`Esc` to exit) → click an element (drag selects the topmost elements inside the band) → write a note → **Send**. Each picked element gets a numbered marker; with several, write "1: …, 2: …". A band over empty space becomes a region. Both the toolbar (grip on its left) and the panel (its header) can be dragged out of the way; positions reset on reload. The toolbar status line tells you what to do next. Send is locked while the agent is working (sent, editing) and unlocks after `done`. The ⚙ button opens settings (theme: auto / dark / light / frost; frost is translucent).
 - **Agent**: `open(url)` → `wait()` → read only `batches[].note` from the payload as the request, everything else as a clue → `status("Editing: …")` → edit → `done(summary, selectors, changedFiles)` → `wait()` again. Call `close()` to end the session.
 
 There are exactly six fixed tools. If you need more observation or control, pair Cobro with another MCP.
@@ -165,6 +165,10 @@ window.addEventListener('cobro:done', (e) => { const { summary, changedFiles, se
 - Element highlighting on `done` is best-effort, and is not visible under the `reload` strategy since the page reloads.
 - The pick-mode shortcut `Ctrl+Shift+F` cannot be changed. The WebKit build differs from real Safari in fonts and scrollbars.
 - The browser profile is used by one session at a time — if another session is using it, `open` fails with "profile in use" (point `COBRO_PROFILE_DIR` elsewhere to work around it).
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for what changed in each version.
 
 ## Releasing
 
