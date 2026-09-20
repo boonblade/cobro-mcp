@@ -7,6 +7,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { Store } from './core/store.js';
 import { createBridge } from './bridge.js';
 import { isTheme } from './core/settings.js';
+import { resolveElementSources } from './core/sourcemap.js';
 import { BrowserLauncher, parseEngine } from './browser/launcher.js';
 import { createMcpServer } from './mcp/server.js';
 import { startParentWatch } from './parent-watch.js';
@@ -55,10 +56,21 @@ const union = (rects: Rect[]): Rect | undefined => {
 };
 
 let launcher: BrowserLauncher | null = null;
+// 모듈 텍스트·소스맵 JSON 문자열을 URL별로 세션 동안 캐시한다(R112) — 같은 페이지 안에서 여러 요소가 같은 모듈을 가리킬 수 있다
+// 성공(문자열)만 캐시한다 — 실패를 캐시하면 일시적 오류가 세션 내내 고정된다(M1)
+const fetchCache = new Map<string, string>();
+const cachedFetchText = async (url: string): Promise<string | undefined> => {
+  const cached = fetchCache.get(url);
+  if (cached !== undefined) return cached;
+  const text = await launcher?.fetchText(url);
+  if (text !== undefined) fetchCache.set(url, text);
+  return text;
+};
 const bridge = await createBridge({
   store, token, settingsFile, envTheme,
   screenshot: async (b) => launcher?.isAlive() ? launcher.screenshot({ rect: union([...b.elements.filter((e) => !e.missing).map((e) => e.rect), ...(b.regions ?? []).map((r) => r.rect)]), outPath: store.shotPath(b.id) }) : undefined,
   consoleEntries: () => launcher?.consoleEntries() ?? [],
+  resolveSource: (b, page) => resolveElementSources(b, page, cachedFetchText),
 });
 const fixed = configStrategy();
 if (fixed) bridge.core.setStrategy(fixed);

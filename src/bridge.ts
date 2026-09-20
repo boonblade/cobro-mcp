@@ -1,13 +1,14 @@
 import { SessionCore } from './core/session.js';
 import { ChannelServer } from './channel/server.js';
 import { buildPayload } from './core/payload.js';
+import { stripFrame } from './core/sourcemap.js';
 import { readUserSettings, writeUserSettings, isTheme } from './core/settings.js';
 import type { Store } from './core/store.js';
 import type { Batch, ConsoleEntry, DoneInfo, PageInfo, ServerMsg, Theme, UiPrefs } from './core/types.js';
 
 export interface Bridge { core: SessionCore; channel: ChannelServer; port: number; token: string; done(info: DoneInfo): Batch[]; close(): Promise<void>; ui(): UiPrefs }
 
-export async function createBridge(opts: { store: Store; token: string; screenshot?: (b: Batch, page: PageInfo) => Promise<string | undefined>; consoleEntries?: () => ConsoleEntry[]; settingsFile?: string; envTheme?: Theme }): Promise<Bridge> {
+export async function createBridge(opts: { store: Store; token: string; screenshot?: (b: Batch, page: PageInfo) => Promise<string | undefined>; consoleEntries?: () => ConsoleEntry[]; settingsFile?: string; envTheme?: Theme; resolveSource?: (b: Batch, page: PageInfo) => Promise<void> }): Promise<Bridge> {
   const core = new SessionCore(opts.store);
   let cachedTheme: Theme | undefined = opts.settingsFile ? readUserSettings(opts.settingsFile).theme : undefined;
   const uiPrefs = (): UiPrefs => ({ theme: opts.envTheme ?? cachedTheme ?? 'auto', themeLocked: !!opts.envTheme });
@@ -48,6 +49,7 @@ export async function createBridge(opts: { store: Store; token: string; screensh
             try {
               batches = core.markSent(batchIds, page);
               for (const b of batches) {
+                try { await opts.resolveSource?.(b, page); } catch (e) { console.error('[cobro] resolveSource failed', (e as Error).message); }
                 try { const p = await opts.screenshot?.(b, page); if (p) core.setScreenshot(b.id, p); } catch (e) { console.error('[cobro] screenshot failed', (e as Error).message); }
               }
               core.deliver(buildPayload({ page, batches, console: opts.consoleEntries?.() ?? [], refreshStrategy: core.effectiveStrategy() }));
@@ -57,7 +59,7 @@ export async function createBridge(opts: { store: Store; token: string; screensh
               if (batches.length === 0) batches = core.session.batches.filter((b) => batchIds.includes(b.id));
               core.deliver({
                 origin: 'human', sentAt: new Date().toISOString(), page,
-                batches: batches.map((b) => ({ id: b.id, note: b.note, elements: b.elements, ...(b.regions?.length ? { regions: b.regions } : {}) })),
+                batches: batches.map((b) => ({ id: b.id, note: b.note, elements: b.elements.map(stripFrame), ...(b.regions?.length ? { regions: b.regions } : {}) })),
                 console: [], refreshStrategy: core.effectiveStrategy(),
               });
             }

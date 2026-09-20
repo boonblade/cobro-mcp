@@ -1,10 +1,15 @@
 import type { ElementInfo } from '../core/types.js';
+import { pickUserFrame } from '../core/frame.js';
 import { uniqueSelector } from './selector.js';
 
 export const STYLE_KEYS = ['display', 'position', 'width', 'height', 'padding', 'margin', 'gap',
   'color', 'background-color', 'font-size', 'font-weight', 'border-radius'] as const;
 
-type Fiber = { type?: unknown; return?: Fiber | null; _debugSource?: { fileName?: string; lineNumber?: number } };
+type Fiber = {
+  type?: unknown; return?: Fiber | null;
+  _debugSource?: { fileName?: string; lineNumber?: number };
+  _debugStack?: string | { stack?: string };
+};
 
 function reactInfo(el: Element): ElementInfo['react'] | undefined {
   const key = Object.keys(el).find((k) => k.startsWith('__reactFiber$'));
@@ -16,7 +21,10 @@ function reactInfo(el: Element): ElementInfo['react'] | undefined {
       const name = t.displayName || t.name;
       if (name) {
         const src = f._debugSource;
-        return src?.fileName ? { component: name, source: `${src.fileName}${src.lineNumber ? ':' + src.lineNumber : ''}` } : { component: name };
+        if (src?.fileName) return { component: name, source: `${src.fileName}${src.lineNumber ? ':' + src.lineNumber : ''}` };
+        const stack = typeof f._debugStack === 'string' ? f._debugStack : f._debugStack?.stack;
+        const frame = stack ? pickUserFrame(stack) : null;
+        return frame ? { component: name, frame } : { component: name };
       }
     }
   }

@@ -1,10 +1,21 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { chromium, webkit, firefox, type BrowserContext, type Page } from 'playwright-core';
+import { chromium, webkit, firefox, type APIRequestContext, type BrowserContext, type Page } from 'playwright-core';
 import { dedupeConsole } from '../core/payload.js';
 import type { ConsoleEntry, Rect } from '../core/types.js';
 
 const INSTALL_HINT = 'Chrome or Edge not found. Install Chrome, or set COBRO_BROWSER_CHANNEL (chrome|msedge|chromium). Bundled Chromium: npx playwright-core install chromium\nWebKit/Firefox engines: npx playwright-core install webkit firefox';
+
+/** 소스맵 해석용 fetch 가드 — 8MB 상한·5초 타임아웃, 실패는 undefined(launcher·e2e helpers 공유, M4) */
+export async function fetchTextGuarded(request: APIRequestContext, url: string, maxBytes = 8 * 1024 * 1024, timeout = 5000): Promise<string | undefined> {
+  try {
+    const res = await request.get(url, { timeout });
+    if (!res.ok()) return undefined;
+    const body = await res.body();
+    if (body.length > maxBytes) return undefined;
+    return body.toString('utf8');
+  } catch { return undefined; }
+}
 
 /** 모든 채널 시도가 "has been closed"로 실패하고 잠금 파일이 있으면 다른 프로세스가 프로필을 쓰고 있는 것 */
 export function classifyLaunchFailure(tried: string[], lockExists: boolean): 'profile-locked' | 'not-found' {
@@ -125,5 +136,10 @@ export class BrowserLauncher {
     return opts.outPath;
   }
   consoleEntries(): ConsoleEntry[] { return dedupeConsole(this.raw); }
+  /** 소스맵 해석용 — 페이지와 같은 컨텍스트로 받는다 */
+  async fetchText(url: string, maxBytes = 8 * 1024 * 1024): Promise<string | undefined> {
+    if (!this.isAlive()) return undefined;
+    return fetchTextGuarded(this.ctx!.request, url, maxBytes);
+  }
   async close(): Promise<void> { const c = this.ctx; this.ctx = null; this.page = null; if (c) await c.close().catch(() => {}); }
 }

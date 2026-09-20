@@ -8,7 +8,7 @@ export interface Rect { x: number; y: number; w: number; h: number } // 페이�
 export interface ElementInfo {
   selector: string; tag: string; classes: string[]; text: string; rect: Rect;
   styles: Record<string, string>;
-  react?: { component: string; source?: string };
+  react?: { component: string; source?: string; frame?: { url: string; line: number; col: number } }; // frame: React 19 _debugStack 첫 사용자 프레임, 서버가 source로 해석 후 페이로드에서 제거(R112)
   missing?: boolean; // 재주입 후 선택자로 못 찾음
 }
 export interface RegionInfo { rect: Rect; within?: string }

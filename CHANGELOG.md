@@ -6,6 +6,9 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Changed
 - Feedback panel: tighter gap between the note box and the Send row.
 
+### Fixed
+- React 19: `react.source` (file:line) is back — recovered from the dev server's source maps via the fiber's debug stack. Production builds without source maps still report the component name only.
+
 ## [0.7.0] — 2026-09-20
 ### Added
 - README: Quick start — the six steps from dev server to the first Send, with the sentence to type in the chat.
