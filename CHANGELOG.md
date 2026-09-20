@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [0.8.1] — 2026-09-21
+### Changed
+- README: changelog link, a drag hint for the toolbar and panel, and the demo GIF now shows the agent transcript alongside the browser.
+
 ## [0.8.0] — 2026-09-20
 ### Added
 - Vue 3: picked elements now carry `vue: { component, source }` (SFC path) on dev builds, next to the existing React support. Framework detection is now an adapter list, so more frameworks can follow.
