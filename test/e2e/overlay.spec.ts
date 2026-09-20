@@ -603,3 +603,12 @@ test('dragging the panel twice moves it by the same amount each time (no duplica
   expect(Math.abs(delta2.x - delta1.x)).toBeLessThanOrEqual(2);
   expect(Math.abs(delta2.y - delta1.y)).toBeLessThanOrEqual(2);
 });
+
+test('footer sits 8px under the textarea', async ({ cobroPage: page }) => {
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await selectAt(page, '#target');
+  const textarea = (await page.locator(`${HOST} .panel textarea`).boundingBox())!;
+  const row = (await page.locator(`${HOST} .panel .row`).boundingBox())!;
+  expect(row.y - (textarea.y + textarea.height)).toBeGreaterThanOrEqual(7);
+  expect(row.y - (textarea.y + textarea.height)).toBeLessThanOrEqual(9);
+});

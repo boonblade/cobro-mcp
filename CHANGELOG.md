@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [Unreleased]
+### Changed
+- Feedback panel: tighter gap between the note box and the Send row.
+
 ## [0.7.0] — 2026-09-20
 ### Added
 - README: Quick start — the six steps from dev server to the first Send, with the sentence to type in the chat.
