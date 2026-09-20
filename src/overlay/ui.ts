@@ -374,7 +374,8 @@ export function createUI(h: UIHandlers) {
       cur.elements.forEach((e, i) => {
         const row = el('div', e.missing ? 'missing' : '');
         row.append(el('span', 'num', `${i + 1}.`));
-        row.append(el('span', 'label', `${e.selector.split(' > ').pop()}${e.react ? ' · ' + e.react.component : ''}${e.missing ? ' · ' + T.elMissing : ''}`));
+        const comp = (e.react ?? e.vue)?.component;
+        row.append(el('span', 'label', `${e.selector.split(' > ').pop()}${comp ? ' · ' + comp : ''}${e.missing ? ' · ' + T.elMissing : ''}`));
         row.append(el('span', 'kind', e.tag));
         const x = el('button', '', '✕'); x.title = T.tipRemove; x.onclick = () => h.onRemoveElement(cur.id, i); row.append(x);
         list.append(row);

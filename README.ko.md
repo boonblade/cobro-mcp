@@ -124,6 +124,7 @@ claude mcp add -s user cobro -- npx -y cobro-mcp@latest
 | `elements[].rect` | `{ x, y, w, h }` 페이지 좌표(스크롤 포함), 정수 |
 | `elements[].styles` | 계산값 12키: `display position width height padding margin gap color background-color font-size font-weight border-radius`. `none`/`normal`은 생략하되 `display: none`은 "안 보임" 단서로 남긴다 |
 | `elements[].react` | React dev 빌드에서만 `{ component, source? }`. 아니면 키 자체가 없다. `source`는 소스맵이 있는 dev 서버(React 19) 또는 React 18까지에서만 온다 |
+| `elements[].vue` | Vue 3 dev 빌드에서 `{ component, source? }`. `source`는 SFC 경로만(행 없음). 아니면 키 생략 |
 | `elements[].missing` | 재주입 뒤 선택자로 못 찾으면 `true`(드묾) |
 | `batches[].regions[]` | 빈 곳에 그린 사각형(밴드 안에 요소가 없을 때): `rect`는 페이지 좌표, `within`은 감싸는 요소의 선택자. 없으면 키 생략 |
 | `console[]` | `level` ∈ `error` `warning` `pageerror` `requestfailed`, `text` 300자, 같은 메시지는 `count`로 합산, `last` 기준 최신 10건 |

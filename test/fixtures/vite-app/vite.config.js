@@ -1,2 +1,3 @@
 import react from '@vitejs/plugin-react';
-export default { plugins: [react()] };
+import vue from '@vitejs/plugin-vue';
+export default { plugins: [react(), vue()] };
