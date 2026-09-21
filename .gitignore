@@ -1,6 +1,7 @@
 .cobro/
 screenshots/
 node_modules/
+!test/fixtures/vite-app/lib/node_modules/
 test-results/
 dist/
 
