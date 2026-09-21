@@ -9,7 +9,7 @@ async function pickAt(page: Page, selector: string) {
   await page.mouse.click(b.x + 3, b.y + 3);
 }
 
-// R126: 자식까지 잡으려면 컨테이너 중심과 자식 중심이 둘 다 밴드 안에 들어야 한다 — 상자 전체를 덮는다
+// R126: 자식까지 잡으려면 컨테이너와 자식이 모두 밴드에 완전히 들어가야 한다(R130) — 상자 전체를 덮는다
 async function dragBand(page: Page, box: { x: number; y: number; width: number; height: number }) {
   await page.mouse.move(box.x, box.y);
   await page.mouse.down();
@@ -134,23 +134,35 @@ test('reload strategy reloads the page on done', async ({ cobroPage: page, bridg
   await expect.poll(() => page.evaluate(() => performance.getEntriesByType('navigation').length > 0 && (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming).type)).toBe('reload');
 });
 
-test('T1: drag-select picks the element whose center is inside the band, or a region if none is (R120)', async ({ cobroPage: page }) => {
+test('T1: drag-select picks only elements fully inside the band, or a region if none is (R130)', async ({ cobroPage: page }) => {
   await page.goto('http://127.0.0.1:4173/basic.html');
   await expect(page.locator(`${HOST} .toolbar`)).toBeVisible();
   await startSelect(page);
   const b = (await page.locator('#card').boundingBox())!;
-  // #card의 60%(좌상단)만 덮어도 #card 중심과 p.desc 중심 둘 다 안에 든다 → H=2 → 그룹(R126)
+  // #card의 60%(좌상단)만 덮으면 어떤 요소도 밴드에 완전히 포함되지 않는다(R130) → 영역
   await page.mouse.move(b.x, b.y);
   await page.mouse.down();
   await page.mouse.move(b.x + b.width * 0.3, b.y + b.height * 0.3, { steps: 5 });
   await page.mouse.move(b.x + b.width * 0.6, b.y + b.height * 0.6, { steps: 5 });
   await page.mouse.up();
   await expect(page.locator(`${HOST} .els > div`)).toHaveCount(1);
-  await expect(page.locator(`${HOST} .els > div.group .cnt`)).toContainText('2'); // M2: .cnt로 한정(치수 문자열과 혼동 방지)
+  await expect(page.locator(`${HOST} .els > div.group`)).toHaveCount(0);
+  await expect(page.locator(`${HOST} .els`)).toContainText('▭');
+  await page.locator(`${HOST} .els > div button`).click(); // 지우고 다시(선택 모드는 그대로 켜져 있다)
+  // #card 전체 + 여백 밴드 — #card와 그 안에 완전히 포함된 자식(p.desc, #target)이 모두 잡힌다.
+  // 오른쪽은 뷰포트 경계(1280px)와 #card 우측이 8px밖에 안 떨어져 있어 +8이면 mouseup이 glass 밖으로
+  // 나가 드래그가 씹힌다(실측) — 뷰포트 안에 머물도록 +5로 제한.
+  await page.mouse.move(b.x - 8, b.y - 8);
+  await page.mouse.down();
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 5 });
+  await page.mouse.move(b.x + b.width + 5, b.y + b.height + 8, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.locator(`${HOST} .els > div`)).toHaveCount(1);
+  await expect(page.locator(`${HOST} .els > div.group .cnt`)).toContainText('3'); // #card + p.desc + #target
   await page.locator(`${HOST} .els > div.group`).click();
-  await expect(page.locator(`${HOST} .els .child`)).toContainText(['#card', 'p.desc']);
+  await expect(page.locator(`${HOST} .els .child`)).toContainText(['#card', 'p.desc', '#target']);
   await page.locator(`${HOST} .els > div.group button`).click(); // 지우고 다시(선택 모드는 그대로 켜져 있다)
-  // #card 왼쪽 위 모서리를 10px만 스치는 밴드 — 어떤 요소의 중심도 안에 없다
+  // #card 왼쪽 위 모서리를 10px만 스치는 밴드 — 완전히 포함되는 요소가 없다
   await page.mouse.move(b.x - 8, b.y - 8);
   await page.mouse.down();
   await page.mouse.move(b.x - 4, b.y - 4, { steps: 5 });
@@ -877,7 +889,7 @@ test('T6: an empty band is a region with no chevron/cnt (R126)', async ({ cobroP
   await page.goto('http://127.0.0.1:4173/region.html');
   await page.keyboard.press('Control+Shift+F');
   await expect(page.locator(`${HOST} .ib.select`)).toHaveClass(/on/); // 선택 모드 활성화를 기다린 뒤 드래그(webkit 경쟁 방지)
-  // 밑의 1500px 여백 — 어떤 요소의 중심도 닿지 않는 빈 공간
+  // 밑의 1500px 여백 — 어떤 요소도 들어가지 않는 빈 공간
   await page.mouse.move(300, 400);
   await page.mouse.down();
   await page.mouse.move(340, 420, { steps: 5 });
