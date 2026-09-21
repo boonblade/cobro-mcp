@@ -27,22 +27,22 @@ export function createPicker(opts: { root: ShadowRoot; host: HTMLElement; onPick
     badge.style.top = (y + 18 + bh > innerHeight ? y - bh - 8 : y + 18) + 'px';
   };
   const labelOf = (el: Element) => el.id ? '#' + el.id : el.tagName.toLowerCase() + [...el.classList].slice(0, 2).map((c) => '.' + c).join('');
-  const centerIn = (el: Element, b: { left: number; top: number; right: number; bottom: number }) => {
+  // R130: 밴드 안 = rect가 밴드에 완전히 포함(중심점 판정 R120은 폐기)
+  const containedIn = (el: Element, b: { left: number; top: number; right: number; bottom: number }) => {
     const r = el.getBoundingClientRect();
-    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-    return r.width > 0 && r.height > 0 && cx >= b.left && cx <= b.right && cy >= b.top && cy <= b.bottom;
+    return r.width > 0 && r.height > 0 && r.left >= b.left && r.right <= b.right && r.top >= b.top && r.bottom <= b.bottom;
   };
   const topLevel = (els: Element[]) => { const set = new Set(els); return els.filter((el) => !(el.parentElement && set.has(el.parentElement))); };
-  // R126: H = 밴드 안 최상위 요소들 + 각 최상위의 안쪽 한 단계(그 최상위의 자손 중 중심점이 밴드 안인 것), 문서 순서로 평면화 — 총 12개 상한
+  // R126: H = 밴드 안 최상위 요소들 + 각 최상위의 안쪽 한 단계(그 최상위의 자손 중 밴드에 완전히 포함되는 것(R130)), 문서 순서로 평면화 — 총 12개 상한
   const inBand = (b: { left: number; top: number; right: number; bottom: number }): Element[] => {
     const within: Element[] = [];
-    for (const el of document.body.querySelectorAll('*')) { if (notOurs(el) && centerIn(el, b)) within.push(el); }
+    for (const el of document.body.querySelectorAll('*')) { if (notOurs(el) && containedIn(el, b)) within.push(el); }
     const top = topLevel(within);
     const hits: Element[] = [];
     for (const p of top) {
       if (hits.length >= 12) break;
       hits.push(p);
-      const kids = topLevel([...p.querySelectorAll('*')].filter((el) => notOurs(el) && centerIn(el, b)));
+      const kids = topLevel([...p.querySelectorAll('*')].filter((el) => notOurs(el) && containedIn(el, b)));
       for (const k of kids) { if (hits.length >= 12) break; hits.push(k); }
     }
     return hits;
