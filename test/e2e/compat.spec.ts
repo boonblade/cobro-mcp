@@ -1,5 +1,6 @@
 import { test, expect, HOST, selectAt } from './helpers.js';
 import { spawn, execSync, type ChildProcess } from 'node:child_process';
+import { resolve } from 'node:path';
 
 let vite: ChildProcess;
 
@@ -19,7 +20,9 @@ async function waitForVite(url: string, timeoutMs = 20_000) {
 
 test.beforeAll(async () => {
   // --host 127.0.0.1: vite 기본값은 'localhost'를 ::1(IPv6)로만 바인딩해 4173 픽스처(127.0.0.1)와 어긋난다
-  vite = spawn('npx', ['vite', '--port', '4174', '--strictPort', '--host', '127.0.0.1'], { cwd: 'test/fixtures/vite-app', shell: true, stdio: 'ignore' });
+  // shell:false — npx.cmd를 직접 spawn하면 Node 24가 EINVAL로 거절한다(CVE-2024-27980 완화). vite bin을 node로 직접 실행
+  const viteBin = resolve('test/fixtures/vite-app/node_modules/vite/bin/vite.js');
+  vite = spawn(process.execPath, [viteBin, '--port', '4174', '--strictPort', '--host', '127.0.0.1'], { cwd: 'test/fixtures/vite-app', stdio: 'ignore' });
   vite.on('error', () => {}); // 비동기 spawn 오류가 러너를 죽이지 않도록 — 실패는 waitForVite의 타임아웃으로 드러난다
   await waitForVite('http://127.0.0.1:4174/');
 });
@@ -27,7 +30,7 @@ test.beforeAll(async () => {
 test.afterAll(() => {
   if (!vite.pid) return;
   if (process.platform === 'win32') {
-    // shell: true라서 vite.pid는 셸 프로세스의 pid다 — /T로 자식(esbuild 등)까지 정리
+    // shell:false라서 vite.pid는 node 프로세스 자신의 pid다 — /T로 자식(esbuild 등)까지 정리
     try { execSync(`taskkill /pid ${vite.pid} /T /F`); } catch { /* 이미 종료됨 */ }
   } else {
     vite.kill();
