@@ -9,6 +9,7 @@ import { SessionCore } from '../../src/core/session.js';
 import { createMcpServer } from '../../src/mcp/server.js';
 import type { Rect } from '../../src/core/types.js';
 
+const HANGUL = /[가-힣]/;
 const page = { url: 'http://x/', title: 'X', viewport: { w: 1, h: 1 } };
 type Shot = { rect?: Rect; selector?: string; outPath: string };
 let core: SessionCore; let client: Client; let calls: string[]; let closeAll: () => Promise<void>;
@@ -42,7 +43,7 @@ describe('mcp server version', () => {
   it('instructions에 운용 규약이 실린다', () => {
     expect(client.getInstructions()).toContain('open(url)');
     expect(client.getInstructions()).toContain('done(summary');
-    expect(client.getInstructions()).not.toMatch(/[가-힣]/);
+    expect(client.getInstructions()).not.toMatch(HANGUL);
   });
 });
 const call = async (name: string, args: Record<string, unknown> = {}) => {
@@ -70,8 +71,8 @@ describe('mcp tools', () => {
   it('tool descriptions are English', async () => {
     const tools = (await client.listTools()).tools;
     for (const t of tools) {
-      expect(t.description).not.toMatch(/[가-힣]/);
-      expect(JSON.stringify(t.inputSchema)).not.toMatch(/[가-힣]/);
+      expect(t.description).not.toMatch(HANGUL);
+      expect(JSON.stringify(t.inputSchema)).not.toMatch(HANGUL);
     }
   });
   it('open returns title, strategy and restored batches; strategy arg fixes it', async () => {

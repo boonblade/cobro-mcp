@@ -124,7 +124,7 @@ If `wait` returns `pending`, call it again (not an error). If `browserGone: true
 | `elements[].text` | `textContent`, whitespace collapsed, first 40 characters |
 | `elements[].rect` | `{ x, y, w, h }` in page coordinates (scroll included), integers |
 | `elements[].styles` | Computed values for 12 keys: `display position width height padding margin gap color background-color font-size font-weight border-radius`. `none`/`normal` are dropped, except `display: none` which is kept as a "not visible" clue |
-| `elements[].react` | `{ component, source? }` from React dev builds only; key omitted otherwise. `source` needs a dev server with source maps (React 19) or React ≤ 18 |
+| `elements[].react` | `{ component, source? }` from React dev builds only; key omitted otherwise. `source` needs a dev server with source maps (React 19) or React ≤ 18. Inside a component library the location is the JSX call site in your code, not the library's internals. |
 | `elements[].vue` | `{ component, source? }` from Vue 3 dev builds; `source` is the SFC path only (no line). Omitted otherwise |
 | `elements[].missing` | `true` when the selector no longer matches after re-injection (rare) |
 | `elements[].ref` | Stable number of the row in the panel (`"2"`, or `"1a"` for an element inside region `"1"`); notes refer to it. Never renumbered while the draft lives |
