@@ -472,16 +472,21 @@ test('markers follow scroll', async ({ cobroPage: page }) => {
   await page.goto('http://127.0.0.1:4173/markers.html');
   await page.locator('#bottom').scrollIntoViewIfNeeded();
   await selectAt(page, '#bottom');
+  // R139: 고정 대기 대신 조건 대기 — boundingBox null이면 Infinity로 취급해 재시도한다.
+  await expect.poll(async () => {
+    const a = await page.locator('#bottom').boundingBox();
+    const m = await page.locator(`${HOST} .marker`).boundingBox();
+    return a && m ? Math.max(Math.abs(m.x - a.x), Math.abs(m.y - a.y)) : Infinity;
+  }).toBeLessThanOrEqual(3);
   const before = (await page.locator('#bottom').boundingBox())!;
-  const markerBefore = (await page.locator(`${HOST} .marker`).boundingBox())!;
-  expect(Math.abs(markerBefore.x - before.x)).toBeLessThanOrEqual(3);
-  expect(Math.abs(markerBefore.y - before.y)).toBeLessThanOrEqual(3);
   await page.mouse.wheel(0, -600);
-  await page.waitForTimeout(150);
-  const after = (await page.locator('#bottom').boundingBox())!;
-  const markerAfter = (await page.locator(`${HOST} .marker`).boundingBox())!;
-  expect(Math.abs(markerAfter.x - after.x)).toBeLessThanOrEqual(3);
-  expect(Math.abs(markerAfter.y - after.y)).toBeLessThanOrEqual(3);
+  // 스크롤 반영 전 첫 poll이 통과하는 공허 단언 방지(I1)
+  await expect.poll(async () => (await page.locator('#bottom').boundingBox())?.y ?? before.y).not.toBe(before.y);
+  await expect.poll(async () => {
+    const a = await page.locator('#bottom').boundingBox();
+    const m = await page.locator(`${HOST} .marker`).boundingBox();
+    return a && m ? Math.max(Math.abs(m.x - a.x), Math.abs(m.y - a.y)) : Infinity;
+  }).toBeLessThanOrEqual(3);
 });
 
 test('markers clear on Send', async ({ cobroPage: page, bridge }) => {
