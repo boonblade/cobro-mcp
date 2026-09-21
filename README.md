@@ -124,7 +124,7 @@ If `wait` returns `pending`, call it again (not an error). If `browserGone: true
 | `elements[].text` | `textContent`, whitespace collapsed, first 40 characters |
 | `elements[].rect` | `{ x, y, w, h }` in page coordinates (scroll included), integers |
 | `elements[].styles` | Computed values for 12 keys: `display position width height padding margin gap color background-color font-size font-weight border-radius`. `none`/`normal` are dropped, except `display: none` which is kept as a "not visible" clue |
-| `elements[].react` | `{ component, source? }` from React dev builds only; key omitted otherwise. `source` needs a dev server with source maps (React 19) or React ≤ 18 |
+| `elements[].react` | `{ component, source? }` from React dev builds only; key omitted otherwise. `source` needs a dev server with source maps (React 19) or React ≤ 18. Inside a component library the location is the JSX call site in your code, not the library's internals. |
 | `elements[].vue` | `{ component, source? }` from Vue 3 dev builds; `source` is the SFC path only (no line). Omitted otherwise |
 | `elements[].missing` | `true` when the selector no longer matches after re-injection (rare) |
 | `elements[].ref` | Stable number of the row in the panel (`"2"`, or `"1a"` for an element inside region `"1"`); notes refer to it. Never renumbered while the draft lives |
@@ -163,7 +163,7 @@ window.addEventListener('cobro:done', (e) => { const { summary, changedFiles, se
 
 ## Limitations
 
-- React component name comes from dev builds. `source` (file:line) is recovered from the dev server's source maps (React 19) or from `_debugSource` (React ≤ 18); production builds without maps report the component only.
+- React component name comes from dev builds. `source` (file:line) is recovered from the dev server's source maps (React 19) or from `_debugSource` (React ≤ 18); production builds without maps report the component only. For component libraries: the location is the JSX call site in your code, not the library's internals.
 - No iframe support (top-level document only). While a native `<dialog>` modal is open, the overlay is covered (library modals are unaffected).
 - Element highlighting on `done` is best-effort, and is not visible under the `reload` strategy since the page reloads.
 - The pick-mode shortcut `Ctrl+Shift+F` cannot be changed. The WebKit build differs from real Safari in fonts and scrollbars.

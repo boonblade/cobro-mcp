@@ -124,7 +124,7 @@ claude mcp add -s user cobro -- npx -y cobro-mcp@latest
 | `elements[].text` | `textContent`를 공백 정규화한 뒤 앞 40자 |
 | `elements[].rect` | `{ x, y, w, h }` 페이지 좌표(스크롤 포함), 정수 |
 | `elements[].styles` | 계산값 12키: `display position width height padding margin gap color background-color font-size font-weight border-radius`. `none`/`normal`은 생략하되 `display: none`은 "안 보임" 단서로 남긴다 |
-| `elements[].react` | React dev 빌드에서만 `{ component, source? }`. 아니면 키 자체가 없다. `source`는 소스맵이 있는 dev 서버(React 19) 또는 React 18까지에서만 온다 |
+| `elements[].react` | React dev 빌드에서만 `{ component, source? }`. 아니면 키 자체가 없다. `source`는 소스맵이 있는 dev 서버(React 19) 또는 React 18까지에서만 온다. 컴포넌트 라이브러리 안 요소는 라이브러리 내부가 아니라 사용자가 쓴 JSX 위치. |
 | `elements[].vue` | Vue 3 dev 빌드에서 `{ component, source? }`. `source`는 SFC 경로만(행 없음). 아니면 키 생략 |
 | `elements[].missing` | 재주입 뒤 선택자로 못 찾으면 `true`(드묾) |
 | `elements[].ref` | 패널 행의 안정 번호(`"2"`, 영역 `"1"` 안의 요소면 `"1a"`). 메모가 이 번호를 가리킨다. 초안이 사는 동안 재번호 없음 |
@@ -163,7 +163,7 @@ window.addEventListener('cobro:done', (e) => { const { summary, changedFiles, se
 
 ## 한계
 
-- React 컴포넌트 이름은 dev 빌드에서만 온다. `source`(파일:행)는 dev 서버의 소스맵(React 19) 또는 `_debugSource`(React 18까지)로 복원한다 — 소스맵 없는 프로덕션 빌드는 컴포넌트 이름만 온다.
+- React 컴포넌트 이름은 dev 빌드에서만 온다. `source`(파일:행)는 dev 서버의 소스맵(React 19) 또는 `_debugSource`(React 18까지)로 복원한다 — 소스맵 없는 프로덕션 빌드는 컴포넌트 이름만 온다. 컴포넌트 라이브러리 안 요소는 라이브러리 내부가 아니라 사용자가 쓴 JSX 위치가 온다.
 - iframe 미지원(최상위 문서만). 네이티브 modal `<dialog>`가 열려 있는 동안은 오버레이가 가려진다(라이브러리 모달은 무관).
 - `done`의 요소 강조는 best-effort이고, `reload` 전략에서는 새로 로드되느라 보이지 않는다.
 - 선택 모드 단축키 `Ctrl+Shift+F`는 바꿀 수 없다. WebKit 빌드는 실제 Safari와 폰트·스크롤바가 다르다.

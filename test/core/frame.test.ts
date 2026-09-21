@@ -24,4 +24,12 @@ describe('pickUserFrame', () => {
   it('returns null when there is no user frame', () => {
     expect(pickUserFrame('at Object.react_stack_bottom_frame (…)')).toBeNull();
   });
+
+  it('skips a compiled library frame under node_modules and keeps going to the user frame', () => {
+    const libOnly = 'at Button (http://localhost:4191/node_modules/fake-ui/index.js:4:40)';
+    expect(pickUserFrame(libOnly)).toBeNull();
+
+    const withUserFrame = libOnly + '\n' + 'at App (http://localhost:4191/src/App.jsx:6:10)';
+    expect(pickUserFrame(withUserFrame)).toEqual({ url: 'http://localhost:4191/src/App.jsx', line: 6, col: 10 });
+  });
 });

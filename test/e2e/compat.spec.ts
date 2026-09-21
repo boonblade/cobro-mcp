@@ -86,6 +86,21 @@ test("React 19 element gets source from the dev server's source maps", async ({ 
   expect(JSON.stringify(r.payload)).not.toContain('"frame"');
 });
 
+test('React element inside a component library resolves to the JSX call site in user code (R143)', async ({ cobroPage: page, bridge }) => {
+  bridge.core.setStrategy('none');
+  await page.goto('http://127.0.0.1:4174/react.html');
+  await selectAt(page, '#libcta');
+  await page.locator(`${HOST} textarea`).fill('메모');
+  const waiting = bridge.core.wait(10_000);
+  await page.locator(`${HOST} button.send`).click();
+  const r = await waiting;
+  expect(r.status).toBe('sent');
+  if (r.status !== 'sent') return;
+  const el = r.payload.batches[0]!.elements[0]!;
+  expect(el.react).toEqual({ component: 'Button', source: 'src/react.jsx:4' });
+  expect((el.react as { source: string }).source).not.toContain('node_modules');
+});
+
 test('Vue 3 element gets component and SFC path', async ({ cobroPage: page, bridge }) => {
   bridge.core.setStrategy('none');
   await page.goto('http://127.0.0.1:4174/vue.html');

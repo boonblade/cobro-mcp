@@ -3,6 +3,14 @@
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
+### Added
+- MCP tool annotations (readOnlyHint / destructiveHint / idempotentHint / openWorldHint) on all six tools, so clients can tell which calls are safe to run unattended: wait is read-only, close is destructive, done and screenshot are not idempotent, open reaches the network.
+
+### Changed
+- Tool descriptions and argument hints are now in English (they were Korean).
+
+### Fixed
+- React: elements rendered by a component library (MUI, Radix, …) now resolve react.source to the JSX call site in your code instead of losing the location (React 19) or pointing into node_modules (React ≤18).
 
 ## [0.9.1] — 2026-09-21
 ### Added
