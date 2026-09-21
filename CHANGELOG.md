@@ -5,6 +5,7 @@ All notable changes to this project are documented here. The format follows [Kee
 ## [Unreleased]
 ### Added
 - Send a note with no element: the new Note button (Ctrl+Shift+M) opens the panel directly; the agent receives an empty elements list and a full-viewport screenshot.
+- Narrow viewports: below 760px the strategy chip hides and the status line shrinks; below 520px the toolbar becomes a full-width bar with the status on its own line, and the panel and settings popover fill the width.
 
 ### Changed
 - Toolbar: the status line has a fixed width (320px), so the toolbar no longer jumps as hints change; very long messages are cut at 160 characters (full text in the tooltip). Hover still scrolls the line to the end.

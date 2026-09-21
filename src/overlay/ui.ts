@@ -112,6 +112,18 @@ textarea{width:100%;min-height:80px;resize:none;font:inherit;color:var(--fg);bac
 .ib .lbl{max-width:0;opacity:0;overflow:hidden;white-space:nowrap;margin-left:0;transition:max-width .1s ease-in,opacity .1s ease-in,margin-left .1s ease-in}
 .ib:hover .lbl,.ib:focus-visible .lbl{max-width:9ch;opacity:1;margin-left:5px;transition-duration:.15s;transition-timing-function:ease-out}
 @media (prefers-reduced-motion: reduce){.ib .lbl{transition:none}}
+@media (max-width:760px){
+  .chip.strategy{display:none}
+  .status{width:180px}
+  .ib .lbl,.ib:hover .lbl,.ib:focus-visible .lbl{max-width:0;opacity:0;margin-left:0}
+}
+@media (max-width:520px){
+  .toolbar{left:8px;right:8px;transform:none;border-radius:12px;flex-wrap:wrap;row-gap:4px}
+  .status{flex-basis:100%;width:auto;order:9}
+  .panel{left:8px;right:8px;width:auto;bottom:calc(var(--tb-h, 84px) + 14px + 12px);max-height:60vh;overflow:auto}
+  .els{max-height:30vh}
+  .pop{left:8px;right:8px;transform:none;min-width:0}
+}
 `;
 
 const LANG = navigator.language.toLowerCase().startsWith('ko') ? 'ko' : 'en';
@@ -323,6 +335,7 @@ export function createUI(h: UIHandlers) {
   function render(vm: ViewModel) {
     lastVm = vm;
     renderMarkers(vm); // 패널이 접혀 있거나 draft가 비어도(= 이른 return) 마커는 매번 갱신(R103)
+    updateTbH(); // 좁은 뷰포트에서 툴바가 두 줄이 되면 패널 bottom이 이 값을 따라간다(R118)
     // panel을 통째로 다시 그리므로 textarea가 분리되면서 포커스·캐럿이 날아간다(디바운스된 draft 왕복마다 발생) → 복원
     const active = root.activeElement;
     const wasTa = active instanceof HTMLTextAreaElement ? active : null;
@@ -454,5 +467,6 @@ export function createUI(h: UIHandlers) {
   function focusNote() { const ta = panel.querySelector('textarea'); ta?.focus(); }
   function setTheme(t: ResolvedTheme): void { host.dataset.theme = t; }
   function expand(): void { if (collapsed) setCollapsed(false); }
-  return { host, root, render, renderMarkers, flash, focusNote, setTheme, closePop, expand };
+  function updateTbH(): void { const h = toolbar.offsetHeight; if (h > 0) host.style.setProperty('--tb-h', `${h}px`); }
+  return { host, root, render, renderMarkers, flash, focusNote, setTheme, closePop, expand, updateTbH };
 }
