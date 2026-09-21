@@ -111,6 +111,26 @@ describe('mcp tools', () => {
     expect(await call('close')).toEqual({ ok: true });
     expect(calls).toContain('close');
   });
+  it('open drops empty-note drafts only when it relaunches the browser, not on a live navigation (R125)', async () => {
+    core.setDrafts([
+      { id: 'e', note: '', elements: [], status: 'draft', createdAt: 't' },
+      { id: 'k', note: 'keep', elements: [], status: 'draft', createdAt: 't' },
+    ]);
+    // 브라우저 닫힘 상태(기존 82행 테스트와 같은 방법) — 첫 open은 새로 띄워야 한다
+    expect(state.alive).toBe(false);
+    const r1 = await call('open', { url: 'http://a/' });
+    expect(r1.restoredBatches).toBe(1);
+    expect(core.session.batches.map((b) => b.id)).toEqual(['k']);
+
+    core.setDrafts([
+      { id: 'k', note: 'keep', elements: [], status: 'draft', createdAt: 't' },
+      { id: 'e2', note: '', elements: [], status: 'draft', createdAt: 't' },
+    ]);
+    // 브라우저가 이미 떠 있다 → URL만 바꾸는 open은 초안을 건드리지 않는다(Task 48)
+    const r2 = await call('open', { url: 'http://b/' });
+    expect(r2.restoredBatches).toBe(2);
+    expect(core.session.batches.map((b) => b.id)).toEqual(['k', 'e2']);
+  });
   it('close resolves a pending wait immediately as browserGone (R77)', async () => {
     const waitP = call('wait', { timeoutSec: 10 });
     await new Promise((r) => setTimeout(r, 50)); // wait 도구가 core.wait를 건 뒤 close

@@ -82,8 +82,16 @@ export class SessionCore extends EventEmitter {
     w.resolve({ status: 'pending', browserGone: true });
     return true;
   }
+  // R125: 메모 없는 초안은 브라우저와 함께 버린다
+  dropEmptyDrafts(): number {
+    const before = this.s.batches.length;
+    this.s.batches = this.s.batches.filter((b) => !(b.status === 'draft' && !b.note.trim()));
+    if (before !== this.s.batches.length) this.commit();
+    return before - this.s.batches.length;
+  }
   /** 미완 묶음의 샷만 남기고 done 묶음의 샷과 manual/ 전체를 지운다(close() 전용, R81·R82) */
   closeSession(): void {
+    this.dropEmptyDrafts();
     this.store.clearShots(this.s.batches.filter((b) => b.status !== 'done').map((b) => b.id));
     for (const b of this.s.batches) if (b.status === 'done') b.screenshot = undefined;
     this.commit();
