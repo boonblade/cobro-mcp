@@ -13,13 +13,14 @@ export interface ElementInfo {
   react?: ComponentInfo;
   vue?: ComponentInfo;
   missing?: boolean; // 재주입 후 선택자로 못 찾음
-  ref?: string; parent?: string; // R123: 그룹이 있을 때만. parent는 자식에만
+  ref?: string; // R127: 안정 번호("2", "1a" — 그룹 "1" 안에서 추가된 순서). 옛 초안만 없음
 }
-export interface RegionInfo { rect: Rect; within?: string }
+export interface RegionInfo { ref?: string; rect: Rect; within?: string }
 export interface Batch {
   id: string; note: string; elements: ElementInfo[]; status: BatchStatus;
   createdAt: string; sentAt?: string; doneAt?: string; screenshot?: string; summary?: string;
   regions?: RegionInfo[];
+  refSeq?: number; // R127: ref 발급용 내부 카운터. 페이로드에는 안 나감(buildPayload의 Pick이 걸러줌)
 }
 export interface PageInfo { url: string; title: string; viewport: { w: number; h: number } }
 export interface Session {

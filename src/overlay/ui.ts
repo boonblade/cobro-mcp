@@ -3,10 +3,11 @@ import { THEMES } from '../core/types.js';
 import { stripStatusLabel } from './status-text.js';
 import type { ResolvedTheme } from './theme.js';
 import { svg } from './icons.js';
+import { isChildRef } from './refs.js';
 type IconName = Parameters<typeof svg>[0];
 
 export interface ViewModel { selecting: boolean; connected: boolean; agent: { status: AgentStatus; text: string }; strategy: RefreshStrategy | null; drafts: Batch[]; locked: boolean; prefs: UiPrefs; expanded: string | null }
-export interface UIHandlers { onToggleSelect(): void; onNoteInput(id: string, note: string): void; onRemoveElement(id: string, index: number): void; onRemoveRegion(id: string, index: number): void; onSend(): void; onSettings(patch: { theme?: Theme }): void; onToggleGroup(selector: string): void }
+export interface UIHandlers { onToggleSelect(): void; onNoteInput(id: string, note: string): void; onRemoveElement(id: string, index: number): void; onRemoveRegion(id: string, index: number): void; onSend(): void; onSettings(patch: { theme?: Theme }): void; onToggleGroup(ref: string): void }
 
 const CSS = `
 :host{
@@ -72,7 +73,7 @@ const CSS = `
 .panel h4 .grip svg{width:14px;height:16px;fill:currentColor;display:block}
 .panel h4 .close{margin-left:auto;background:transparent;border-color:transparent;color:var(--fg-5);padding:0 6px}
 .panel h4 .close:hover{background:var(--hover);color:var(--fg-hover)}
-.els{max-height:min(40vh,172px);overflow:auto;margin-bottom:8px;color:var(--fg-3);font-size:11px}
+.els{max-height:min(45vh,260px);overflow:auto;margin-bottom:8px;color:var(--fg-3);font-size:11px}
 .els div{display:flex;align-items:center;gap:8px;padding:8px 10px;margin-bottom:8px;background:var(--bg-3);border:1px solid var(--border);border-radius:8px;word-break:break-all}
 .els div:last-child{margin-bottom:0}
 .els .missing{color:var(--warn)}
@@ -144,7 +145,7 @@ const T = {
     agentSentDetail: '에이전트 응답 대기',
     disconnected: '연결 끊김 — 재연결 중',
     hintSend: 'Send로 전송하세요', hintClick: '페이지에서 요소를 클릭하세요 · Esc로 해제',
-    hintMore: (n: number) => `요소 ${n}개 선택 · 더 고르거나 메모를 적으세요`,
+    hintMore: (n: number) => `${n}개 선택 · 더 고르거나 메모를 적으세요`,
     hintNote: '메모를 적고 Send를 누르세요', hintPick: 'Ctrl+Shift+F 또는 Select로 요소를 고르세요',
     tipStrategy: (s: RefreshStrategy) => `갱신 전략: ${s} — ${{ none: 'HMR이 있어 done 뒤 새로고침 없음', reload: 'done 뒤 페이지 새로고침', event: '앱이 cobro:done 이벤트로 직접 갱신' }[s]}`,
     selCount: (n: number) => `요소 ${n}개 선택됨`,
@@ -153,7 +154,7 @@ const T = {
     regionIn: (s: string) => ` · ${s} 안`,
     selNone: '요소 없음 · 메모만 보내도 됩니다',
     elMissing: '요소 없음', notePlaceholder: '수정 요청 메모…',
-    notePlaceholderMulti: '번호로 구분해 적을 수 있어요 — 1: … 1a: … 2: …',
+    notePlaceholderMulti: '번호로 구분해 적을 수 있어요 — 1: … 1b: … 2: …',
     groupInside: (n: number) => `${n}개 포함`, tipExpand: '펼치기 / 접기',
     tipSelect: '요소 선택 모드 (Ctrl+Shift+F)', tipClose: '닫기 (Esc)', tipDrag: '툴바 이동',
     sends: '선택자 · 스타일 · 스크린샷 · 콘솔',
@@ -180,7 +181,7 @@ const T = {
     regionIn: (s: string) => ` · in ${s}`,
     selNone: 'No element · note alone is fine',
     elMissing: 'missing', notePlaceholder: 'Describe the change…',
-    notePlaceholderMulti: 'Number them if they differ — 1: … 1a: … 2: …',
+    notePlaceholderMulti: 'Number them if they differ — 1: … 1b: … 2: …',
     groupInside: (n: number) => `${n} inside`, tipExpand: 'Expand / collapse',
     tipSelect: 'Pick mode (Ctrl+Shift+F)', tipClose: 'Close (Esc)', tipDrag: 'Move toolbar',
     sends: 'Sends selector · styles · shot · console',
@@ -383,42 +384,49 @@ export function createUI(h: UIHandlers) {
       h4.append(close);
       panel.append(h4);
       const list = el('div', 'els');
-      const topEls = cur.elements.filter((e) => !e.parent);
-      topEls.forEach((e, i) => {
+      // 행 목록 = 낱개 요소(ref에 글자 없음) ∪ 영역, ref 오름차순(R127·R128). 그룹 자식은 여기 안 나오고 펼침에서만 보인다
+      const looseEls = cur.elements.filter((e) => /^\d+$/.test(e.ref ?? ''));
+      const rows: Array<{ ref: string; render(): void }> = [];
+      looseEls.forEach((e) => {
         const idx = cur.elements.indexOf(e);
-        const kids = cur.elements.filter((c) => c.parent === e.selector);
-        const row = el('div', e.missing ? 'missing' : '');
-        if (kids.length) { row.classList.add('group'); const chev = el('span', 'chev', vm.expanded === e.selector ? '▾' : '▸'); chev.title = T.tipExpand; row.append(chev); }
-        row.append(el('span', 'num', `${e.ref ?? i + 1}.`));
-        const comp = (e.react ?? e.vue)?.component;
-        row.append(el('span', 'label', `${e.selector.split(' > ').pop()}${comp ? ' · ' + comp : ''}${e.missing ? ' · ' + T.elMissing : ''}`));
-        if (kids.length) row.append(el('span', 'cnt', T.groupInside(kids.length)));
-        row.append(el('span', 'kind', e.tag));
-        const x = el('button', '', '✕'); x.title = T.tipRemove; x.onclick = () => h.onRemoveElement(cur.id, idx); row.append(x);
-        if (kids.length) row.addEventListener('click', (ev) => { const t = ev.target as Element; if (t.closest('button') || t.closest('.num')) return; h.onToggleGroup(e.selector); });
-        list.append(row);
-        if (kids.length && vm.expanded === e.selector) {
-          kids.forEach((c) => {
-            const cidx = cur.elements.indexOf(c);
-            const crow = el('div', 'child' + (c.missing ? ' missing' : ''));
-            crow.append(el('span', 'num', `${c.ref}.`));
-            const ccomp = (c.react ?? c.vue)?.component;
-            crow.append(el('span', 'label', `${c.selector.split(' > ').pop()}${ccomp ? ' · ' + ccomp : ''}${c.missing ? ' · ' + T.elMissing : ''}`));
-            crow.append(el('span', 'kind', c.tag));
-            const cx = el('button', '', '✕'); cx.title = T.tipRemove; cx.onclick = () => h.onRemoveElement(cur.id, cidx); crow.append(cx);
-            list.append(crow);
-          });
-        }
+        rows.push({ ref: e.ref!, render: () => {
+          const row = el('div', e.missing ? 'missing' : '');
+          row.append(el('span', 'num', `${e.ref}.`));
+          const comp = (e.react ?? e.vue)?.component;
+          row.append(el('span', 'label', `${e.selector.split(' > ').pop()}${comp ? ' · ' + comp : ''}${e.missing ? ' · ' + T.elMissing : ''}`));
+          row.append(el('span', 'kind', e.tag));
+          const x = el('button', '', '✕'); x.title = T.tipRemove; x.onclick = () => h.onRemoveElement(cur.id, idx); row.append(x);
+          list.append(row);
+        } });
       });
       cur.regions?.forEach((r, i) => {
-        const n = topEls.length + i + 1; // M1: 자식은 부모의 번호를 쓰므로 영역 번호는 최상위 요소 수 기준
-        const row = el('div', '');
-        row.append(el('span', 'num', `${n}.`));
-        row.append(el('span', 'label', `${T.regionRow(r.rect.w, r.rect.h)}${r.within ? T.regionIn(r.within.split(' > ').pop()!) : ''}`));
-        row.append(el('span', 'kind region', 'region'));
-        const x = el('button', '', '✕'); x.title = T.tipRemove; x.onclick = () => h.onRemoveRegion(cur.id, i); row.append(x);
-        list.append(row);
+        rows.push({ ref: r.ref ?? '', render: () => {
+          const kids = r.ref ? cur.elements.filter((e) => isChildRef(e.ref, r.ref!)) : [];
+          const row = el('div', '');
+          if (kids.length) { row.classList.add('group'); const chev = el('span', 'chev', vm.expanded === r.ref ? '▾' : '▸'); chev.title = T.tipExpand; row.append(chev); }
+          row.append(el('span', 'num', `${r.ref ?? ''}.`));
+          row.append(el('span', 'label', `${T.regionRow(r.rect.w, r.rect.h)}${r.within ? T.regionIn(r.within.split(' > ').pop()!) : ''}`));
+          if (kids.length) row.append(el('span', 'cnt', T.groupInside(kids.length)));
+          if (!kids.length) row.append(el('span', 'kind region', 'region')); // M5(리뷰): 자식 있는 그룹 행은 cnt 칩으로 충분, region 칩 생략
+          const x = el('button', '', '✕'); x.title = T.tipRemove; x.onclick = () => h.onRemoveRegion(cur.id, i); row.append(x);
+          if (kids.length) row.addEventListener('click', (ev) => { const t = ev.target as Element; if (t.closest('button') || t.closest('.num')) return; h.onToggleGroup(r.ref!); });
+          list.append(row);
+          if (kids.length && vm.expanded === r.ref) {
+            kids.forEach((c) => {
+              const cidx = cur.elements.indexOf(c);
+              const crow = el('div', 'child' + (c.missing ? ' missing' : ''));
+              crow.append(el('span', 'num', `${c.ref}.`));
+              const ccomp = (c.react ?? c.vue)?.component;
+              crow.append(el('span', 'label', `${c.selector.split(' > ').pop()}${ccomp ? ' · ' + ccomp : ''}${c.missing ? ' · ' + T.elMissing : ''}`));
+              crow.append(el('span', 'kind', c.tag));
+              const cx = el('button', '', '✕'); cx.title = T.tipRemove; cx.onclick = () => h.onRemoveElement(cur.id, cidx); crow.append(cx);
+              list.append(crow);
+            });
+          }
+        } });
       });
+      rows.sort((a, b) => Number(a.ref) - Number(b.ref));
+      rows.forEach((r) => r.render());
       panel.append(list);
       let ta = textareas.get(cur.id);
       if (!ta) { ta = document.createElement('textarea'); const id = cur.id; ta.addEventListener('input', () => h.onNoteInput(id, ta!.value)); textareas.set(id, ta); }
@@ -451,18 +459,19 @@ export function createUI(h: UIHandlers) {
         m.append(el('span', 'n', String(n)));
         root.append(m);
       };
-      const topCount = cur.elements.filter((e) => !e.parent).length; // M1: 영역 번호는 최상위 요소 수 기준
-      cur.elements.forEach((e, i) => {
+      cur.elements.forEach((e) => {
         if (e.missing) return;
-        if (e.parent && vm.expanded !== e.parent) return; // R124: 자식 마커는 그 그룹이 펼쳐진 동안만
+        const isChild = /[a-z]$/.test(e.ref ?? '');
+        const groupRef = isChild ? e.ref!.slice(0, -1) : null;
+        if (isChild && vm.expanded !== groupRef) return; // R128: 자식 마커는 그 그룹이 펼쳐진 동안만
         let target: Element | null = null;
         try { target = document.querySelector(e.selector); } catch { /* 선택자 불량 */ }
         if (!target) return;
         const r = target.getBoundingClientRect();
-        place(el('div', e.parent ? 'marker child' : 'marker'), r.left - 2, r.top - 2, r.width + 4, r.height + 4, e.ref ?? i + 1);
+        place(el('div', isChild ? 'marker child' : 'marker'), r.left - 2, r.top - 2, r.width + 4, r.height + 4, e.ref ?? '');
       });
-      cur.regions?.forEach((r, i) => {
-        place(el('div', 'marker region'), r.rect.x - scrollX, r.rect.y - scrollY, r.rect.w, r.rect.h, topCount + i + 1);
+      cur.regions?.forEach((r) => {
+        place(el('div', 'marker region'), r.rect.x - scrollX, r.rect.y - scrollY, r.rect.w, r.rect.h, r.ref ?? '');
       });
     });
   }

@@ -21,12 +21,13 @@ describe('buildPayload', () => {
   it('forces origin human, strips non-payload batch fields, keeps screenshot path', () => {
     const p = buildPayload({
       page, refreshStrategy: 'none', console: [], now: new Date('2026-09-08T00:00:00Z'),
-      batches: [{ id: 'b', note: 'n', status: 'sent', createdAt: 't', screenshot: '/s/b.png', summary: 'leak?', elements: [] }],
+      batches: [{ id: 'b', note: 'n', status: 'sent', createdAt: 't', screenshot: '/s/b.png', summary: 'leak?', refSeq: 4, elements: [] }],
     });
     expect(p.origin).toBe('human');
     expect(p.sentAt).toBe('2026-09-08T00:00:00.000Z');
     expect(p.batches[0]).toEqual({ id: 'b', note: 'n', elements: [], screenshot: '/s/b.png' });
     expect('summary' in p.batches[0]!).toBe(false);
+    expect('refSeq' in p.batches[0]!).toBe(false);
   });
 
   it('keeps regions only when present', () => {
@@ -54,19 +55,17 @@ describe('buildPayload', () => {
     expect(p.batches[0]!.elements[1]).toBe(noFrame);
   });
 
-  it('T1: passes ref/parent through untouched, and omits the keys when absent (R123)', () => {
-    const withGroup = { selector: '#a', tag: 'section', classes: [], text: '', rect: { x: 0, y: 0, w: 0, h: 0 }, styles: {}, ref: '1' };
-    const child = { selector: '#ba', tag: 'button', classes: [], text: '', rect: { x: 0, y: 0, w: 0, h: 0 }, styles: {}, ref: '1a', parent: '#a' };
+  it('T1: passes ref through untouched on elements and regions, and refSeq is excluded (R127)', () => {
+    const child = { selector: '#ba', tag: 'button', classes: [], text: '', rect: { x: 0, y: 0, w: 0, h: 0 }, styles: {}, ref: '1a' };
     const plain = { selector: '#c', tag: 'div', classes: [], text: '', rect: { x: 0, y: 0, w: 0, h: 0 }, styles: {} };
     const p = buildPayload({
       page, refreshStrategy: 'none', console: [], now: new Date('2026-09-08T00:00:00Z'),
-      batches: [{ id: 'b', note: 'n', status: 'sent', createdAt: 't', elements: [withGroup, child, plain] }],
+      batches: [{ id: 'b', note: 'n', status: 'sent', createdAt: 't', refSeq: 5, elements: [child, plain], regions: [{ ref: '1', rect: { x: 0, y: 0, w: 1, h: 1 } }] }],
     });
-    expect(p.batches[0]!.elements[0]).toMatchObject({ selector: '#a', ref: '1' });
-    expect(p.batches[0]!.elements[1]).toMatchObject({ selector: '#ba', ref: '1a', parent: '#a' });
-    expect('ref' in p.batches[0]!.elements[2]!).toBe(false);
-    expect('parent' in p.batches[0]!.elements[2]!).toBe(false);
-    expect('parent' in p.batches[0]!.elements[0]!).toBe(false);
+    expect(p.batches[0]!.elements[0]).toMatchObject({ selector: '#ba', ref: '1a' });
+    expect('ref' in p.batches[0]!.elements[1]!).toBe(false);
+    expect(p.batches[0]!.regions![0]).toEqual({ ref: '1', rect: { x: 0, y: 0, w: 1, h: 1 } });
+    expect('refSeq' in p.batches[0]!).toBe(false);
   });
 
   it('strips vue.frame too (same contract as react)', () => {
