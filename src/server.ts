@@ -11,7 +11,8 @@ import { resolveElementSources } from './core/sourcemap.js';
 import { BrowserLauncher, parseEngine } from './browser/launcher.js';
 import { createMcpServer } from './mcp/server.js';
 import { startParentWatch } from './parent-watch.js';
-import type { RefreshStrategy, Rect } from './core/types.js';
+import { union } from './core/rect.js';
+import type { RefreshStrategy } from './core/types.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const overlaySource = readFileSync(join(here, 'overlay.js'), 'utf8'); // build가 server.js 옆에 둔다
@@ -47,12 +48,6 @@ const configStrategy = (): RefreshStrategy | undefined => {
     if (v !== undefined) console.error(`[cobro] ${file}의 refreshStrategy 무시 — none|reload|event만 받는다`);
   } catch (e) { console.error(`[cobro] ${file}을 읽지 못해 무시한다: ${(e as Error).message}`); }
   return undefined;
-};
-
-const union = (rects: Rect[]): Rect | undefined => {
-  if (!rects.length) return undefined;
-  const x = Math.min(...rects.map((r) => r.x)), y = Math.min(...rects.map((r) => r.y));
-  return { x, y, w: Math.max(...rects.map((r) => r.x + r.w)) - x, h: Math.max(...rects.map((r) => r.y + r.h)) - y };
 };
 
 let launcher: BrowserLauncher | null = null;
