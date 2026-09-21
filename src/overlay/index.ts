@@ -98,6 +98,7 @@ declare const __COBRO_TOKEN__: string;
     const onViewport = () => ui.renderMarkers(vm());
     window.addEventListener('scroll', onViewport, { capture: true, passive: true });
     window.addEventListener('resize', onViewport, { passive: true });
+    window.addEventListener('resize', () => ui.updateTbH(), { passive: true });
     installGuards(ui.host); // 반드시 위 리스너들 뒤
 
     const onMessage = (m: ServerMsg) => {
