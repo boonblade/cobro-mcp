@@ -3,6 +3,8 @@
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
+
+## [0.9.0] — 2026-09-21
 ### Added
 - Drag groups: dragging over two or more elements picks them as one group — the band becomes a region (ref "1") and the elements inside get "1a", "1b"…; the row is collapsed by default and expands to show or remove them. A band over one element picks just that element. Every element and region now carries a stable `ref` that does not change when other rows are removed.
 - Narrow viewports: below 760px the strategy chip hides and the status line shrinks; below 520px the toolbar becomes a full-width bar with the status on its own line, and the panel and settings popover fill the width.
