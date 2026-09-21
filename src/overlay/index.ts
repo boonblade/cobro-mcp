@@ -7,6 +7,7 @@ import { inspectElement } from './inspect.js';
 import { uniqueSelector } from './selector.js';
 import { detectStrategy, applyDone } from './refresh.js';
 import { resolveTheme } from './theme.js';
+import { isChildRef } from './refs.js';
 
 declare const __COBRO_PORT__: number;
 declare const __COBRO_TOKEN__: string;
@@ -49,40 +50,56 @@ declare const __COBRO_TOKEN__: string;
       if (!stateSeen) { openPending = true; render(); return; }
       ensureCurrent(); render(); ui.focusNote();
     };
-    // I1: 부모 제거 시 그 parent를 가진 자식도 함께 지운다 — addEl의 토글 해제·onRemoveElement 둘 다 이 함수로
+    const GROUP_LETTERS = 'abcdefghijkl';
+    // R127: ref는 안정 번호 — 발급 뒤 다른 항목이 지워져도 바뀌지 않는다. refSeq는 발급 전용 카운터.
+    const nextRef = (b: Batch): string => { b.refSeq = (b.refSeq ?? 0) + 1; return String(b.refSeq); };
+    const resetSeqIfEmpty = (b: Batch) => { if (b.elements.length === 0 && !(b.regions?.length)) b.refSeq = 0; };
+    // 그룹 g의 다음 자식 문자 — 기존 자식 수로 결정, 12개(a~l) 상한이면 더 받지 않는다
+    const childRef = (g: string, b: Batch): string | null => {
+      const n = b.elements.filter((e) => isChildRef(e.ref, g)).length;
+      return n < GROUP_LETTERS.length ? g + GROUP_LETTERS[n] : null;
+    };
+    // 옛 초안(ref 없는 요소·영역)에 순서대로 ref를 채운다 — 요소 먼저, 영역 다음
+    // M1(리뷰): refSeq를 0부터 다시 세지 않고, 기존 ref들의 앞 숫자 최댓값부터 이어간다(중복 발급 방지)
+    const ensureRefs = (b: Batch) => {
+      const lead = (s?: string) => { const m = /^\d+/.exec(s ?? ''); return m ? Number(m[0]) : 0; };
+      let max = b.refSeq ?? 0;
+      for (const e of b.elements) max = Math.max(max, lead(e.ref));
+      for (const r of b.regions ?? []) max = Math.max(max, lead(r.ref));
+      b.refSeq = max;
+      for (const e of b.elements) if (!e.ref) e.ref = nextRef(b);
+      for (const r of b.regions ?? []) if (!r.ref) r.ref = nextRef(b);
+    };
     const removeEl = (b: Batch, selector: string) => {
       const i = b.elements.findIndex((e) => e.selector === selector);
-      if (i < 0) return;
-      const removed = b.elements[i]!;
-      b.elements.splice(i, 1);
-      if (!removed.parent) b.elements = b.elements.filter((e) => e.parent !== removed.selector);
-      if (expandedGroup === removed.selector) expandedGroup = null; // M2: 펼쳐진 그룹의 부모가 사라지면 접힘
+      if (i >= 0) b.elements.splice(i, 1);
     };
-    const addEl = (b: Batch, el: Element, toggle: boolean, parent?: string) => {
+    const addEl = (b: Batch, el: Element, toggle: boolean, ref: string) => {
       const info = inspectElement(el);
-      if (parent) {
-        info.parent = parent;
-        if (b.elements.filter((e) => e.parent === parent).length >= 12) return; // M3: 자식 12개 상한(밴드 재드래그 누적 방지)
-      }
+      info.ref = ref;
       const i = b.elements.findIndex((e) => e.selector === info.selector);
       if (i >= 0) { if (toggle) removeEl(b, info.selector); } else b.elements.push(info);
     };
-    const GROUP_LETTERS = 'abcdefghijkl';
-    // R123: 그룹(parent 있는 요소)이 하나라도 있으면 전 요소에 ref 부여(부모 1,2,… / 자식은 부모 뒤 1a,1b,…), 없으면 전부 삭제
-    const assignRefs = (b: Batch) => {
-      if (!b.elements.some((e) => e.parent)) { for (const e of b.elements) delete e.ref; return; }
-      let top = 0, childIdx = 0;
-      for (const e of b.elements) {
-        if (e.parent) { e.ref = `${top}${GROUP_LETTERS[childIdx]}`; childIdx++; } // M3: addEl이 12개에서 막으므로 폴백 불필요
-        else { top++; childIdx = 0; e.ref = String(top); }
+    // 그룹(영역) 제거 = 영역 splice + 그 자식 전부(ref가 그룹 ref로 시작하고 글자 하나만 붙은 요소) 제거
+    const removeRegion = (b: Batch, i: number) => {
+      const r = b.regions?.[i];
+      if (!r) return;
+      b.regions!.splice(i, 1);
+      if (r.ref) {
+        const g = r.ref;
+        b.elements = b.elements.filter((e) => !isChildRef(e.ref, g));
+        if (expandedGroup === g) expandedGroup = null; // M2: 펼쳐진 그룹이 사라지면 접힘
       }
     };
-    const resolveDraft = (b: Batch): Batch => ({ ...b, status: 'draft', elements: b.elements.map((e, i) => {
-      let found: Element | null = null; try { found = document.querySelector(e.selector); } catch { /* 불량 선택자 */ }
-      const missing = !found;
-      if (missing !== !!e.missing) chan.send({ type: 'resolved', batchId: b.id, index: i, missing });
-      return { ...e, missing };
-    }) });
+    const resolveDraft = (b: Batch): Batch => {
+      ensureRefs(b);
+      return { ...b, status: 'draft', elements: b.elements.map((e, i) => {
+        let found: Element | null = null; try { found = document.querySelector(e.selector); } catch { /* 불량 선택자 */ }
+        const missing = !found;
+        if (missing !== !!e.missing) chan.send({ type: 'resolved', batchId: b.id, index: i, missing });
+        return { ...e, missing };
+      }) };
+    };
 
     const ui = createUI({
       onToggleSelect: () => setSelecting(!picker.isActive()),
@@ -91,9 +108,13 @@ declare const __COBRO_TOKEN__: string;
         const b = drafts?.find((d) => d.id === id); if (!b) return;
         const sel = b.elements[i]?.selector;
         if (sel) removeEl(b, sel);
-        assignRefs(b); pushDraft(); render();
+        resetSeqIfEmpty(b); pushDraft(); render();
       },
-      onRemoveRegion: (id, i) => { const b = drafts?.find((d) => d.id === id); if (b?.regions) { b.regions.splice(i, 1); pushDraft(); render(); } },
+      onRemoveRegion: (id, i) => {
+        const b = drafts?.find((d) => d.id === id); if (!b) return;
+        removeRegion(b, i);
+        resetSeqIfEmpty(b); pushDraft(); render();
+      },
       onSend: () => {
         const ready = (drafts ?? []).filter((b) => b.note.trim());
         if (!ready.length) { ui.focusNote(); return; }
@@ -103,7 +124,7 @@ declare const __COBRO_TOKEN__: string;
         picker.setActive(false); expandedGroup = null; render(); // M2: 다음 초안은 접힘부터
       },
       onSettings: (patch) => chan.send({ type: 'settings', patch }),
-      onToggleGroup: (selector) => { expandedGroup = expandedGroup === selector ? null : selector; render(); },
+      onToggleGroup: (ref) => { expandedGroup = expandedGroup === ref ? null : ref; render(); },
     });
     const applyTheme = () => ui.setTheme(resolveTheme(prefs.theme, {
       prefersDark: mq.matches,
@@ -113,23 +134,45 @@ declare const __COBRO_TOKEN__: string;
     mq.addEventListener('change', applyTheme);
     const picker = createPicker({
       root: ui.root, host: ui.host,
-      onPick: (el) => { if (!stateSeen) return; const b = ensureCurrent(); addEl(b, el, true); assignRefs(b); pushDraft(); render(); ui.focusNote(); },
-      onBandPick: (top, band, childrenOf) => {
+      onPick: (el) => {
         if (!stateSeen) return;
         const b = ensureCurrent();
-        if (top.length) {
-          for (const p of top) {
-            addEl(b, p, false);
-            const parentSel = uniqueSelector(p);
-            for (const c of childrenOf.get(p) ?? []) addEl(b, c, false, parentSel);
-          }
-        } else if (band.right - band.left >= 8 && band.bottom - band.top >= 8) {
+        const sel = uniqueSelector(el);
+        if (b.elements.some((e) => e.selector === sel)) removeEl(b, sel);
+        else addEl(b, el, false, nextRef(b));
+        resetSeqIfEmpty(b);
+        pushDraft(); render(); ui.focusNote();
+      },
+      // R126: 0개 → 영역만 / fresh 0개(전부 이미 있음) → 아무것도 안 함(I2) / fresh 1개 → 낱개 요소 / fresh 2개 이상 → 그룹
+      onBandPick: (hits, band) => {
+        if (!stateSeen) return;
+        const b = ensureCurrent();
+        const rect = { x: Math.round(band.left + scrollX), y: Math.round(band.top + scrollY), w: Math.round(band.right - band.left), h: Math.round(band.bottom - band.top) };
+        const withinAt = () => {
           const cx = (band.left + band.right) / 2, cy = (band.top + band.bottom) / 2;
           const hit = document.elementsFromPoint(cx, cy).find((el) => el !== ui.host && !ui.host.contains(el) && el !== document.documentElement && el !== document.body);
-          const rect = { x: Math.round(band.left + scrollX), y: Math.round(band.top + scrollY), w: Math.round(band.right - band.left), h: Math.round(band.bottom - band.top) };
-          (b.regions ??= []).push(hit ? { rect, within: uniqueSelector(hit) } : { rect });
+          return hit ? uniqueSelector(hit) : undefined;
+        };
+        if (hits.length === 0) {
+          if (band.right - band.left >= 8 && band.bottom - band.top >= 8) {
+            const ref = nextRef(b);
+            const within = withinAt();
+            (b.regions ??= []).push(within ? { ref, rect, within } : { ref, rect });
+            pushDraft(); render();
+          }
+          return;
         }
-        assignRefs(b);
+        // I2(리뷰): 이미 목록에 있는 요소를 뺀 "새로 잡힌" 요소 수로 판정 — 같은 밴드 재드래그가 자식 없는 그룹을 또 만들지 않게
+        const fresh = hits.filter((h) => !b.elements.some((e) => e.selector === uniqueSelector(h)));
+        if (fresh.length === 0) return;
+        if (fresh.length === 1) {
+          addEl(b, fresh[0]!, false, nextRef(b));
+        } else {
+          const g = nextRef(b);
+          const within = withinAt();
+          (b.regions ??= []).push(within ? { ref: g, rect, within } : { ref: g, rect });
+          for (const h of fresh) { const cr = childRef(g, b); if (cr) addEl(b, h, false, cr); }
+        }
         pushDraft(); render();
       },
     });

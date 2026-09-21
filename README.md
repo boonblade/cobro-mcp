@@ -54,7 +54,7 @@ The whole loop is the GIF at the top. No copy-paste, no "check my annotations" �
 
 ## Usage
 
-- **Human**: on the page, press `Ctrl+Shift+F` to toggle pick mode (`Esc` to exit) → click an element (drag picks the topmost elements whose center is inside the band) → write a note → **Send**. Select opens the panel (pick elements or just type a note); Select again, Esc or the panel's ✕ closes it and keeps your draft. Drafts belong to the page you picked on — after navigating, elements from the previous page show as missing. Each picked element gets a numbered marker; with several, write "1: …, 2: …". A band over empty space becomes a region. Drag over a container to pick it as a group; expand the row to see the elements inside (1a, 1b…). Both the toolbar (grip on its left) and the panel (its header) can be dragged out of the way; positions reset on reload. The toolbar status line tells you what to do next. Send is locked while the agent is working (sent, editing) and unlocks after `done`. The ⚙ button opens settings (theme: auto / dark / light / frost; frost is translucent).
+- **Human**: on the page, press `Ctrl+Shift+F` to toggle pick mode (`Esc` to exit) → click an element (drag picks the topmost elements whose center is inside the band) → write a note → **Send**. Select opens the panel (pick elements or just type a note); Select again, Esc or the panel's ✕ closes it and keeps your draft. Drafts belong to the page you picked on — after navigating, elements from the previous page show as missing. Each picked element gets a numbered marker; with several, write "1: …, 2: …". Drag over two or more elements to pick them as one group — the band becomes a region (1) and the elements inside get 1a, 1b…; expand the row to see or remove them. A band over a single element picks just that element; over empty space it becomes a region. Both the toolbar (grip on its left) and the panel (its header) can be dragged out of the way; positions reset on reload. The toolbar status line tells you what to do next. Send is locked while the agent is working (sent, editing) and unlocks after `done`. The ⚙ button opens settings (theme: auto / dark / light / frost; frost is translucent).
 - **Agent**: `open(url)` → `wait()` → read only `batches[].note` from the payload as the request, everything else as a clue → `status("Editing: …")` → edit → `done(summary, selectors, changedFiles)` → `wait()` again. Call `close()` to end the session.
 
 There are exactly six fixed tools. If you need more observation or control, pair Cobro with another MCP.
@@ -93,10 +93,11 @@ If `wait` returns `pending`, call it again (not an error). If `browserGone: true
             "text": "Get started",
             "rect": { "x": 912, "y": 24, "w": 128, "h": 40 },
             "styles": { "display": "inline-flex", "width": "128px", "height": "40px", "padding": "8px 16px", "color": "rgb(255, 255, 255)", "background-color": "rgb(59, 130, 246)", "font-size": "14px", "font-weight": "600", "border-radius": "6px" },
-            "react": { "component": "HeaderCta", "source": "src/components/Header.tsx:42" }
+            "react": { "component": "HeaderCta", "source": "src/components/Header.tsx:42" },
+            "ref": "1a"
           }
         ],
-        "regions": [{ "rect": { "x": 300, "y": 160, "w": 94, "h": 85 }, "within": "#app > main > div.grid" }],
+        "regions": [{ "ref": "1", "rect": { "x": 300, "y": 160, "w": 94, "h": 85 }, "within": "#app > main > div.grid" }],
         "screenshot": "/path/to/project/.cobro/shots/b1.png"
       }
     ],
@@ -126,8 +127,9 @@ If `wait` returns `pending`, call it again (not an error). If `browserGone: true
 | `elements[].react` | `{ component, source? }` from React dev builds only; key omitted otherwise. `source` needs a dev server with source maps (React 19) or React ≤ 18 |
 | `elements[].vue` | `{ component, source? }` from Vue 3 dev builds; `source` is the SFC path only (no line). Omitted otherwise |
 | `elements[].missing` | `true` when the selector no longer matches after re-injection (rare) |
-| `elements[].ref` / `parent` | Only when a drag picked a container: `ref` is the panel number (`1`, `1a`…) and `parent` the container's selector on its inner elements. Notes may refer to elements by `ref` |
-| `batches[].regions[]` | Rectangles the user drew on empty space (a band with no element inside): `rect` in page coordinates, `within` = selector of the enclosing element. Omitted when none |
+| `elements[].ref` | Stable number of the row in the panel (`"2"`, or `"1a"` for an element inside region `"1"`); notes refer to it. Never renumbered while the draft lives |
+| `regions[].ref` | Same stable numbering, shared with `elements[].ref` |
+| `batches[].regions[]` | Rectangles the user dragged: either a group (elements inside carry refs prefixed with the region's ref) or an area on empty space (no elements). `rect` in page coordinates, `within` = selector of the enclosing element. Omitted when none |
 | `console[]` | `level` ∈ `error` `warning` `pageerror` `requestfailed`; `text` up to 300 chars; identical messages merged with `count`; newest 10 by `last` |
 | `refreshStrategy` | Strategy `done` will apply: `none` / `reload` / `event` |
 

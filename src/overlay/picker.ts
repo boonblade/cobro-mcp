@@ -1,4 +1,4 @@
-export function createPicker(opts: { root: ShadowRoot; host: HTMLElement; onPick(el: Element): void; onBandPick(top: Element[], band: { left: number; top: number; right: number; bottom: number }, childrenOf: Map<Element, Element[]>): void }) {
+export function createPicker(opts: { root: ShadowRoot; host: HTMLElement; onPick(el: Element): void; onBandPick(hits: Element[], band: { left: number; top: number; right: number; bottom: number }): void }) {
   const { root, host } = opts;
   const glass = document.createElement('div');
   glass.className = 'glass';
@@ -33,17 +33,19 @@ export function createPicker(opts: { root: ShadowRoot; host: HTMLElement; onPick
     return r.width > 0 && r.height > 0 && cx >= b.left && cx <= b.right && cy >= b.top && cy <= b.bottom;
   };
   const topLevel = (els: Element[]) => { const set = new Set(els); return els.filter((el) => !(el.parentElement && set.has(el.parentElement))); };
-  const inBand = (b: { left: number; top: number; right: number; bottom: number }) => {
+  // R126: H = 밴드 안 최상위 요소들 + 각 최상위의 안쪽 한 단계(그 최상위의 자손 중 중심점이 밴드 안인 것), 문서 순서로 평면화 — 총 12개 상한
+  const inBand = (b: { left: number; top: number; right: number; bottom: number }): Element[] => {
     const within: Element[] = [];
     for (const el of document.body.querySelectorAll('*')) { if (notOurs(el) && centerIn(el, b)) within.push(el); }
     const top = topLevel(within);
-    // R122: 밴드로 잡힌 최상위 요소마다 그 자손 중 중심점이 밴드 안인 것들을 그룹 자식으로 — 최대 12개(문서 순서)
-    const childrenOf = new Map<Element, Element[]>();
+    const hits: Element[] = [];
     for (const p of top) {
-      const kids = [...p.querySelectorAll('*')].filter((el) => notOurs(el) && centerIn(el, b));
-      childrenOf.set(p, topLevel(kids).slice(0, 12));
+      if (hits.length >= 12) break;
+      hits.push(p);
+      const kids = topLevel([...p.querySelectorAll('*')].filter((el) => notOurs(el) && centerIn(el, b)));
+      for (const k of kids) { if (hits.length >= 12) break; hits.push(k); }
     }
-    return { top, childrenOf };
+    return hits;
   };
 
   glass.addEventListener('mousedown', (e) => { if (e.button === 0) { dragStart = { x: e.clientX, y: e.clientY }; dragging = false; } });
@@ -62,8 +64,8 @@ export function createPicker(opts: { root: ShadowRoot; host: HTMLElement; onPick
     if (!dragging) { dragStart = null; return; }
     e.preventDefault();
     const b = rectOf(e);
-    const { top, childrenOf } = inBand(b);
-    opts.onBandPick(top, b, childrenOf);
+    const hits = inBand(b);
+    opts.onBandPick(hits, b);
     band.style.display = 'none'; dragStart = null; dragging = false; suppressClick = true;
   });
   glass.addEventListener('click', (e) => {
