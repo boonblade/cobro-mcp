@@ -112,8 +112,10 @@ describe('mcp tools', () => {
     expect(calls).toContain('close');
   });
   it('open drops empty-note drafts only when it relaunches the browser, not on a live navigation (R125)', async () => {
+    // note가 비어도 elements가 있으면 R129(setDrafts)는 저장한다 — 여기서 지워지는 건 R125(dropEmptyDrafts, 브라우저 재시작)의 몫
+    const el = { selector: '#e', tag: 'div', classes: [], text: '', rect: { x: 0, y: 0, w: 1, h: 1 }, styles: {} };
     core.setDrafts([
-      { id: 'e', note: '', elements: [], status: 'draft', createdAt: 't' },
+      { id: 'e', note: '', elements: [el], status: 'draft', createdAt: 't' },
       { id: 'k', note: 'keep', elements: [], status: 'draft', createdAt: 't' },
     ]);
     // 브라우저 닫힘 상태(기존 82행 테스트와 같은 방법) — 첫 open은 새로 띄워야 한다
@@ -124,7 +126,7 @@ describe('mcp tools', () => {
 
     core.setDrafts([
       { id: 'k', note: 'keep', elements: [], status: 'draft', createdAt: 't' },
-      { id: 'e2', note: '', elements: [], status: 'draft', createdAt: 't' },
+      { id: 'e2', note: '', elements: [el], status: 'draft', createdAt: 't' },
     ]);
     // 브라우저가 이미 떠 있다 → URL만 바꾸는 open은 초안을 건드리지 않는다(Task 48)
     const r2 = await call('open', { url: 'http://b/' });

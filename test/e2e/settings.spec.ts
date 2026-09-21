@@ -1,4 +1,4 @@
-import { test, expect, HOST, selectAt } from './helpers.js';
+import { test, expect, HOST, selectAt, startSelect } from './helpers.js';
 
 test('settings popover selects a theme and the server persists it', async ({ cobroPage: page, bridge }) => {
   await page.goto('http://127.0.0.1:4173/basic.html');
@@ -95,7 +95,7 @@ test.describe('light theme hover badge (부채 #5)', () => {
   test.use({ envTheme: 'light' });
   test('light theme hover badge text is readable', async ({ cobroPage: page }) => {
     await page.goto('http://127.0.0.1:4173/basic.html');
-    await page.keyboard.press('Control+Shift+F');
+    await startSelect(page);
     const b = (await page.locator('#target').boundingBox())!;
     await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
     const badge = page.locator(`${HOST} .hover-badge`);

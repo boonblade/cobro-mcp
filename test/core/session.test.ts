@@ -37,6 +37,19 @@ describe('SessionCore', () => {
     core.setDrafts([draft('3')]);
     expect(core.session.batches.map((b) => [b.id, b.status])).toEqual([['1', 'sent'], ['3', 'draft']]);
   });
+  it('setDrafts drops empty drafts (no elements, no regions, blank note) but keeps sent untouched (R129)', () => {
+    core.setDrafts([draft('1')]);
+    core.markSent(['1'], page);
+    core.setDrafts([
+      { id: 'empty', note: '', elements: [], status: 'draft', createdAt: 't' },
+      draft('2'),
+      { id: 'noteOnly', note: '메모', elements: [], status: 'draft', createdAt: 't' },
+      { id: 'regionOnly', note: '', elements: [], status: 'draft', createdAt: 't', regions: [{ rect: { x: 0, y: 0, w: 1, h: 1 } }] },
+    ]);
+    const drafts = core.session.batches.filter((b) => b.status === 'draft');
+    expect(drafts.map((b) => b.id)).toEqual(['2', 'noteOnly', 'regionOnly']);
+    expect(core.session.batches.find((b) => b.id === '1')?.status).toBe('sent');
+  });
   it('markSent moves earlier sent to unanswered and sets agent sent (R79)', () => {
     core.setDrafts([draft('1'), draft('2')]);
     core.markSent(['1'], page);
