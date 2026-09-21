@@ -1,4 +1,4 @@
-export function createPicker(opts: { root: ShadowRoot; host: HTMLElement; onPick(el: Element): void; onBandPick(els: Element[], band: { left: number; top: number; right: number; bottom: number }): void }) {
+export function createPicker(opts: { root: ShadowRoot; host: HTMLElement; onPick(el: Element): void; onBandPick(top: Element[], band: { left: number; top: number; right: number; bottom: number }, childrenOf: Map<Element, Element[]>): void }) {
   const { root, host } = opts;
   const glass = document.createElement('div');
   glass.className = 'glass';
@@ -27,15 +27,23 @@ export function createPicker(opts: { root: ShadowRoot; host: HTMLElement; onPick
     badge.style.top = (y + 18 + bh > innerHeight ? y - bh - 8 : y + 18) + 'px';
   };
   const labelOf = (el: Element) => el.id ? '#' + el.id : el.tagName.toLowerCase() + [...el.classList].slice(0, 2).map((c) => '.' + c).join('');
+  const centerIn = (el: Element, b: { left: number; top: number; right: number; bottom: number }) => {
+    const r = el.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    return r.width > 0 && r.height > 0 && cx >= b.left && cx <= b.right && cy >= b.top && cy <= b.bottom;
+  };
+  const topLevel = (els: Element[]) => { const set = new Set(els); return els.filter((el) => !(el.parentElement && set.has(el.parentElement))); };
   const inBand = (b: { left: number; top: number; right: number; bottom: number }) => {
-    const within = new Set<Element>();
-    for (const el of document.body.querySelectorAll('*')) {
-      if (!notOurs(el)) continue;
-      const r = el.getBoundingClientRect();
-      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-      if (r.width && r.height && cx >= b.left && cx <= b.right && cy >= b.top && cy <= b.bottom) within.add(el);
+    const within: Element[] = [];
+    for (const el of document.body.querySelectorAll('*')) { if (notOurs(el) && centerIn(el, b)) within.push(el); }
+    const top = topLevel(within);
+    // R122: 밴드로 잡힌 최상위 요소마다 그 자손 중 중심점이 밴드 안인 것들을 그룹 자식으로 — 최대 12개(문서 순서)
+    const childrenOf = new Map<Element, Element[]>();
+    for (const p of top) {
+      const kids = [...p.querySelectorAll('*')].filter((el) => notOurs(el) && centerIn(el, b));
+      childrenOf.set(p, topLevel(kids).slice(0, 12));
     }
-    return [...within].filter((el) => !(el.parentElement && within.has(el.parentElement)));
+    return { top, childrenOf };
   };
 
   glass.addEventListener('mousedown', (e) => { if (e.button === 0) { dragStart = { x: e.clientX, y: e.clientY }; dragging = false; } });
@@ -53,7 +61,9 @@ export function createPicker(opts: { root: ShadowRoot; host: HTMLElement; onPick
   glass.addEventListener('mouseup', (e) => {
     if (!dragging) { dragStart = null; return; }
     e.preventDefault();
-    const b = rectOf(e); opts.onBandPick(inBand(b), b);
+    const b = rectOf(e);
+    const { top, childrenOf } = inBand(b);
+    opts.onBandPick(top, b, childrenOf);
     band.style.display = 'none'; dragStart = null; dragging = false; suppressClick = true;
   });
   glass.addEventListener('click', (e) => {

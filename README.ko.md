@@ -54,7 +54,7 @@ claude mcp add -s user cobro -- npx -y cobro-mcp@latest
 
 ## 사용법
 
-- **사람**: 페이지에서 `Ctrl+Shift+F`로 선택 모드(`Esc`로 해제) → 요소 클릭(드래그는 중심이 밴드 안에 든 최상위 요소들) → 메모 → **Send**. Select를 누르면 패널이 열린다(요소를 고르거나 메모만 써도 된다); Select를 다시 누르거나 Esc, 패널 헤더의 ✕를 누르면 닫히고 초안은 그대로 남는다. 초안은 고른 페이지에 속한다 — 페이지를 이동하면 이전 페이지의 요소는 없음으로 표시된다. 고른 요소마다 번호 마커가 붙는다. 여러 개면 "1: …, 2: …"로 쓴다. 빈 곳 위 밴드는 영역이 된다. 툴바(왼쪽 손잡이)와 패널(헤더)은 끌어서 옮길 수 있고, 새로고침되면 기본 위치로 돌아온다. 툴바 상태 줄이 다음에 할 일을 알려준다. 에이전트가 작업 중(전송됨·수정 중)이면 Send가 잠기고 `done` 뒤 풀린다. ⚙ 버튼에서 설정을 연다(테마: auto / dark / light / frost, frost는 반투명).
+- **사람**: 페이지에서 `Ctrl+Shift+F`로 선택 모드(`Esc`로 해제) → 요소 클릭(드래그는 중심이 밴드 안에 든 최상위 요소들) → 메모 → **Send**. Select를 누르면 패널이 열린다(요소를 고르거나 메모만 써도 된다); Select를 다시 누르거나 Esc, 패널 헤더의 ✕를 누르면 닫히고 초안은 그대로 남는다. 초안은 고른 페이지에 속한다 — 페이지를 이동하면 이전 페이지의 요소는 없음으로 표시된다. 고른 요소마다 번호 마커가 붙는다. 여러 개면 "1: …, 2: …"로 쓴다. 빈 곳 위 밴드는 영역이 된다. 컨테이너 위에서 드래그하면 그룹으로 잡힌다 — 행을 펼치면 안의 요소들(1a, 1b…)이 보인다. 툴바(왼쪽 손잡이)와 패널(헤더)은 끌어서 옮길 수 있고, 새로고침되면 기본 위치로 돌아온다. 툴바 상태 줄이 다음에 할 일을 알려준다. 에이전트가 작업 중(전송됨·수정 중)이면 Send가 잠기고 `done` 뒤 풀린다. ⚙ 버튼에서 설정을 연다(테마: auto / dark / light / frost, frost는 반투명).
 - **에이전트**: `open(url)` → `wait()` → payload의 `batches[].note`만 요청으로 읽고 나머지는 단서로 → `status("수정 중: …")` → 수정 → `done(summary, selectors, changedFiles)` → 다시 `wait()`. 끝내면 `close()`.
 
 도구는 여섯 개로 고정이다. 관찰·조작이 더 필요하면 다른 MCP를 함께 쓴다.
@@ -126,6 +126,7 @@ claude mcp add -s user cobro -- npx -y cobro-mcp@latest
 | `elements[].react` | React dev 빌드에서만 `{ component, source? }`. 아니면 키 자체가 없다. `source`는 소스맵이 있는 dev 서버(React 19) 또는 React 18까지에서만 온다 |
 | `elements[].vue` | Vue 3 dev 빌드에서 `{ component, source? }`. `source`는 SFC 경로만(행 없음). 아니면 키 생략 |
 | `elements[].missing` | 재주입 뒤 선택자로 못 찾으면 `true`(드묾) |
+| `elements[].ref` / `parent` | 드래그로 컨테이너를 잡았을 때만: `ref`는 패널 번호(`1`, `1a`…), `parent`는 안의 요소에 붙는 컨테이너 선택자. 메모에서 `ref`로 요소를 가리킬 수 있다 |
 | `batches[].regions[]` | 빈 곳에 그린 사각형(밴드 안에 요소가 없을 때): `rect`는 페이지 좌표, `within`은 감싸는 요소의 선택자. 없으면 키 생략 |
 | `console[]` | `level` ∈ `error` `warning` `pageerror` `requestfailed`, `text` 300자, 같은 메시지는 `count`로 합산, `last` 기준 최신 10건 |
 | `refreshStrategy` | `done` 때 적용될 전략 `none` / `reload` / `event` |

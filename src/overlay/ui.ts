@@ -5,8 +5,8 @@ import type { ResolvedTheme } from './theme.js';
 import { svg } from './icons.js';
 type IconName = Parameters<typeof svg>[0];
 
-export interface ViewModel { selecting: boolean; connected: boolean; agent: { status: AgentStatus; text: string }; strategy: RefreshStrategy | null; drafts: Batch[]; locked: boolean; prefs: UiPrefs }
-export interface UIHandlers { onToggleSelect(): void; onNoteInput(id: string, note: string): void; onRemoveElement(id: string, index: number): void; onRemoveRegion(id: string, index: number): void; onSend(): void; onSettings(patch: { theme?: Theme }): void }
+export interface ViewModel { selecting: boolean; connected: boolean; agent: { status: AgentStatus; text: string }; strategy: RefreshStrategy | null; drafts: Batch[]; locked: boolean; prefs: UiPrefs; expanded: string | null }
+export interface UIHandlers { onToggleSelect(): void; onNoteInput(id: string, note: string): void; onRemoveElement(id: string, index: number): void; onRemoveRegion(id: string, index: number): void; onSend(): void; onSettings(patch: { theme?: Theme }): void; onToggleGroup(selector: string): void }
 
 const CSS = `
 :host{
@@ -80,6 +80,13 @@ const CSS = `
 .els .label{flex:1;min-width:0}
 .els .kind{flex:none;font-size:10px;line-height:16px;padding:0 6px;border-radius:999px;background:var(--chip);border:1px solid var(--border);color:var(--fg-4)}
 .els .kind.region{color:var(--accent);border-color:color-mix(in srgb, var(--accent) 45%, transparent);background:color-mix(in srgb, var(--accent) 10%, transparent)}
+.els .child{margin-left:22px;background:var(--bg);padding:6px 10px}
+.els .chev{flex:none;width:14px;text-align:center;color:var(--fg-5);cursor:pointer}
+.els .cnt{flex:none;font-size:10px;line-height:16px;padding:0 6px;border-radius:999px;background:color-mix(in srgb, var(--accent) 12%, transparent);border:1px solid color-mix(in srgb, var(--accent) 45%, transparent);color:var(--accent)}
+.els .child .num{color:var(--fg-4)}
+.els > div.group{cursor:pointer}
+.marker.child{border-style:dotted}
+.marker.child .n{background:#fff;color:var(--accent);border:1.5px solid var(--accent)}
 textarea{width:100%;min-height:80px;resize:none;font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--border-2);border-radius:8px;padding:10px;margin-bottom:0;display:block}
 .row{display:flex;justify-content:space-between;margin-top:8px;gap:6px;align-items:center}
 .row .sends{color:var(--fg-5);font-size:11px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -91,6 +98,7 @@ textarea{width:100%;min-height:80px;resize:none;font:inherit;color:var(--fg);bac
 .marker.inside-x .n{transform:translate(4px,-50%)}
 .marker.inside-y .n{transform:translate(-50%,4px)}
 .marker.inside-x.inside-y .n{transform:translate(4px,4px)}
+.marker.child .n{left:auto;right:-2px;transform:translate(50%,-50%)}
 .flash{position:fixed;border:2px solid var(--ok);border-radius:2px;pointer-events:none;animation:cobroflash 1.6s ease-out forwards}
 @keyframes cobroflash{0%{opacity:1}100%{opacity:0}}
 /* shadow root의 자식은 모두 position:fixed 형제 — picker가 glass를 toolbar/panel 뒤에 append하므로 쌓임 순서를 명시한다 */
@@ -145,7 +153,8 @@ const T = {
     regionIn: (s: string) => ` · ${s} 안`,
     selNone: '요소 없음 · 메모만 보내도 됩니다',
     elMissing: '요소 없음', notePlaceholder: '수정 요청 메모…',
-    notePlaceholderMulti: '번호로 구분해 적을 수 있어요 — 1: … 2: …',
+    notePlaceholderMulti: '번호로 구분해 적을 수 있어요 — 1: … 1a: … 2: …',
+    groupInside: (n: number) => `${n}개 포함`, tipExpand: '펼치기 / 접기',
     tipSelect: '요소 선택 모드 (Ctrl+Shift+F)', tipClose: '닫기 (Esc)', tipDrag: '툴바 이동',
     sends: '선택자 · 스타일 · 스크린샷 · 콘솔',
     tipSend: '선택한 요소와 메모를 에이전트에 전송',
@@ -171,7 +180,8 @@ const T = {
     regionIn: (s: string) => ` · in ${s}`,
     selNone: 'No element · note alone is fine',
     elMissing: 'missing', notePlaceholder: 'Describe the change…',
-    notePlaceholderMulti: 'Number them if they differ — 1: … 2: …',
+    notePlaceholderMulti: 'Number them if they differ — 1: … 1a: … 2: …',
+    groupInside: (n: number) => `${n} inside`, tipExpand: 'Expand / collapse',
     tipSelect: 'Pick mode (Ctrl+Shift+F)', tipClose: 'Close (Esc)', tipDrag: 'Move toolbar',
     sends: 'Sends selector · styles · shot · console',
     tipSend: 'Send the selected elements and note to the agent',
@@ -373,17 +383,35 @@ export function createUI(h: UIHandlers) {
       h4.append(close);
       panel.append(h4);
       const list = el('div', 'els');
-      cur.elements.forEach((e, i) => {
+      const topEls = cur.elements.filter((e) => !e.parent);
+      topEls.forEach((e, i) => {
+        const idx = cur.elements.indexOf(e);
+        const kids = cur.elements.filter((c) => c.parent === e.selector);
         const row = el('div', e.missing ? 'missing' : '');
-        row.append(el('span', 'num', `${i + 1}.`));
+        if (kids.length) { row.classList.add('group'); const chev = el('span', 'chev', vm.expanded === e.selector ? '▾' : '▸'); chev.title = T.tipExpand; row.append(chev); }
+        row.append(el('span', 'num', `${e.ref ?? i + 1}.`));
         const comp = (e.react ?? e.vue)?.component;
         row.append(el('span', 'label', `${e.selector.split(' > ').pop()}${comp ? ' · ' + comp : ''}${e.missing ? ' · ' + T.elMissing : ''}`));
+        if (kids.length) row.append(el('span', 'cnt', T.groupInside(kids.length)));
         row.append(el('span', 'kind', e.tag));
-        const x = el('button', '', '✕'); x.title = T.tipRemove; x.onclick = () => h.onRemoveElement(cur.id, i); row.append(x);
+        const x = el('button', '', '✕'); x.title = T.tipRemove; x.onclick = () => h.onRemoveElement(cur.id, idx); row.append(x);
+        if (kids.length) row.addEventListener('click', (ev) => { const t = ev.target as Element; if (t.closest('button') || t.closest('.num')) return; h.onToggleGroup(e.selector); });
         list.append(row);
+        if (kids.length && vm.expanded === e.selector) {
+          kids.forEach((c) => {
+            const cidx = cur.elements.indexOf(c);
+            const crow = el('div', 'child' + (c.missing ? ' missing' : ''));
+            crow.append(el('span', 'num', `${c.ref}.`));
+            const ccomp = (c.react ?? c.vue)?.component;
+            crow.append(el('span', 'label', `${c.selector.split(' > ').pop()}${ccomp ? ' · ' + ccomp : ''}${c.missing ? ' · ' + T.elMissing : ''}`));
+            crow.append(el('span', 'kind', c.tag));
+            const cx = el('button', '', '✕'); cx.title = T.tipRemove; cx.onclick = () => h.onRemoveElement(cur.id, cidx); crow.append(cx);
+            list.append(crow);
+          });
+        }
       });
       cur.regions?.forEach((r, i) => {
-        const n = cur.elements.length + i + 1;
+        const n = topEls.length + i + 1; // M1: 자식은 부모의 번호를 쓰므로 영역 번호는 최상위 요소 수 기준
         const row = el('div', '');
         row.append(el('span', 'num', `${n}.`));
         row.append(el('span', 'label', `${T.regionRow(r.rect.w, r.rect.h)}${r.within ? T.regionIn(r.within.split(' > ').pop()!) : ''}`));
@@ -416,23 +444,25 @@ export function createUI(h: UIHandlers) {
       root.querySelectorAll('.marker').forEach((m) => m.remove());
       const cur = vm.drafts.length ? vm.drafts[vm.drafts.length - 1] : null;
       if (!cur) return;
-      const place = (m: HTMLElement, left: number, top: number, width: number, height: number, n: number) => {
+      const place = (m: HTMLElement, left: number, top: number, width: number, height: number, n: number | string) => {
         Object.assign(m.style, { left: left + 'px', top: top + 'px', width: width + 'px', height: height + 'px' });
         if (left < 12) m.classList.add('inside-x');
         if (top < 12) m.classList.add('inside-y');
         m.append(el('span', 'n', String(n)));
         root.append(m);
       };
+      const topCount = cur.elements.filter((e) => !e.parent).length; // M1: 영역 번호는 최상위 요소 수 기준
       cur.elements.forEach((e, i) => {
         if (e.missing) return;
+        if (e.parent && vm.expanded !== e.parent) return; // R124: 자식 마커는 그 그룹이 펼쳐진 동안만
         let target: Element | null = null;
         try { target = document.querySelector(e.selector); } catch { /* 선택자 불량 */ }
         if (!target) return;
         const r = target.getBoundingClientRect();
-        place(el('div', 'marker'), r.left - 2, r.top - 2, r.width + 4, r.height + 4, i + 1);
+        place(el('div', e.parent ? 'marker child' : 'marker'), r.left - 2, r.top - 2, r.width + 4, r.height + 4, e.ref ?? i + 1);
       });
       cur.regions?.forEach((r, i) => {
-        place(el('div', 'marker region'), r.rect.x - scrollX, r.rect.y - scrollY, r.rect.w, r.rect.h, cur.elements.length + i + 1);
+        place(el('div', 'marker region'), r.rect.x - scrollX, r.rect.y - scrollY, r.rect.w, r.rect.h, topCount + i + 1);
       });
     });
   }
