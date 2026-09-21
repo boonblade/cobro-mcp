@@ -6,7 +6,7 @@ import { svg } from './icons.js';
 import { isChildRef } from './refs.js';
 type IconName = Parameters<typeof svg>[0];
 
-export interface ViewModel { selecting: boolean; connected: boolean; agent: { status: AgentStatus; text: string }; strategy: RefreshStrategy | null; drafts: Batch[]; locked: boolean; prefs: UiPrefs; expanded: string | null }
+export interface ViewModel { selecting: boolean; connected: boolean; agent: { status: AgentStatus; text: string }; strategy: RefreshStrategy | null; drafts: Batch[]; sent: Batch[]; locked: boolean; prefs: UiPrefs; expanded: string | null }
 export interface UIHandlers { onToggleSelect(): void; onNoteInput(id: string, note: string): void; onRemoveElement(id: string, index: number): void; onRemoveRegion(id: string, index: number): void; onSend(): void; onSettings(patch: { theme?: Theme }): void; onToggleGroup(ref: string): void }
 
 const CSS = `
@@ -64,6 +64,17 @@ const CSS = `
 .status-in.enter{animation:cobroin .15s ease-out}
 @keyframes cobroin{from{opacity:.4;transform:translateX(-6px)}to{opacity:1;transform:translateX(0)}}
 @media (prefers-reduced-motion: reduce){.status-in{transition:none}.status-in.enter{animation:none}}
+.wbox{position:fixed;border:1.5px solid var(--info);border-radius:2px;pointer-events:none;box-sizing:border-box;animation:cobrobreathe 2.4s ease-in-out infinite}
+.wbox.region{border-style:dashed;background:color-mix(in srgb, var(--info) 6%, transparent)}
+.wbox .clip{position:absolute;inset:0;overflow:hidden;border-radius:inherit}
+.wbox .sweep{position:absolute;top:0;bottom:0;left:0;width:55%;background:linear-gradient(90deg,transparent,color-mix(in srgb, var(--info) 55%, transparent),transparent);animation:cobrosweep 2.2s cubic-bezier(.4,0,.2,1) infinite}
+/* 배지 배경 토큰을 글자색으로 — --info 위 대비가 세 테마 모두 맞는다 */
+.wbox .n{position:absolute;left:-2px;top:-2px;transform:translate(-50%,-50%);min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--info);color:var(--badge-bg);font:700 11px/18px ui-monospace,Menlo,Consolas,monospace;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+@keyframes cobrosweep{0%{transform:translateX(-110%)}100%{transform:translateX(300%)}}
+@keyframes cobrobreathe{0%{box-shadow:0 0 0 1px color-mix(in srgb, var(--info) 12%, transparent),0 0 6px color-mix(in srgb, var(--info) 18%, transparent)}50%{box-shadow:0 0 0 3px color-mix(in srgb, var(--info) 16%, transparent),0 0 16px color-mix(in srgb, var(--info) 42%, transparent)}100%{box-shadow:0 0 0 1px color-mix(in srgb, var(--info) 12%, transparent),0 0 6px color-mix(in srgb, var(--info) 18%, transparent)}}
+.toolbar .line{position:absolute;left:20px;right:20px;bottom:0;height:2px;background:linear-gradient(90deg,transparent,var(--info) 30%,var(--accent) 50%,var(--info) 70%,transparent);background-size:200% 100%;background-position:100%;opacity:.9;animation:cobroflow 2.2s linear infinite;pointer-events:none}
+@keyframes cobroflow{from{background-position:100%}to{background-position:-100%}}
+@media (prefers-reduced-motion: reduce){.wbox{animation:none}.wbox .sweep{display:none}.toolbar .line{animation:none}}
 .panel{position:fixed;right:14px;bottom:60px;width:320px;background:var(--bg-2);border:1px solid var(--accent);border-radius:var(--radius);padding:16px 16px 14px;box-shadow:var(--shadow);pointer-events:auto;display:none}
 .panel.show{display:block}
 .panel h4{margin:0 0 12px;color:var(--fg);font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px;cursor:grab;user-select:none}
@@ -96,15 +107,15 @@ textarea{width:100%;min-height:80px;resize:none;font:inherit;color:var(--fg);bac
 .marker{position:fixed;border:2px solid var(--accent);border-radius:2px;pointer-events:none;box-sizing:border-box}
 .marker.region{border-style:dashed;background:color-mix(in srgb, var(--accent) 6%, transparent)}
 .marker .n{position:absolute;left:-2px;top:-2px;transform:translate(-50%,-50%);min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--accent);color:#fff;font:700 11px/18px ui-monospace,Menlo,Consolas,monospace;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.4)}
-.marker.inside-x .n{transform:translate(4px,-50%)}
-.marker.inside-y .n{transform:translate(-50%,4px)}
-.marker.inside-x.inside-y .n{transform:translate(4px,4px)}
+.marker.inside-x .n,.wbox.inside-x .n{transform:translate(4px,-50%)}
+.marker.inside-y .n,.wbox.inside-y .n{transform:translate(-50%,4px)}
+.marker.inside-x.inside-y .n,.wbox.inside-x.inside-y .n{transform:translate(4px,4px)}
 .marker.child .n{left:auto;right:-2px;transform:translate(50%,-50%)}
 .flash{position:fixed;border:2px solid var(--ok);border-radius:2px;pointer-events:none;animation:cobroflash 1.6s ease-out forwards}
 @keyframes cobroflash{0%{opacity:1}100%{opacity:0}}
 /* shadow root의 자식은 모두 position:fixed 형제 — picker가 glass를 toolbar/panel 뒤에 append하므로 쌓임 순서를 명시한다 */
 .glass{z-index:0}
-.hover-box,.hover-badge,.band,.flash,.marker{z-index:1}
+.hover-box,.hover-badge,.band,.flash,.marker,.wbox{z-index:1}
 .toolbar,.pop,.panel{z-index:2}
 .pop{position:fixed;bottom:56px;left:50%;transform:translateX(-50%);display:none;min-width:260px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;box-shadow:var(--shadow);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);pointer-events:auto;color:var(--fg-2)}
 .pop.show{display:block}
@@ -251,6 +262,9 @@ export function createUI(h: UIHandlers) {
   const gearBtn = gearParts.btn;
   const gripParts = iconBtn('drag', 'Move', T.tipDrag, 'grip', false); const grip = gripParts.btn; grip.setAttribute('aria-label', 'Move toolbar');
   toolbar.append(grip, selectBtn, chip, chip2, status, gearBtn);
+  // R131: 작업 중 흐름선 — el()이 아직 선언 전(TDZ)이라 여기서는 직접 createElement한다
+  const line = document.createElement('span'); line.className = 'line'; line.hidden = true;
+  toolbar.append(line);
   makeDraggable(toolbar, grip);
   const pop = document.createElement('div'); pop.className = 'pop';
   const popRow = document.createElement('div'); popRow.className = 'pop-row';
@@ -450,8 +464,7 @@ export function createUI(h: UIHandlers) {
     cancelAnimationFrame(markerFrame);
     markerFrame = requestAnimationFrame(() => {
       root.querySelectorAll('.marker').forEach((m) => m.remove());
-      const cur = vm.drafts.length ? vm.drafts[vm.drafts.length - 1] : null;
-      if (!cur) return;
+      root.querySelectorAll('.wbox').forEach((m) => m.remove());
       const place = (m: HTMLElement, left: number, top: number, width: number, height: number, n: number | string) => {
         Object.assign(m.style, { left: left + 'px', top: top + 'px', width: width + 'px', height: height + 'px' });
         if (left < 12) m.classList.add('inside-x');
@@ -459,20 +472,43 @@ export function createUI(h: UIHandlers) {
         m.append(el('span', 'n', String(n)));
         root.append(m);
       };
-      cur.elements.forEach((e) => {
-        if (e.missing) return;
-        const isChild = /[a-z]$/.test(e.ref ?? '');
-        const groupRef = isChild ? e.ref!.slice(0, -1) : null;
-        if (isChild && vm.expanded !== groupRef) return; // R128: 자식 마커는 그 그룹이 펼쳐진 동안만
-        let target: Element | null = null;
-        try { target = document.querySelector(e.selector); } catch { /* 선택자 불량 */ }
-        if (!target) return;
-        const r = target.getBoundingClientRect();
-        place(el('div', isChild ? 'marker child' : 'marker'), r.left - 2, r.top - 2, r.width + 4, r.height + 4, e.ref ?? '');
-      });
-      cur.regions?.forEach((r) => {
-        place(el('div', 'marker region'), r.rect.x - scrollX, r.rect.y - scrollY, r.rect.w, r.rect.h, r.ref ?? '');
-      });
+      const cur = vm.drafts.length ? vm.drafts[vm.drafts.length - 1] : null;
+      if (cur) {
+        cur.elements.forEach((e) => {
+          if (e.missing) return;
+          const isChild = /[a-z]$/.test(e.ref ?? '');
+          const groupRef = isChild ? e.ref!.slice(0, -1) : null;
+          if (isChild && vm.expanded !== groupRef) return; // R128: 자식 마커는 그 그룹이 펼쳐진 동안만
+          let target: Element | null = null;
+          try { target = document.querySelector(e.selector); } catch { /* 선택자 불량 */ }
+          if (!target) return;
+          const r = target.getBoundingClientRect();
+          place(el('div', isChild ? 'marker child' : 'marker'), r.left - 2, r.top - 2, r.width + 4, r.height + 4, e.ref ?? '');
+        });
+        cur.regions?.forEach((r) => {
+          place(el('div', 'marker region'), r.rect.x - scrollX, r.rect.y - scrollY, r.rect.w, r.rect.h, r.ref ?? '');
+        });
+      }
+      // R131: 작업 중 표시 — 서버가 sent로 든 배치의 요소·영역 위에 스캔 테두리
+      const working = vm.locked && vm.connected;
+      line.hidden = !working;
+      if (working) {
+        const wbox = (cls: string) => { const m = el('div', cls); const clip = el('div', 'clip'); clip.append(el('span', 'sweep')); m.append(clip); return m; };
+        for (const b of vm.sent) {
+          b.elements.forEach((e) => {
+            if (e.missing) return;
+            if (/[a-z]$/.test(e.ref ?? '')) return; // sent 배치에는 펼침 상태가 없다 — 접힌 상태와 동일, 자식은 그리지 않는다
+            let target: Element | null = null;
+            try { target = document.querySelector(e.selector); } catch { /* 선택자 불량 */ }
+            if (!target) return;
+            const r = target.getBoundingClientRect();
+            place(wbox('wbox'), r.left - 2, r.top - 2, r.width + 4, r.height + 4, e.ref ?? '');
+          });
+          b.regions?.forEach((r) => {
+            place(wbox('wbox region'), r.rect.x - scrollX, r.rect.y - scrollY, r.rect.w, r.rect.h, r.ref ?? '');
+          });
+        }
+      }
     });
   }
   function flash(selectors: string[]) {
