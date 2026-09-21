@@ -67,6 +67,13 @@ describe('mcp tools', () => {
       close: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     });
   });
+  it('tool descriptions are English', async () => {
+    const tools = (await client.listTools()).tools;
+    for (const t of tools) {
+      expect(t.description).not.toMatch(/[가-힣]/);
+      expect(JSON.stringify(t.inputSchema)).not.toMatch(/[가-힣]/);
+    }
+  });
   it('open returns title, strategy and restored batches; strategy arg fixes it', async () => {
     expect(await call('open', { url: 'http://a/', strategy: 'event' })).toEqual({ title: 'T', strategy: 'event', restoredBatches: 0, restarted: false });
     expect(core.session.strategy).toBe('event');

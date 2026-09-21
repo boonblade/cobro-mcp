@@ -6,6 +6,9 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Added
 - MCP tool annotations (readOnlyHint / destructiveHint / idempotentHint / openWorldHint) on all six tools, so clients can tell which calls are safe to run unattended: wait is read-only, close is destructive, done and screenshot are not idempotent, open reaches the network.
 
+### Changed
+- Tool descriptions and argument hints are now in English (they were Korean).
+
 ## [0.9.1] — 2026-09-21
 ### Added
 - Working indicator: while the agent is editing (from Send until done), the elements and regions you sent get a blue scanning outline and the toolbar shows a flowing line; respects prefers-reduced-motion.
