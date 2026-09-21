@@ -40,6 +40,7 @@ declare const __COBRO_TOKEN__: string;
     const vm = () => ({
       selecting: picker.isActive(), connected, agent: session?.agent ?? { status: 'idle' as const, text: '' },
       strategy: session ? session.strategy ?? session.detected : null, drafts: drafts ?? [],
+      sent: session?.batches.filter((b) => b.status === 'sent') ?? [],
       locked: session?.agent.status === 'sent' || session?.agent.status === 'working',
       prefs, expanded: expandedGroup,
     });

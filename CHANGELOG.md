@@ -3,6 +3,8 @@
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
+### Added
+- Working indicator: while the agent is editing (from Send until done), the elements and regions you sent get a blue scanning outline and the toolbar shows a flowing line; respects prefers-reduced-motion.
 
 ## [0.9.0] — 2026-09-21
 ### Added

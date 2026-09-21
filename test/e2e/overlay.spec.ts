@@ -1007,6 +1007,80 @@ test('T10: redragging a band whose hits already belong to the draft changes noth
   await expect(groups.nth(1).locator('.num')).toHaveText('2.');
 });
 
+test.describe('R131 working indicator', () => {
+  test.use({ envTheme: 'dark' });
+
+  test('working boxes appear on Send and clear on done (R131)', async ({ cobroPage: page, bridge }) => {
+    bridge.core.setStrategy('none');
+    await page.goto('http://127.0.0.1:4173/basic.html');
+    await selectAt(page, '#target');
+    await page.locator(`${HOST} textarea`).fill('메모');
+    const waiting = bridge.core.wait(10_000);
+    await page.locator(`${HOST} button.send`).click();
+    const r = await waiting;
+    expect(r.status).toBe('sent');
+
+    await expect(page.locator(`${HOST} .wbox`)).toHaveCount(1);
+    const targetBox = (await page.locator('#target').boundingBox())!;
+    const wboxBox = (await page.locator(`${HOST} .wbox`).boundingBox())!;
+    expect(Math.abs(wboxBox.x - targetBox.x)).toBeLessThanOrEqual(3);
+    expect(Math.abs(wboxBox.y - targetBox.y)).toBeLessThanOrEqual(3);
+    expect(Math.abs(wboxBox.width - targetBox.width)).toBeLessThanOrEqual(5);
+    expect(Math.abs(wboxBox.height - targetBox.height)).toBeLessThanOrEqual(5);
+    await expect(page.locator(`${HOST} .wbox .n`)).toHaveText('1');
+    await expect(page.locator(`${HOST} .toolbar .line`)).toBeVisible();
+    await page.screenshot({ path: 'screenshots/working-dark.png' });
+
+    bridge.core.setAgentText('Editing: x');
+    await expect(page.locator(`${HOST} .wbox`)).toHaveCount(1);
+
+    bridge.done({ summary: 'ok', selectors: ['#target'], changedFiles: [] });
+    await expect(page.locator(`${HOST} .wbox`)).toHaveCount(0);
+    await expect(page.locator(`${HOST} .toolbar .line`)).toBeHidden();
+    await expect(page.locator(`${HOST} .flash`)).toHaveCount(1);
+  });
+});
+
+test('note-only Send shows only the toolbar line (R131)', async ({ cobroPage: page, bridge }) => {
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await page.keyboard.press('Control+Shift+F');
+  await expect(page.locator(`${HOST} .panel`)).toHaveClass(/show/);
+  await expect(page.locator(`${HOST} textarea`)).toBeVisible();
+  await page.keyboard.type('메모만 보냅니다');
+  await expect(page.locator(`${HOST} .status`)).toContainText('Send로 전송하세요');
+  const waiting = bridge.core.wait(10_000);
+  await page.locator(`${HOST} button.send`).click();
+  const r = await waiting;
+  expect(r.status).toBe('sent');
+
+  await expect(page.locator(`${HOST} .wbox`)).toHaveCount(0);
+  await expect(page.locator(`${HOST} .toolbar .line`)).toBeVisible();
+
+  bridge.done({ summary: 'ok', selectors: [], changedFiles: [] });
+  await expect(page.locator(`${HOST} .toolbar .line`)).toBeHidden();
+});
+
+test('working effect is static under prefers-reduced-motion (R131)', async ({ cobroPage: page, bridge }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  bridge.core.setStrategy('none');
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await selectAt(page, '#target');
+  await page.locator(`${HOST} textarea`).fill('메모');
+  const waiting = bridge.core.wait(10_000);
+  await page.locator(`${HOST} button.send`).click();
+  const r = await waiting;
+  expect(r.status).toBe('sent');
+
+  await expect(page.locator(`${HOST} .wbox`)).toHaveCount(1);
+  const wboxAnim = await page.locator(`${HOST} .wbox`).evaluate((el) => getComputedStyle(el).animationName);
+  expect(wboxAnim).toBe('none');
+  const sweepDisplay = await page.locator(`${HOST} .wbox .sweep`).evaluate((el) => getComputedStyle(el).display);
+  expect(sweepDisplay).toBe('none');
+  const lineAnim = await page.locator(`${HOST} .toolbar .line`).evaluate((el) => getComputedStyle(el).animationName);
+  expect(lineAnim).toBe('none');
+  await expect(page.locator(`${HOST} .wbox`)).toHaveCount(1);
+});
+
 async function focusedTag(page: Page): Promise<string | undefined> {
   return page.evaluate((host) => {
     const h = document.querySelector(host);
