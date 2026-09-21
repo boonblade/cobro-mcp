@@ -32,7 +32,8 @@ export function createPicker(opts: { root: ShadowRoot; host: HTMLElement; onPick
     for (const el of document.body.querySelectorAll('*')) {
       if (!notOurs(el)) continue;
       const r = el.getBoundingClientRect();
-      if (r.width && r.height && r.left >= b.left && r.right <= b.right && r.top >= b.top && r.bottom <= b.bottom) within.add(el);
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      if (r.width && r.height && cx >= b.left && cx <= b.right && cy >= b.top && cy <= b.bottom) within.add(el);
     }
     return [...within].filter((el) => !(el.parentElement && within.has(el.parentElement)));
   };

@@ -41,9 +41,9 @@ test('light theme hover text stays readable against the light hover background (
   await page.locator(`${HOST} .seg button[data-theme="light"]`).click();
   await expect(page.locator(HOST)).toHaveAttribute('data-theme', 'light');
   await page.keyboard.press('Escape');
-  const collapseBtn = page.locator(`${HOST} .ib.collapse`);
-  await collapseBtn.hover();
-  await expect(collapseBtn).toHaveCSS('color', 'rgb(23, 27, 40)');
+  const gearBtn = page.locator(`${HOST} .ib.gear`);
+  await gearBtn.hover();
+  await expect(gearBtn).toHaveCSS('color', 'rgb(23, 27, 40)');
 });
 
 test('auto follows prefers-color-scheme', async ({ cobroPage: page }) => {
