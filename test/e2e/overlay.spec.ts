@@ -151,12 +151,29 @@ test.describe('en locale', () => {
   });
 });
 
+test('toolbar width does not change between hints', async ({ cobroPage: page }) => {
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  const toolbar = page.locator(`${HOST} .toolbar`);
+  await expect(page.locator(`${HOST} .status`)).toContainText('Ctrl+Shift+F'); // 연결 완료 후 폭이 안정된 뒤 측정
+  await expect(page.locator(`${HOST} .chip.strategy`)).toBeVisible(); // 전략 칩도 뜬 뒤라야 폭이 안정된다
+  await expect(page.locator(`${HOST} .status-in`)).not.toHaveClass(/marquee/); // 짧은 힌트는 marquee 없음
+  const before = (await toolbar.boundingBox())!;
+  await selectAt(page, '#target');
+  await expect(page.locator(`${HOST} .status`)).toContainText('요소 1개 선택');
+  const afterSelect = (await toolbar.boundingBox())!;
+  expect(Math.abs(afterSelect.width - before.width)).toBeLessThanOrEqual(1);
+  await page.keyboard.press('Escape');
+  await expect(page.locator(`${HOST} .status`)).toContainText('메모를 적고 Send');
+  const afterEsc = (await toolbar.boundingBox())!;
+  expect(Math.abs(afterEsc.width - before.width)).toBeLessThanOrEqual(1);
+});
+
 test('status scrolls on hover only when it overflows', async ({ cobroPage: page, bridge }) => {
   await page.goto('http://127.0.0.1:4173/basic.html');
   await page.locator(`${HOST} .status`).hover();
   await expect(page.locator(`${HOST} .status-in`)).not.toHaveClass(/scroll/);
   bridge.core.setAgentText('x'.repeat(200));
-  await expect.poll(() => page.locator(`${HOST} .status`).textContent()).toContain('x'.repeat(200));
+  await expect.poll(() => page.locator(`${HOST} .status`).textContent()).toContain('x'.repeat(160)); // 표시는 160자로 절단(R117)
   await page.locator(`${HOST} .status`).hover();
   const inner = page.locator(`${HOST} .status-in`);
   await expect(inner).toHaveClass(/scroll/);
@@ -169,7 +186,7 @@ test('scroll state clears when the hint shortens while still hovering', async ({
   bridge.core.setStrategy('none'); // done이 페이지를 reload하면 아래 evaluate가 실행 컨텍스트 파괴와 경합한다
   await page.goto('http://127.0.0.1:4173/basic.html');
   bridge.core.setAgentText('x'.repeat(200));
-  await expect.poll(() => page.locator(`${HOST} .status`).textContent()).toContain('x'.repeat(200));
+  await expect.poll(() => page.locator(`${HOST} .status`).textContent()).toContain('x'.repeat(160)); // 표시는 160자로 절단(R117)
   await page.locator(`${HOST} .status`).hover();
   const inner = page.locator(`${HOST} .status-in`);
   await expect(inner).toHaveClass(/scroll/);
@@ -183,7 +200,7 @@ test('scroll state clears when the hint shortens while still hovering', async ({
 test('re-hovering within 200ms keeps the scroll state applied', async ({ cobroPage: page, bridge }) => {
   await page.goto('http://127.0.0.1:4173/basic.html');
   bridge.core.setAgentText('x'.repeat(200));
-  await expect.poll(() => page.locator(`${HOST} .status`).textContent()).toContain('x'.repeat(200));
+  await expect.poll(() => page.locator(`${HOST} .status`).textContent()).toContain('x'.repeat(160)); // 표시는 160자로 절단(R117)
   const inner = page.locator(`${HOST} .status-in`);
   const box = (await page.locator(`${HOST} .status`).boundingBox())!;
   const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
@@ -194,6 +211,16 @@ test('re-hovering within 200ms keeps the scroll state applied', async ({ cobroPa
   await page.mouse.move(cx, cy);
   await page.waitForTimeout(300);
   await expect(inner).toHaveClass(/scroll/);
+});
+
+test('long status text is truncated to 160 chars, full text kept in the title', async ({ cobroPage: page, bridge }) => {
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  const longText = 'x'.repeat(300);
+  bridge.core.setAgentText(longText);
+  const inner = page.locator(`${HOST} .status-in`);
+  await expect.poll(() => inner.evaluate((el) => el.textContent?.length)).toBe(161);
+  await expect(inner).toHaveText(/…$/);
+  expect(await inner.getAttribute('title')).toBe(longText);
 });
 
 test('panel has no batch tabs, Add batch, or history (R64)', async ({ cobroPage: page, bridge }) => {

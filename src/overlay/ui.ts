@@ -56,7 +56,7 @@ const CSS = `
 .dot.sent{color:var(--warn)}
 .dot.working{color:var(--info)}
 .dot.done{color:var(--ok)}
-.status{max-width:440px;overflow:hidden;color:var(--fg-4)}
+.status{width:320px;flex:none;overflow:hidden;color:var(--fg-4)}
 .status.off{color:var(--warn)}
 .status-in{display:inline-block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;transition:transform .2s ease-out}
 .status-in.scroll{max-width:none;overflow:visible;text-overflow:clip}
@@ -345,6 +345,7 @@ export function createUI(h: UIHandlers) {
       else text = T.hintPick;
       hint = text;
     }
+    const displayHint = hint.length > 160 ? hint.slice(0, 160) + '…' : hint; // 표시만 절단, title은 전문(R117)
     if (hint !== lastHint) {
       lastHint = hint;
       if (!statusIn.classList.contains('scroll')) {
@@ -353,7 +354,7 @@ export function createUI(h: UIHandlers) {
         statusIn.classList.add('enter');
       }
     }
-    statusIn.textContent = hint;
+    statusIn.textContent = displayHint;
     statusIn.title = hint;
     if (hovering) { applyHoverScroll(); if (statusIn.classList.contains('scroll')) statusIn.classList.remove('enter'); }
     status.classList.toggle('off', !vm.connected);
