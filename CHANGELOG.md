@@ -4,6 +4,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 ### Added
+- Drag groups: dragging over a container picks it as a group; expand the row to see and remove the elements inside (numbered 1a, 1b…), which the agent receives with `ref` and `parent`.
 - Narrow viewports: below 760px the strategy chip hides and the status line shrinks; below 520px the toolbar becomes a full-width bar with the status on its own line, and the panel and settings popover fill the width.
 
 ### Changed

@@ -13,6 +13,7 @@ export interface ElementInfo {
   react?: ComponentInfo;
   vue?: ComponentInfo;
   missing?: boolean; // 재주입 후 선택자로 못 찾음
+  ref?: string; parent?: string; // R123: 그룹이 있을 때만. parent는 자식에만
 }
 export interface RegionInfo { rect: Rect; within?: string }
 export interface Batch {

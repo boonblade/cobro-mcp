@@ -54,6 +54,21 @@ describe('buildPayload', () => {
     expect(p.batches[0]!.elements[1]).toBe(noFrame);
   });
 
+  it('T1: passes ref/parent through untouched, and omits the keys when absent (R123)', () => {
+    const withGroup = { selector: '#a', tag: 'section', classes: [], text: '', rect: { x: 0, y: 0, w: 0, h: 0 }, styles: {}, ref: '1' };
+    const child = { selector: '#ba', tag: 'button', classes: [], text: '', rect: { x: 0, y: 0, w: 0, h: 0 }, styles: {}, ref: '1a', parent: '#a' };
+    const plain = { selector: '#c', tag: 'div', classes: [], text: '', rect: { x: 0, y: 0, w: 0, h: 0 }, styles: {} };
+    const p = buildPayload({
+      page, refreshStrategy: 'none', console: [], now: new Date('2026-09-08T00:00:00Z'),
+      batches: [{ id: 'b', note: 'n', status: 'sent', createdAt: 't', elements: [withGroup, child, plain] }],
+    });
+    expect(p.batches[0]!.elements[0]).toMatchObject({ selector: '#a', ref: '1' });
+    expect(p.batches[0]!.elements[1]).toMatchObject({ selector: '#ba', ref: '1a', parent: '#a' });
+    expect('ref' in p.batches[0]!.elements[2]!).toBe(false);
+    expect('parent' in p.batches[0]!.elements[2]!).toBe(false);
+    expect('parent' in p.batches[0]!.elements[0]!).toBe(false);
+  });
+
   it('strips vue.frame too (same contract as react)', () => {
     const withFrame = { selector: '#a', tag: 'button', classes: [], text: '', rect: { x: 0, y: 0, w: 0, h: 0 }, styles: {}, vue: { component: 'Cta', source: 'src/Cta.vue', frame: { url: 'http://x/a.js', line: 1, col: 2 } } };
     const p = buildPayload({

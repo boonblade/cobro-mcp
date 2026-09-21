@@ -9,6 +9,15 @@ async function pickAt(page: Page, selector: string) {
   await page.mouse.click(b.x + 3, b.y + 3);
 }
 
+// R122: 자식까지 잡으려면 컨테이너 중심과 자식 중심이 둘 다 밴드 안에 들어야 한다 — 상자 전체를 덮는다
+async function dragBand(page: Page, box: { x: number; y: number; width: number; height: number }) {
+  await page.mouse.move(box.x, box.y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5, { steps: 5 });
+  await page.mouse.move(box.x + box.width, box.y + box.height, { steps: 5 });
+  await page.mouse.up();
+}
+
 test('select → note → Send arrives in core.wait with selector, then done flashes and dispatches event', async ({ cobroPage: page, bridge }) => {
   bridge.core.setStrategy('none'); // done이 페이지를 reload하면 __doneEvents가 사라진다
   await page.goto('http://127.0.0.1:4173/basic.html');
@@ -434,7 +443,7 @@ test('placeholder switches to numbering hint with 2+ elements', async ({ cobroPa
   await selectAt(page, '#target');
   await expect(page.locator(`${HOST} textarea`)).toHaveAttribute('placeholder', '수정 요청 메모…');
   await pickAt(page, '#title');
-  await expect(page.locator(`${HOST} textarea`)).toHaveAttribute('placeholder', '번호로 구분해 적을 수 있어요 — 1: … 2: …');
+  await expect(page.locator(`${HOST} textarea`)).toHaveAttribute('placeholder', '번호로 구분해 적을 수 있어요 — 1: … 1a: … 2: …');
 });
 
 test.describe('region with screenshot capture', () => {
@@ -709,6 +718,114 @@ test('footer sits 8px under the textarea', async ({ cobroPage: page }) => {
   const row = (await page.locator(`${HOST} .panel .row`).boundingBox())!;
   expect(row.y - (textarea.y + textarea.height)).toBeGreaterThanOrEqual(7);
   expect(row.y - (textarea.y + textarea.height)).toBeLessThanOrEqual(9);
+});
+
+test('T2: drag over a container groups it — collapsed by default, expand shows the child row and its marker (R122~R124)', async ({ cobroPage: page }) => {
+  await page.goto('http://127.0.0.1:4173/region.html');
+  await page.keyboard.press('Control+Shift+F');
+  const a = (await page.locator('#a').boundingBox())!;
+  await dragBand(page, a);
+  const group = page.locator(`${HOST} .els > div.group`);
+  await expect(group).toHaveCount(1);
+  await expect(group).toContainText('#a');
+  await expect(page.locator(`${HOST} .els .child`)).toHaveCount(0); // 초기 접힘
+  await expect(page.locator(`${HOST} .marker.child`)).toHaveCount(0);
+  await group.click();
+  await expect(page.locator(`${HOST} .els .child`)).toHaveCount(1);
+  await expect(page.locator(`${HOST} .els .child`)).toContainText('#ba');
+  await expect(page.locator(`${HOST} .marker.child`)).toHaveCount(1);
+  await group.click();
+  await expect(page.locator(`${HOST} .els .child`)).toHaveCount(0);
+  await expect(page.locator(`${HOST} .marker.child`)).toHaveCount(0);
+});
+
+test('T3: expanding a second group collapses the first (R124 accordion)', async ({ cobroPage: page }) => {
+  await page.goto('http://127.0.0.1:4173/region.html');
+  await page.keyboard.press('Control+Shift+F');
+  const a = (await page.locator('#a').boundingBox())!;
+  await dragBand(page, a);
+  const b = (await page.locator('#b').boundingBox())!;
+  await dragBand(page, b);
+  const groups = page.locator(`${HOST} .els > div.group`);
+  await expect(groups).toHaveCount(2);
+  await groups.nth(0).click();
+  await expect(page.locator(`${HOST} .els .child`)).toHaveCount(1);
+  await expect(page.locator(`${HOST} .els .child`)).toContainText('#ba');
+  await groups.nth(1).click();
+  await expect(page.locator(`${HOST} .els .child`)).toHaveCount(1);
+  await expect(page.locator(`${HOST} .els .child`)).toContainText('#bb');
+});
+
+test('T4: Send carries ref/parent for a group, and removing the only child clears refs entirely (R123)', async ({ cobroPage: page, bridge }) => {
+  bridge.core.setStrategy('none');
+  await page.goto('http://127.0.0.1:4173/region.html');
+  await page.keyboard.press('Control+Shift+F');
+  const a = (await page.locator('#a').boundingBox())!;
+  await dragBand(page, a);
+  await page.locator(`${HOST} textarea`).fill('1: 여백  1a: 색상');
+  const waiting1 = bridge.core.wait(10_000);
+  await page.locator(`${HOST} button.send`).click();
+  const r1 = await waiting1;
+  expect(r1.status).toBe('sent');
+  if (r1.status === 'sent') {
+    expect(r1.payload.batches[0]!.elements).toMatchObject([
+      { selector: '#a', ref: '1' },
+      { selector: '#ba', ref: '1a', parent: '#a' },
+    ]);
+  }
+  bridge.done({ summary: 'ok', selectors: [], changedFiles: [] });
+
+  await page.keyboard.press('Control+Shift+F');
+  await dragBand(page, a);
+  await page.locator(`${HOST} .els > div.group`).click();
+  await page.locator(`${HOST} .els .child button`).click(); // 자식만 제거
+  await expect(page.locator(`${HOST} .els > div`)).toHaveCount(1);
+  await page.locator(`${HOST} textarea`).fill('메모');
+  const waiting2 = bridge.core.wait(10_000);
+  await page.locator(`${HOST} button.send`).click();
+  const r2 = await waiting2;
+  expect(r2.status).toBe('sent');
+  if (r2.status === 'sent') {
+    expect(r2.payload.batches[0]!.elements).toHaveLength(1);
+    expect(r2.payload.batches[0]!.elements[0]!.selector).toBe('#a');
+    expect('ref' in r2.payload.batches[0]!.elements[0]!).toBe(false);
+  }
+});
+
+test('T5: click-selecting a container is not a group — no chevron/cnt/ref (R122)', async ({ cobroPage: page, bridge }) => {
+  await page.goto('http://127.0.0.1:4173/region.html');
+  await selectAt(page, '#a');
+  await expect(page.locator(`${HOST} .els > div`)).toHaveCount(1);
+  await expect(page.locator(`${HOST} .els .chev`)).toHaveCount(0);
+  await expect(page.locator(`${HOST} .els .cnt`)).toHaveCount(0);
+  await page.locator(`${HOST} textarea`).fill('x');
+  const waiting = bridge.core.wait(10_000);
+  await page.locator(`${HOST} button.send`).click();
+  const r = await waiting;
+  expect(r.status).toBe('sent');
+  if (r.status === 'sent') expect('ref' in r.payload.batches[0]!.elements[0]!).toBe(false);
+});
+
+test('T6: toggling a group parent off the page drops its children too (I1)', async ({ cobroPage: page, bridge }) => {
+  bridge.core.setStrategy('none');
+  await page.goto('http://127.0.0.1:4173/region.html');
+  await page.keyboard.press('Control+Shift+F');
+  const a = (await page.locator('#a').boundingBox())!;
+  await dragBand(page, a);
+  await expect(page.locator(`${HOST} .els > div.group`)).toHaveCount(1);
+  await expect(page.locator(`${HOST} .els .child`)).toHaveCount(0); // 접힘 기본 — #ba는 목록에 안 보임
+  // #a 여백(버튼 밖) 클릭 — 클릭 선택은 낱개 토글이라 이미 고른 #a를 다시 찍으면 빠진다
+  const cx = a.x + a.width - 10, cy = a.y + a.height - 10;
+  await page.mouse.move(cx, cy);
+  await page.mouse.click(cx, cy);
+  await expect(page.locator(`${HOST} .els > div`)).toHaveCount(0);
+  await expect(page.locator(`${HOST} .panel h4`)).toContainText('요소 없음');
+  await page.locator(`${HOST} textarea`).fill('메모만');
+  const waiting = bridge.core.wait(10_000);
+  await page.locator(`${HOST} button.send`).click();
+  const r = await waiting;
+  expect(r.status).toBe('sent');
+  if (r.status === 'sent') expect(r.payload.batches[0]!.elements.length).toBe(0);
 });
 
 async function focusedTag(page: Page): Promise<string | undefined> {
