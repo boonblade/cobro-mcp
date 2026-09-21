@@ -77,7 +77,7 @@ test('overlay stays above max z-index header and survives a later native dialog'
 
 test('works on a strict-CSP page (bypassCSP context)', async ({ cobroPage: page, bridge }) => {
   await page.goto('http://127.0.0.1:4173/csp.html');
-  await expect(page.locator(`${HOST} .status`)).toContainText('요소 선택');
+  await expect(page.locator(`${HOST} .status`)).toContainText('요소를 고르세요');
   await expect.poll(() => bridge.channel.clientCount()).toBe(1);
 });
 
@@ -89,6 +89,9 @@ test('drafts survive reload and missing elements are marked', async ({ cobroPage
   // reload는 고정 페이지 HTML을 그대로 다시 준다 → 재주입 후에도 요소가 없으려면 로드 시점에 지워야 한다
   await page.addInitScript(() => { document.addEventListener('DOMContentLoaded', () => document.getElementById('target')?.remove()); });
   await page.reload();
+  // 힌트는 선택 모드와 무관하게 note가 있으면 'Send로 전송하세요' — state로 초안이 복구됐다는 신호
+  await expect(page.locator(`${HOST} .status`)).toContainText('Send로 전송하세요');
+  await page.keyboard.press('Control+Shift+F'); // 재주입 뒤 선택 모드는 꺼진 채 시작 — 패널을 다시 열어 초안을 확인
   await expect(page.locator(`${HOST} textarea`)).toHaveValue('임시');
   await expect(page.locator(`${HOST} .els .missing`)).toContainText('요소 없음');
 });
@@ -104,25 +107,33 @@ test('reload strategy reloads the page on done', async ({ cobroPage: page, bridg
   await expect.poll(() => page.evaluate(() => performance.getEntriesByType('navigation').length > 0 && (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming).type)).toBe('reload');
 });
 
-test('drag-select picks only the top-most fully contained element', async ({ cobroPage: page }) => {
+test('T1: drag-select picks the element whose center is inside the band, or a region if none is (R120)', async ({ cobroPage: page }) => {
   await page.goto('http://127.0.0.1:4173/basic.html');
   await expect(page.locator(`${HOST} .toolbar`)).toBeVisible();
   await page.keyboard.press('Control+Shift+F');
   const b = (await page.locator('#card').boundingBox())!;
-  const pad = 4; // #card를 완전히 감싸도록 바깥으로 조금 더
-  await page.mouse.move(b.x - pad, b.y - pad);
+  // #card의 60%(좌상단)만 덮어도 #card 중심은 안에 있다 → 자식 p.desc·#target은 제외되고 #card만
+  await page.mouse.move(b.x, b.y);
   await page.mouse.down();
-  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 5 });
-  await page.mouse.move(b.x + b.width + pad, b.y + b.height + pad, { steps: 5 });
+  await page.mouse.move(b.x + b.width * 0.3, b.y + b.height * 0.3, { steps: 5 });
+  await page.mouse.move(b.x + b.width * 0.6, b.y + b.height * 0.6, { steps: 5 });
   await page.mouse.up();
-  // 밴드에 완전히 들어온 것 중 최상위만 — 자식 p.desc·#target은 제외된다
   await expect(page.locator(`${HOST} .els div`)).toHaveCount(1);
   await expect(page.locator(`${HOST} .els`)).toContainText('#card');
+  await page.locator(`${HOST} .els div button`).click(); // 지우고 다시(선택 모드는 그대로 켜져 있다)
+  // #card 왼쪽 위 모서리를 10px만 스치는 밴드 — 어떤 요소의 중심도 안에 없다
+  await page.mouse.move(b.x - 8, b.y - 8);
+  await page.mouse.down();
+  await page.mouse.move(b.x - 4, b.y - 4, { steps: 5 });
+  await page.mouse.move(b.x + 2, b.y + 2, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.locator(`${HOST} .els div`)).toHaveCount(1);
+  await expect(page.locator(`${HOST} .els`)).toContainText('▭');
 });
 
 test('toolbar hint guides the next action', async ({ cobroPage: page }) => {
   await page.goto('http://127.0.0.1:4173/basic.html');
-  await expect(page.locator(`${HOST} .status`)).toContainText('요소 선택');
+  await expect(page.locator(`${HOST} .status`)).toContainText('요소를 고르세요');
   await page.locator(`${HOST} button`, { hasText: 'Select' }).click();
   await expect(page.locator(`${HOST} .status`)).toContainText('페이지에서 요소를 클릭하세요');
   const b = (await page.locator('#target').boundingBox())!;
@@ -131,6 +142,7 @@ test('toolbar hint guides the next action', async ({ cobroPage: page }) => {
   await expect(page.locator(`${HOST} .status`)).toContainText('요소 1개 선택');
   await page.keyboard.press('Escape');
   await expect(page.locator(`${HOST} .status`)).toContainText('메모를 적고 Send');
+  await page.locator(`${HOST} button.select`).click(); // 패널을 다시 열어야 메모를 칠 수 있다(R121)
   await page.keyboard.type('x');
   await expect(page.locator(`${HOST} .status`)).toContainText('Send로 전송하세요');
 });
@@ -139,7 +151,7 @@ test.describe('en locale', () => {
   test.use({ locale: 'en-US' });
   test('shows English hints and labels', async ({ cobroPage: page, bridge }) => {
     await page.goto('http://127.0.0.1:4173/basic.html');
-    await expect(page.locator(`${HOST} .status`)).toContainText('Ctrl+Shift+F pick');
+    await expect(page.locator(`${HOST} .status`)).toContainText('pick an element');
     const waiting = bridge.core.wait(10_000);
     void waiting; // 이 테스트는 응답을 기다리지 않는다 — 칩 라벨만 확인
     await expect(page.locator(`${HOST} .chip:not(.strategy)`)).toContainText('Waiting');
@@ -448,7 +460,10 @@ test.describe('region with screenshot capture', () => {
     await expect(page.locator(`${HOST} .marker .n`)).toHaveText('1');
     // I1: a region-only draft still guides to note → Send (hasElements counts regions too)
     await page.keyboard.press('Escape');
+    await expect(page.locator(`${HOST} .panel`)).not.toHaveClass(/show/);
     await expect(page.locator(`${HOST} .status`)).toContainText('메모를 적고 Send를 누르세요');
+    await expect(page.locator(`${HOST} .marker.region`)).toHaveCount(1); // 패널이 닫혀도 마커는 유지(R121)
+    await page.keyboard.press('Control+Shift+F');
     await page.locator(`${HOST} textarea`).fill('여백 줄여줘');
     await expect(page.locator(`${HOST} .status`)).toContainText('Send로 전송하세요');
     const waiting = bridge.core.wait(10_000);
@@ -530,14 +545,90 @@ test('region marker numbers continue after elements', async ({ cobroPage: page }
   await expect(page.locator(`${HOST} .marker`).nth(1)).toHaveClass(/region/);
 });
 
-test('header ✕ collapses the panel and keeps the selection', async ({ cobroPage: page }) => {
+test('T2: Select opens the panel, Esc closes it but keeps the marker, Select reopens with the same list (R121)', async ({ cobroPage: page }) => {
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await expect(page.locator(`${HOST} .panel`)).not.toHaveClass(/show/);
+  await page.keyboard.press('Control+Shift+F');
+  await expect(page.locator(`${HOST} .panel`)).toHaveClass(/show/);
+  await expect(page.locator(`${HOST} textarea`)).toBeVisible(); // 첫 state 수신 전이면 초안 생성이 미뤄진다(I1) — textarea 등장을 기다린다
+  expect(await focusedTag(page)).toBe('TEXTAREA');
+  await expect(page.locator(`${HOST} .els div`)).toHaveCount(0);
+  const b = (await page.locator('#target').boundingBox())!;
+  await page.mouse.move(b.x + 3, b.y + 3);
+  await page.mouse.click(b.x + 3, b.y + 3);
+  await expect(page.locator(`${HOST} .els div`)).toHaveCount(1);
+  await page.keyboard.press('Escape');
+  await expect(page.locator(`${HOST} .panel`)).not.toHaveClass(/show/);
+  await expect(page.locator(`${HOST} button.select`)).not.toHaveClass(/on/);
+  await expect(page.locator(`${HOST} .marker`)).toHaveCount(1);
+  await page.locator(`${HOST} button.select`).click();
+  await expect(page.locator(`${HOST} .panel`)).toHaveClass(/show/);
+  await expect(page.locator(`${HOST} .els div`)).toHaveCount(1);
+});
+
+test('T4: reload then immediate Select+typing does not lose the server-restored draft (I1)', async ({ cobroPage: page, bridge }) => {
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await selectAt(page, '#target');
+  await page.keyboard.type('keep me');
+  await page.waitForTimeout(600); // 디바운스된 draft가 서버에 저장될 시간
+  await page.reload();
+  await page.keyboard.press('Control+Shift+F'); // 대기 없이 즉시 — state 도착 전 레이스를 노린다
+  await page.keyboard.type(' more');
+  await page.waitForTimeout(800);
+  await expect(page.locator(`${HOST} .els`)).toContainText('#target');
+  await expect(page.locator(`${HOST} textarea`)).toHaveValue(/keep me/);
+  const serverBatch = bridge.core.session.batches.find((b) => b.status === 'draft');
+  expect(serverBatch?.elements.some((e) => e.selector === '#target')).toBe(true);
+});
+
+test('T3a: header ✕ closes the panel and turns off select mode, keeping the marker (R121)', async ({ cobroPage: page }) => {
   await page.goto('http://127.0.0.1:4173/basic.html');
   await selectAt(page, '#target');
   await page.locator(`${HOST} .panel h4 .close`).click();
   await expect(page.locator(`${HOST} .panel`)).not.toHaveClass(/show/);
-  await page.locator(`${HOST} button.collapse`).click();
+  await expect(page.locator(`${HOST} button.select`)).not.toHaveClass(/on/);
+  await expect(page.locator(`${HOST} .marker`)).toHaveCount(1);
+});
+
+test('T3b: a note-only Send delivers an empty elements list and closes the panel (R121)', async ({ cobroPage: page, bridge }) => {
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await page.keyboard.press('Control+Shift+F');
   await expect(page.locator(`${HOST} .panel`)).toHaveClass(/show/);
-  await expect(page.locator(`${HOST} .els`)).toContainText('#target');
+  await expect(page.locator(`${HOST} textarea`)).toBeVisible(); // 첫 state 수신 전이면 초안 생성이 미뤄진다(I1) — 포커스 갈 곳이 생길 때까지 대기
+  await page.keyboard.type('메모만 보냅니다');
+  await expect(page.locator(`${HOST} .status`)).toContainText('Send로 전송하세요');
+  const waiting = bridge.core.wait(10_000);
+  await page.locator(`${HOST} button.send`).click();
+  const r = await waiting;
+  expect(r.status).toBe('sent');
+  if (r.status === 'sent') {
+    expect(r.payload.batches[0]!.elements.length).toBe(0);
+    expect(r.payload.batches[0]).not.toHaveProperty('regions');
+    expect(r.payload.batches[0]!.note).toBe('메모만 보냅니다');
+  }
+  await expect(page.locator(`${HOST} .panel`)).not.toHaveClass(/show/);
+  await expect(page.locator(`${HOST} button.select`)).not.toHaveClass(/on/);
+});
+
+test('M1: panel keeps its dragged position across header ✕ close and Select reopen', async ({ cobroPage: page }) => {
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await selectAt(page, '#target');
+  await expect(page.locator(`${HOST} .panel h4 .close`)).toBeVisible();
+  const h4 = (await page.locator(`${HOST} .panel h4`).boundingBox())!;
+  const hx = h4.x + 20;
+  const hy = h4.y + h4.height / 2;
+  await page.mouse.move(hx, hy);
+  await page.mouse.down();
+  await page.mouse.move(hx - 300, hy - 200, { steps: 5 });
+  await page.mouse.up();
+  const moved = (await page.locator(`${HOST} .panel`).boundingBox())!;
+  await page.locator(`${HOST} .panel h4 .close`).click(); // 버튼 클릭은 드래그를 시작하지 않는다
+  await expect(page.locator(`${HOST} .panel`)).not.toHaveClass(/show/);
+  await page.locator(`${HOST} button.select`).click();
+  await expect(page.locator(`${HOST} .panel`)).toHaveClass(/show/);
+  const after = (await page.locator(`${HOST} .panel`).boundingBox())!;
+  expect(Math.abs(after.x - moved.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(after.y - moved.y)).toBeLessThanOrEqual(1);
 });
 
 test('rows carry a type chip; region chip is marked', async ({ cobroPage: page }) => {
@@ -582,27 +673,6 @@ test('panel drags by its header and stays put across re-render', async ({ cobroP
   expect(Math.abs(after2.y - after.y)).toBeLessThanOrEqual(1);
 });
 
-test('header ✕ still collapses (click on button does not start a drag)', async ({ cobroPage: page }) => {
-  await page.goto('http://127.0.0.1:4173/basic.html');
-  await selectAt(page, '#target');
-  await expect(page.locator(`${HOST} .panel h4 .close`)).toBeVisible();
-  const h4 = (await page.locator(`${HOST} .panel h4`).boundingBox())!;
-  const hx = h4.x + 20;
-  const hy = h4.y + h4.height / 2;
-  await page.mouse.move(hx, hy);
-  await page.mouse.down();
-  await page.mouse.move(hx - 300, hy - 200, { steps: 5 });
-  await page.mouse.up();
-  const moved = (await page.locator(`${HOST} .panel`).boundingBox())!;
-  await page.locator(`${HOST} .panel h4 .close`).click();
-  await expect(page.locator(`${HOST} .panel`)).not.toHaveClass(/show/);
-  await page.locator(`${HOST} button.collapse`).click();
-  await expect(page.locator(`${HOST} .panel`)).toHaveClass(/show/);
-  const after = (await page.locator(`${HOST} .panel`).boundingBox())!;
-  expect(Math.abs(after.x - moved.x)).toBeLessThanOrEqual(1);
-  expect(Math.abs(after.y - moved.y)).toBeLessThanOrEqual(1);
-});
-
 test('dragging the panel twice moves it by the same amount each time (no duplicated drag listeners)', async ({ cobroPage: page }) => {
   await page.goto('http://127.0.0.1:4173/basic.html');
   await selectAt(page, '#target');
@@ -634,6 +704,7 @@ test('dragging the panel twice moves it by the same amount each time (no duplica
 test('footer sits 8px under the textarea', async ({ cobroPage: page }) => {
   await page.goto('http://127.0.0.1:4173/basic.html');
   await selectAt(page, '#target');
+  await expect(page.locator(`${HOST} .panel textarea`)).toBeVisible(); // 렌더 잠깐의 재구성 뒤 DOM이 안정될 때까지 대기
   const textarea = (await page.locator(`${HOST} .panel textarea`).boundingBox())!;
   const row = (await page.locator(`${HOST} .panel .row`).boundingBox())!;
   expect(row.y - (textarea.y + textarea.height)).toBeGreaterThanOrEqual(7);
@@ -647,31 +718,3 @@ async function focusedTag(page: Page): Promise<string | undefined> {
   }, HOST);
 }
 
-test('note-only: Ctrl+Shift+M opens the panel and Send delivers a note with no elements', async ({ cobroPage: page, bridge }) => {
-  await page.goto('http://127.0.0.1:4173/basic.html');
-  await page.keyboard.press('Control+Shift+M');
-  await expect(page.locator(`${HOST} .panel`)).toHaveClass(/show/);
-  expect(await focusedTag(page)).toBe('TEXTAREA');
-  await expect(page.locator(`${HOST} button.select`)).not.toHaveClass(/on/);
-  await page.keyboard.type('Whole page feels slow');
-  await expect(page.locator(`${HOST} .status`)).toContainText('Send로 전송하세요');
-  const waiting = bridge.core.wait(10_000);
-  await page.locator(`${HOST} button.send`).click();
-  const r = await waiting;
-  expect(r.status).toBe('sent');
-  if (r.status !== 'sent') return;
-  expect(r.payload.batches[0]!.elements.length).toBe(0);
-  expect(r.payload.batches[0]).not.toHaveProperty('regions');
-  expect(r.payload.batches[0]!.note).toBe('Whole page feels slow');
-});
-
-test('note-only: toolbar Note button works while collapsed', async ({ cobroPage: page }) => {
-  await page.goto('http://127.0.0.1:4173/basic.html');
-  await selectAt(page, '#target');
-  await page.locator(`${HOST} button.collapse`).click();
-  await expect(page.locator(`${HOST} .panel`)).not.toHaveClass(/show/);
-  await page.locator(`${HOST} button.note`).click();
-  await expect(page.locator(`${HOST} .panel`)).toHaveClass(/show/);
-  expect(await focusedTag(page)).toBe('TEXTAREA');
-  await expect(page.locator(`${HOST} .els`)).toContainText('#target');
-});

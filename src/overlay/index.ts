@@ -24,6 +24,8 @@ declare const __COBRO_TOKEN__: string;
     let drafts: Batch[] | null = null; // null = 서버 상태를 아직 못 받음
     let current: string | null = null;
     let connected = false;
+    let stateSeen = false; // 첫 state 수신 전에는 ensureCurrent를 미룬다 — 서버 복구 초안을 가리지 않도록(I1)
+    let openPending = false;
     let draftTimer: ReturnType<typeof setTimeout> | null = null;
     let prefs: UiPrefs = { theme: 'auto', themeLocked: false };
     const mq = matchMedia('(prefers-color-scheme: dark)');
@@ -40,7 +42,12 @@ declare const __COBRO_TOKEN__: string;
       prefs,
     });
     const render = () => ui.render(vm());
-    const onNoteOnly = () => { ensureCurrent(); ui.expand(); render(); ui.focusNote(); };
+    const setSelecting = (on: boolean) => {
+      picker.setActive(on);
+      if (!on) { render(); return; }
+      if (!stateSeen) { openPending = true; render(); return; }
+      ensureCurrent(); render(); ui.focusNote();
+    };
     const addEl = (b: Batch, el: Element, toggle: boolean) => {
       const info = inspectElement(el);
       const i = b.elements.findIndex((e) => e.selector === info.selector);
@@ -54,11 +61,10 @@ declare const __COBRO_TOKEN__: string;
     }) });
 
     const ui = createUI({
-      onToggleSelect: () => { picker.setActive(!picker.isActive()); render(); },
+      onToggleSelect: () => setSelecting(!picker.isActive()),
       onNoteInput: (id, note) => { const b = drafts?.find((d) => d.id === id); if (b) { b.note = note; pushDraft(); } },
       onRemoveElement: (id, i) => { const b = drafts?.find((d) => d.id === id); if (b) { b.elements.splice(i, 1); pushDraft(); render(); } },
       onRemoveRegion: (id, i) => { const b = drafts?.find((d) => d.id === id); if (b?.regions) { b.regions.splice(i, 1); pushDraft(); render(); } },
-      onNoteOnly,
       onSend: () => {
         const ready = (drafts ?? []).filter((b) => b.note.trim());
         if (!ready.length) { ui.focusNote(); return; }
@@ -77,8 +83,9 @@ declare const __COBRO_TOKEN__: string;
     mq.addEventListener('change', applyTheme);
     const picker = createPicker({
       root: ui.root, host: ui.host,
-      onPick: (el) => { addEl(ensureCurrent(), el, true); pushDraft(); render(); ui.focusNote(); },
+      onPick: (el) => { if (!stateSeen) return; addEl(ensureCurrent(), el, true); pushDraft(); render(); ui.focusNote(); },
       onBandPick: (els, band) => {
+        if (!stateSeen) return;
         const b = ensureCurrent();
         if (els.length) { for (const el of els) addEl(b, el, false); }
         else if (band.right - band.left >= 8 && band.bottom - band.top >= 8) {
@@ -91,9 +98,8 @@ declare const __COBRO_TOKEN__: string;
       },
     });
     window.addEventListener('keydown', (e) => {
-      if (e.ctrlKey && e.shiftKey && e.code === 'KeyF') { e.preventDefault(); ui.closePop(); picker.setActive(!picker.isActive()); render(); }
-      else if (e.ctrlKey && e.shiftKey && e.code === 'KeyM') { e.preventDefault(); ui.closePop(); onNoteOnly(); }
-      else if (e.key === 'Escape' && picker.isActive()) { picker.setActive(false); render(); }
+      if (e.ctrlKey && e.shiftKey && e.code === 'KeyF') { e.preventDefault(); ui.closePop(); setSelecting(!picker.isActive()); }
+      else if (e.key === 'Escape' && picker.isActive()) { setSelecting(false); }
     }, true);
     const onViewport = () => ui.renderMarkers(vm());
     window.addEventListener('scroll', onViewport, { capture: true, passive: true });
@@ -115,6 +121,8 @@ declare const __COBRO_TOKEN__: string;
           drafts = drafts.filter((d) => !nonDraft.has(d.id));
         }
         render();
+        stateSeen = true;
+        if (openPending) { openPending = false; ensureCurrent(); render(); ui.focusNote(); }
       } else if (m.type === 'done') {
         ui.flash(m.info.selectors);
         flushDraft();
