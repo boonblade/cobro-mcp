@@ -36,8 +36,13 @@ export const test = base.extend<{ ctx: BrowserContext; bridge: Bridge; cobroPage
 });
 export { expect };
 export const HOST = '[data-cobro-host]';
-export async function selectAt(page: Page, selector: string) {
+// webkit에서 Ctrl+Shift+F 직후 선택 레이어(glass)가 켜지기 전에 마우스 이벤트가 나가면 간헐 실패한다(부채 #3)
+export async function startSelect(page: Page) {
   await page.keyboard.press('Control+Shift+F');
+  await expect(page.locator(`${HOST} .ib.select`)).toHaveClass(/on/);
+}
+export async function selectAt(page: Page, selector: string) {
+  await startSelect(page);
   const b = (await page.locator(selector).boundingBox())!;
   await page.mouse.move(b.x + 3, b.y + 3);
   await page.mouse.click(b.x + 3, b.y + 3);

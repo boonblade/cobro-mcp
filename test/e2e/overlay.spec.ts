@@ -1,4 +1,4 @@
-import { test, expect, HOST, selectAt } from './helpers.js';
+import { test, expect, HOST, selectAt, startSelect } from './helpers.js';
 import type { Page } from '@playwright/test';
 
 // selectAt는 매번 Ctrl+Shift+F로 선택 모드를 토글한다 — 이미 선택 모드인 상태에서 두 번째
@@ -105,6 +105,24 @@ test('drafts survive reload and missing elements are marked', async ({ cobroPage
   await expect(page.locator(`${HOST} .els .missing`)).toContainText('요소 없음');
 });
 
+test('an emptied draft is not kept on the server, so a refresh does not restore an empty panel (T2, R129)', async ({ cobroPage: page, bridge }) => {
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await page.keyboard.press('Control+Shift+F');
+  await page.locator(`${HOST} textarea`).fill('abc');
+  await page.locator(`${HOST} textarea`).fill('');
+  await page.waitForTimeout(600); // 디바운스된 draft가 서버에 반영될 시간
+  expect(bridge.core.session.batches.filter((b) => b.status === 'draft')).toHaveLength(0);
+  await page.reload();
+  await expect(page.locator(`${HOST} .panel`)).not.toHaveClass(/show/); // 선택 모드는 꺼진 채 시작 — 서버에 초안이 없다
+  await page.keyboard.press('Control+Shift+F');
+  await expect(page.locator(`${HOST} .panel`)).toHaveClass(/show/); // 빈 패널 — 로컬 초안일 뿐 서버엔 없다
+  await pickAt(page, '#target'); // 선택 모드가 이미 켜져 있으므로 재클릭 없이 바로 픽
+  await page.waitForTimeout(600);
+  const drafts = bridge.core.session.batches.filter((b) => b.status === 'draft');
+  expect(drafts).toHaveLength(1);
+  expect(drafts[0]!.elements).toHaveLength(1);
+});
+
 test('reload strategy reloads the page on done', async ({ cobroPage: page, bridge }) => {
   await page.goto('http://127.0.0.1:4173/basic.html');
   await expect.poll(() => bridge.core.session.detected).toBe('reload');
@@ -119,7 +137,7 @@ test('reload strategy reloads the page on done', async ({ cobroPage: page, bridg
 test('T1: drag-select picks the element whose center is inside the band, or a region if none is (R120)', async ({ cobroPage: page }) => {
   await page.goto('http://127.0.0.1:4173/basic.html');
   await expect(page.locator(`${HOST} .toolbar`)).toBeVisible();
-  await page.keyboard.press('Control+Shift+F');
+  await startSelect(page);
   const b = (await page.locator('#card').boundingBox())!;
   // #card의 60%(좌상단)만 덮어도 #card 중심과 p.desc 중심 둘 다 안에 든다 → H=2 → 그룹(R126)
   await page.mouse.move(b.x, b.y);
@@ -477,7 +495,7 @@ test.describe('region with screenshot capture', () => {
 
   test('a band over empty space becomes a region with within', async ({ cobroPage: page, bridge }) => {
     await page.goto('http://127.0.0.1:4173/region.html');
-    await page.keyboard.press('Control+Shift+F');
+    await startSelect(page);
     const a = (await page.locator('#a').boundingBox())!;
     const b = (await page.locator('#b').boundingBox())!;
     const left = a.x + a.width + 10;
@@ -517,7 +535,7 @@ test.describe('region with screenshot capture', () => {
     // M2: page rect.y must include scrollY — the #a/#b gap (208px page-y) can't survive a
     // 300px scroll (grid total height ~208px), so this second region is drawn on the
     // 1500px spacer added below the grid, which stays in view after scrolling.
-    await page.keyboard.press('Control+Shift+F');
+    await startSelect(page);
     await page.mouse.wheel(0, 300);
     await page.waitForTimeout(100);
     const scrollY = await page.evaluate(() => window.scrollY);
@@ -542,7 +560,7 @@ test.describe('region with screenshot capture', () => {
 
 test('a band that contains an element yields elements, no region', async ({ cobroPage: page, bridge }) => {
   await page.goto('http://127.0.0.1:4173/region.html');
-  await page.keyboard.press('Control+Shift+F');
+  await startSelect(page);
   const b = (await page.locator('#ba').boundingBox())!;
   const pad = 4;
   await page.mouse.move(b.x - pad, b.y - pad);
@@ -748,7 +766,7 @@ test('footer sits 8px under the textarea', async ({ cobroPage: page }) => {
 
 test('T2: dragging over two elements makes one group — the band is the head; expand shows its children and their markers (R126)', async ({ cobroPage: page }) => {
   await page.goto('http://127.0.0.1:4173/region.html');
-  await page.keyboard.press('Control+Shift+F');
+  await startSelect(page);
   const a = (await page.locator('#a').boundingBox())!;
   const b = (await page.locator('#b').boundingBox())!;
   const combined = { x: a.x, y: Math.min(a.y, b.y), width: b.x + b.width - a.x, height: Math.max(a.y + a.height, b.y + b.height) - Math.min(a.y, b.y) };
@@ -776,7 +794,7 @@ test('T2: dragging over two elements makes one group — the band is the head; e
 
 test('T3: expanding a second group collapses the first (accordion, R126)', async ({ cobroPage: page }) => {
   await page.goto('http://127.0.0.1:4173/region.html');
-  await page.keyboard.press('Control+Shift+F');
+  await startSelect(page);
   const a = (await page.locator('#a').boundingBox())!;
   await dragBand(page, a);
   const b = (await page.locator('#b').boundingBox())!;
@@ -798,7 +816,7 @@ test('T3: expanding a second group collapses the first (accordion, R126)', async
 test('T4: Send carries a stable ref for every element/region, no parent key; refs never shift on removal (R127)', async ({ cobroPage: page, bridge }) => {
   bridge.core.setStrategy('none');
   await page.goto('http://127.0.0.1:4173/region.html');
-  await page.keyboard.press('Control+Shift+F');
+  await startSelect(page);
   const a = (await page.locator('#a').boundingBox())!;
   const b = (await page.locator('#b').boundingBox())!;
   const combined = { x: a.x, y: Math.min(a.y, b.y), width: b.x + b.width - a.x, height: Math.max(a.y + a.height, b.y + b.height) - Math.min(a.y, b.y) };
@@ -815,7 +833,7 @@ test('T4: Send carries a stable ref for every element/region, no parent key; ref
   }
   bridge.done({ summary: 'ok', selectors: [], changedFiles: [] });
 
-  await page.keyboard.press('Control+Shift+F');
+  await startSelect(page);
   await dragBand(page, combined);
   await page.locator(`${HOST} .els > div.group`).click();
   await page.locator(`${HOST} .els .child`).nth(1).locator('button').click(); // "1b" 제거
@@ -829,7 +847,7 @@ test('T4: Send carries a stable ref for every element/region, no parent key; ref
   if (r2.status === 'sent') expect(r2.payload.batches[0]!.elements.map((e) => e.ref)).toEqual(['1a', '1c', '1d']);
   bridge.done({ summary: 'ok', selectors: [], changedFiles: [] });
 
-  await page.keyboard.press('Control+Shift+F');
+  await startSelect(page);
   await dragBand(page, combined); // 새 배치 — 요소 0·영역 0에서 다시 그룹 하나
   await page.locator(`${HOST} .els > div.group button`).click(); // 그룹째 제거 → 요소 0·영역 0
   await expect(page.locator(`${HOST} .els > div`)).toHaveCount(0);
@@ -839,7 +857,7 @@ test('T4: Send carries a stable ref for every element/region, no parent key; ref
 
 test('T5: a band around one element is a lone pick, not a group; ref stays stable after a removal (R126)', async ({ cobroPage: page }) => {
   await page.goto('http://127.0.0.1:4173/region.html');
-  await page.keyboard.press('Control+Shift+F');
+  await startSelect(page);
   const ba = (await page.locator('#ba').boundingBox())!;
   const pad = 4;
   await dragBand(page, { x: ba.x - pad, y: ba.y - pad, width: ba.width + pad * 2, height: ba.height + pad * 2 });
@@ -876,7 +894,7 @@ test('T6: an empty band is a region with no chevron/cnt (R126)', async ({ cobroP
 test('T7: clicking a group child on the page toggles just that child (R126)', async ({ cobroPage: page, bridge }) => {
   bridge.core.setStrategy('none');
   await page.goto('http://127.0.0.1:4173/region.html');
-  await page.keyboard.press('Control+Shift+F');
+  await startSelect(page);
   const a = (await page.locator('#a').boundingBox())!;
   const b = (await page.locator('#b').boundingBox())!;
   const combined = { x: a.x, y: Math.min(a.y, b.y), width: b.x + b.width - a.x, height: Math.max(a.y + a.height, b.y + b.height) - Math.min(a.y, b.y) };
@@ -929,7 +947,7 @@ test('T8: an old draft without refs gets them assigned in order on reload (eleme
     regions: [{ ref: '1', rect: { x: 0, y: 0, w: 10, h: 10 } }],
   }]);
   await page.reload();
-  await page.keyboard.press('Control+Shift+F');
+  await startSelect(page);
   await pickAt(page, '#bb');
   await expect(page.locator(`${HOST} .marker:not(.region):not(.child) .n`).last()).toHaveText('2'); // 새 낱개 요소의 마커(영역 마커는 DOM 순서상 항상 뒤에 붙는다)
 });
@@ -960,7 +978,7 @@ test('T9: a group child ref like "1a" is never confused with a lone element ref 
 
 test('T10: redragging a band whose hits already belong to the draft changes nothing; brand-new hits still group (R126 I2)', async ({ cobroPage: page }) => {
   await page.goto('http://127.0.0.1:4173/region.html');
-  await page.keyboard.press('Control+Shift+F');
+  await startSelect(page);
   const a = (await page.locator('#a').boundingBox())!;
   await dragBand(page, a);
   const group1 = page.locator(`${HOST} .els > div.group`).first();

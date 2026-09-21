@@ -27,7 +27,9 @@ export class SessionCore extends EventEmitter {
 
   setDrafts(batches: Batch[]): void {
     const others = this.s.batches.filter((b) => b.status !== 'draft');
-    this.s.batches = [...others, ...batches.map((b) => ({ ...b, status: 'draft' as const }))];
+    // R129: 빈 초안은 저장하지 않는다(부채 #9)
+    const kept = batches.filter((b) => b.elements.length || b.regions?.length || b.note.trim());
+    this.s.batches = [...others, ...kept.map((b) => ({ ...b, status: 'draft' as const }))];
     this.commit();
   }
   markSent(batchIds: string[], page: PageInfo): Batch[] {
