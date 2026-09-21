@@ -55,6 +55,18 @@ describe('mcp tools', () => {
     const t = (await client.listTools()).tools.map((x) => x.name).sort();
     expect(t).toEqual(['close', 'done', 'open', 'screenshot', 'status', 'wait']);
   });
+  it('declares safety annotations for every tool', async () => {
+    const tools = (await client.listTools()).tools;
+    const byName = Object.fromEntries(tools.map((t) => [t.name, t.annotations]));
+    expect(byName).toEqual({
+      open: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      wait: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      status: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      done: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+      screenshot: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+      close: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    });
+  });
   it('open returns title, strategy and restored batches; strategy arg fixes it', async () => {
     expect(await call('open', { url: 'http://a/', strategy: 'event' })).toEqual({ title: 'T', strategy: 'event', restoredBatches: 0, restarted: false });
     expect(core.session.strategy).toBe('event');

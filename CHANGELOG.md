@@ -3,6 +3,8 @@
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
+### Added
+- MCP tool annotations (readOnlyHint / destructiveHint / idempotentHint / openWorldHint) on all six tools, so clients can tell which calls are safe to run unattended: wait is read-only, close is destructive, done and screenshot are not idempotent, open reaches the network.
 
 ## [0.9.1] — 2026-09-21
 ### Added
