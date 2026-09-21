@@ -61,12 +61,12 @@ claude mcp add -s user cobro -- npx -y cobro-mcp@latest
 
 | 도구 | 인자 | 하는 일 | 반환 |
 |---|---|---|---|
-| `open` | `url`, `strategy?` | 브라우저를 띄우고(없으면) URL을 열어 오버레이를 켠다 | `title` `strategy` `restoredBatches` `restarted` |
+| `open` | `url`, `strategy?` | 브라우저를 띄우고(없으면) URL을 열어 오버레이를 켠다. 메모 있는 초안은 복구하고, 새로 띄울 때는 메모 없는 초안을 버린다 | `title` `strategy` `restoredBatches` `restarted` |
 | `wait` | `timeoutSec?` | 사람이 Send할 때까지 대기 | `status: "sent"` + `payload`, 또는 `status: "pending"` (`browserGone?`) |
 | `status` | `text` | 상태 줄에 한 줄 표시 | `ok` |
 | `done` | `summary`, `selectors?`, `changedFiles?` | 수정 완료 → 갱신 전략 실행·요소 강조 | `ok` `doneBatches` |
 | `screenshot` | `selector?` | 화면(또는 요소 주변 16px)을 PNG로 저장 | `path` |
-| `close` | 없음 | 대기를 풀고 브라우저를 닫는다 | `ok` |
+| `close` | 없음 | 대기를 풀고 브라우저를 닫으며, 메모 없는 초안을 버린다 | `ok` |
 
 `wait`가 `pending`이면 다시 부른다(오류 아님). `browserGone: true`면 사용자가 브라우저를 닫은 것이니 `open`부터.
 

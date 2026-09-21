@@ -340,6 +340,30 @@ test('done summary stays in the detail while waiting, until a new draft starts (
   await expect(page.locator(`${HOST} .status`)).not.toContainText('완료');
 });
 
+// T3(재현, R125): done 뒤 메모 잔존 관찰 재현. 지휘자 관찰과 달리 코드상 남는 경로가
+// 보이지 않는다(미확인) — master에서 먼저 돌려 통과/실패를 확인한다.
+test('done clears the note, leaving no leftover draft across reload (T3, R125)', async ({ cobroPage: page, bridge }) => {
+  bridge.core.setStrategy('none'); // done이 reload하면 확인 전에 문서가 바뀐다
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await selectAt(page, '#target');
+  await page.locator(`${HOST} textarea`).fill('fix me');
+  const waiting = bridge.core.wait(10_000);
+  await page.locator(`${HOST} button.send`).click();
+  await waiting;
+  bridge.done({ summary: 'ok', selectors: ['#target'], changedFiles: [] });
+  await page.waitForTimeout(800);
+  await page.keyboard.press('Control+Shift+F');
+  await expect(page.locator(`${HOST} textarea`)).toHaveValue('');
+  await expect(page.locator(`${HOST} .els > div`)).toHaveCount(0);
+  await expect(page.locator(`${HOST} .panel h4`)).toContainText('요소 없음');
+  await page.reload();
+  await page.keyboard.press('Control+Shift+F');
+  await expect(page.locator(`${HOST} textarea`)).toHaveValue('');
+  await expect(page.locator(`${HOST} .els > div`)).toHaveCount(0);
+  await expect(page.locator(`${HOST} .panel h4`)).toContainText('요소 없음');
+  expect(bridge.core.session.batches.filter((b) => b.status === 'draft')).toHaveLength(0);
+});
+
 test('toolbar drags by the handle', async ({ cobroPage: page }) => {
   await page.goto('http://127.0.0.1:4173/basic.html');
   await expect(page.locator(`${HOST} .status`)).toContainText('Ctrl+Shift+F'); // 연결 완료 후 폭이 안정된 뒤 측정(칩 텍스트가 붙기 전 측정하면 -50% 중심 정렬이 흔들린다)

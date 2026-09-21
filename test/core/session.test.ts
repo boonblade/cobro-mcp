@@ -174,4 +174,23 @@ describe('SessionCore', () => {
     expect(core.session.batches.find((b) => b.id === '1')!.screenshot).toBeUndefined();
     expect(core.session.batches.find((b) => b.id === '2')!.screenshot).toBe(store.shotPath('2'));
   });
+  it('dropEmptyDrafts removes note-less drafts and closeSession applies it before clearing shots (R125)', () => {
+    core.setDrafts([
+      { ...draft('A'), note: '' },
+      { ...draft('A2'), note: '  ' },
+      { ...draft('B'), note: 'keep' },
+      draft('C'),
+    ]);
+    core.markSent(['C'], page);
+    core.setScreenshot('A', store.shotPath('A'));
+    core.setScreenshot('B', store.shotPath('B'));
+    const removed = core.dropEmptyDrafts();
+    expect(removed).toBe(2);
+    const spy = vi.spyOn(store, 'clearShots');
+    core.closeSession();
+    expect(spy).toHaveBeenCalledWith(expect.arrayContaining(['B', 'C']));
+    expect(spy.mock.calls[0]![0]).toHaveLength(2);
+    expect(core.session.batches.map((b) => b.id)).toEqual(['B', 'C']);
+    expect(core.session.batches.find((b) => b.id === 'B')!.screenshot).toBe(store.shotPath('B'));
+  });
 });

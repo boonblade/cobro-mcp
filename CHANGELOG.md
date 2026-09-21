@@ -11,6 +11,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - Toolbar: the status line has a fixed width (320px), so the toolbar no longer jumps as hints change; very long messages are cut at 160 characters (full text in the tooltip). Hover still scrolls the line to the end.
 - Toolbar simplified: Select now opens the feedback panel (pick elements or just type a note) and closes it again; the collapse and note buttons are gone. Picked elements stay marked on the page while the panel is closed.
 - Band selection picks elements whose center is inside the band (was: fully contained).
+- Drafts without a note are dropped when the browser closes (close() or a fresh launch on the next open), so stale picks no longer come back. Drafts with a note still survive.
 
 ## [0.8.1] — 2026-09-21
 ### Changed

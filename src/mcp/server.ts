@@ -31,10 +31,11 @@ export function createMcpServer(deps: { core: SessionCore; browser: BrowserLike;
   const browserGone = () => browser.wasLaunched() && !browser.isAlive();
 
   server.registerTool('open', {
-    description: 'URL을 전용 브라우저에 열고 피드백 오버레이를 켠다. 브라우저가 없으면 띄운다. 저장된 초안·이력을 복구한다.',
+    description: 'URL을 전용 브라우저에 열고 피드백 오버레이를 켠다. 브라우저가 없으면 띄운다. 저장된 초안·이력을 복구한다. 브라우저를 새로 띄울 때는 메모가 없는 초안을 버린다.',
     inputSchema: { url: z.string().url(), strategy: z.enum(['none', 'reload', 'event']).optional().describe('done 시 갱신 전략 고정. 생략 시 자동 감지(HMR 있으면 none, 없으면 reload)') },
   }, async ({ url, strategy }) => {
     if (strategy) core.setStrategy(strategy);
+    if (!browser.isAlive()) core.dropEmptyDrafts(); // R125: 브라우저를 새로 띄우는 open은 묵은 빈 초안을 버린다
     const r = await browser.open(url);
     if (r.restarted) restartedPending = true;
     return text({ title: r.title, strategy: core.effectiveStrategy(), restoredBatches: core.session.batches.filter((b) => b.status === 'draft').length, restarted: r.restarted });
@@ -76,7 +77,7 @@ export function createMcpServer(deps: { core: SessionCore; browser: BrowserLike;
     inputSchema: { selector: z.string().optional().describe('이 선택자로 찾은 첫 요소 주변만 잘라낸다. 생략 시 뷰포트') },
   }, async ({ selector }) => text({ path: await browser.screenshot({ selector, outPath: deps.manualShotPath('manual-' + Date.now()) }) }));
 
-  server.registerTool('close', { description: '브라우저를 닫고 세션을 정리한다.', inputSchema: {} },
+  server.registerTool('close', { description: '브라우저를 닫고 세션을 정리한다. 메모가 없는 초안은 버린다.', inputSchema: {} },
     async () => {
       core.cancelWait();
       core.closeSession();
