@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { mkdtempSync, existsSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
+import { mkdtempSync, existsSync, writeFileSync, rmSync, readFileSync, openSync, closeSync } from 'node:fs';
+import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -65,4 +66,31 @@ test('빌드된 dist/server.js가 stdio로 도구 6개를 제공하고 stdin 종
     rmSync(profileDir, { recursive: true, force: true });
   }
   expect(stderrText.join('')).toContain('[cobro] ready');
+});
+
+test('stdin이 파일이면(EOF 뒤 close 없음) end로 스스로 내려간다(R156)', async () => {
+  const stateDir = mkdtempSync(join(tmpdir(), 'cobro-state-'));
+  const profileDir = mkdtempSync(join(tmpdir(), 'cobro-prof-'));
+  const stdinPath = join(stateDir, 'empty-stdin');
+  writeFileSync(stdinPath, '');
+  const fd = openSync(stdinPath, 'r');
+  const child = spawn(process.execPath, [join(process.cwd(), 'dist/server.js')], {
+    stdio: [fd, 'pipe', 'pipe'],
+    env: {
+      ...inherited,
+      COBRO_HEADLESS: '1',
+      COBRO_STATE_DIR: stateDir,
+      COBRO_PROFILE_DIR: profileDir,
+      COBRO_WAIT_SEC: '5',
+      COBRO_TICK_MS: '1000',
+    },
+  });
+  const pid = child.pid!;
+  try {
+    await expect.poll(() => alive(pid), { timeout: 5000 }).toBe(false);
+  } finally {
+    closeSync(fd);
+    rmSync(stateDir, { recursive: true, force: true });
+    rmSync(profileDir, { recursive: true, force: true });
+  }
 });
