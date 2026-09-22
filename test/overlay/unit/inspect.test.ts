@@ -79,4 +79,51 @@ describe('inspectElement', () => {
       component: 'Button', source: 'src/ui/Button.jsx:2', callers: ['src/App.jsx:9', 'src/App.jsx:20'],
     });
   });
+
+  it('captures the host fiber\'s own JSX line as source, naming it from the nearest named ancestor (R149)', () => {
+    document.body.innerHTML = '<button></button>';
+    const el = document.querySelector('button')!;
+    const app = { type: { name: 'App' }, _debugSource: { fileName: 'src/main.jsx', lineNumber: 3 }, return: null };
+    (el as unknown as Record<string, unknown>)['__reactFiber$g'] = {
+      type: 'button', _debugSource: { fileName: 'src/App.jsx', lineNumber: 7 }, return: app,
+    };
+    expect(inspectElement(el).react).toEqual({ component: 'App', source: 'src/App.jsx:7' });
+  });
+
+  it('skips node_modules host and library layers, naming the component from the first user-code named fiber (R149·R143)', () => {
+    document.body.innerHTML = '<button></button>';
+    const el = document.querySelector('button')!;
+    const app = { type: { name: 'App' }, _debugSource: { fileName: 'src/main.jsx', lineNumber: 3 }, return: null };
+    const button = { type: { name: 'Button' }, _debugSource: { fileName: 'src/App.jsx', lineNumber: 5 }, return: app };
+    const buttonBase = { type: { name: 'ButtonBase' }, _debugSource: { fileName: 'node_modules/lib/y.js', lineNumber: 2 }, return: button };
+    (el as unknown as Record<string, unknown>)['__reactFiber$h'] = {
+      type: 'button', _debugSource: { fileName: 'node_modules/lib/x.js', lineNumber: 9 }, return: buttonBase,
+    };
+    expect(inspectElement(el).react).toEqual({ component: 'Button', source: 'src/App.jsx:5' });
+  });
+
+  it('skips a library host and its internal named layer when a user element is passed as children (R153)', () => {
+    document.body.innerHTML = '<span></span>';
+    const el = document.querySelector('span')!;
+    const app = { type: { name: 'App' }, _debugSource: { fileName: 'src/main.jsx', lineNumber: 3 }, return: null };
+    const button = { type: { name: 'Button' }, _debugSource: { fileName: 'src/App.jsx', lineNumber: 8 }, return: app };
+    const buttonBase = { type: { name: 'ButtonBase' }, _debugSource: { fileName: 'node_modules/lib/y.js', lineNumber: 2 }, return: button };
+    const hostButton = { type: 'button', _debugSource: { fileName: 'node_modules/lib/x.js', lineNumber: 9 }, return: buttonBase };
+    (el as unknown as Record<string, unknown>)['__reactFiber$i'] = {
+      type: 'span', _debugSource: { fileName: 'src/App.jsx', lineNumber: 8 }, return: hostButton,
+    };
+    expect(inspectElement(el).react).toEqual({ component: 'Button', source: 'src/App.jsx:8' });
+  });
+
+  it('resolves the host fiber\'s own JSX line via _debugStack (React 19 stack format) as frame (R153·M3)', () => {
+    document.body.innerHTML = '<button></button>';
+    const el = document.querySelector('button')!;
+    const cta = { type: { name: 'Cta' }, return: null };
+    const stack = 'at exports.jsxDEV (http://localhost:4191/node_modules/.vite/deps/react_jsx-dev-runtime.js?v=a490e72c:244:31)\n'
+      + 'at App (http://localhost:4191/src/main.jsx:11:21)';
+    (el as unknown as Record<string, unknown>)['__reactFiber$j'] = { type: 'button', _debugStack: stack, return: cta };
+    expect(inspectElement(el).react).toEqual({
+      component: 'Cta', frame: { url: 'http://localhost:4191/src/main.jsx', line: 11, col: 21 },
+    });
+  });
 });
