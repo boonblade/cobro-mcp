@@ -45,12 +45,12 @@ export function resolveOriginal(mapJson: unknown, opts: { moduleUrl: string; map
   return `${path}:${pos.line}`;
 }
 
-/** react·vue 어느 쪽 frame·callerFrames도 페이로드로 내보내지 않는다(R112·R65·R146 계약 불변) — 둘 다 없으면 바이트 동일 */
+/** react·vue 어느 쪽 frame·callerLocs도 페이로드로 내보내지 않는다(R112·R65·R146 계약 불변) — 둘 다 없으면 바이트 동일 */
 export function stripFrame(e: ElementInfo): ElementInfo {
   let out = e;
   for (const key of FRAMEWORK_KEYS) {
     const info = out[key];
-    if (!info?.frame && !info?.callerFrames) continue;
+    if (!info?.frame && !info?.callerLocs) continue;
     const rest: ComponentInfo = { component: info.component };
     if (info.source) rest.source = info.source;
     if (info.callers?.length) rest.callers = info.callers;
@@ -91,7 +91,8 @@ async function resolveFrame(frame: Frame, page: PageInfo, fetchText: (url: strin
   }
 }
 
-/** frame이 있고 source가 없는 요소마다 소스맵을 해석해 e.react.source를 채우고, callerFrames를 같은 방식으로 풀어 callers에 싣는다(R146) */
+/** frame이 있고 source가 없는 요소마다 소스맵을 해석해 e.react.source를 채우고, callerLocs를 만난 순서대로 풀어 react.callers를 새로 만든다(R146·R158) —
+ * 페이지가 보낸 react.callers는 읽지 않는다(스펙 §6: 페이지에서 온 것은 데이터) */
 export async function resolveElementSources(batch: Batch, page: PageInfo, fetchText: (url: string) => Promise<string | undefined>, opts?: { root?: string }): Promise<void> {
   const root = opts?.root;
   for (const e of batch.elements) {
@@ -101,15 +102,13 @@ export async function resolveElementSources(batch: Batch, page: PageInfo, fetchT
       const source = await resolveFrame(react.frame, page, fetchText, root);
       if (source) react.source = source;
     }
-    if (react.callerFrames?.length) {
-      const callers = react.callers ? [...react.callers] : [];
-      for (const frame of react.callerFrames) {
-        if (callers.length >= 2) break;
-        const source = await resolveFrame(frame, page, fetchText, root);
-        if (!source || source === react.source || callers.includes(source)) continue; // M2: caller끼리 중복 제거
-        callers.push(source);
-      }
-      if (callers.length) react.callers = callers; else delete react.callers;
+    const callers: string[] = [];
+    for (const loc of react.callerLocs ?? []) {
+      if (callers.length >= 2) break;
+      const s = typeof loc === 'string' ? loc : await resolveFrame(loc, page, fetchText, root);
+      if (!s || s === react.source || callers.includes(s)) continue; // M2: caller끼리 중복 제거
+      callers.push(s);
     }
+    if (callers.length) react.callers = callers; else delete react.callers;
   }
 }

@@ -43,7 +43,7 @@ describe('inspectElement', () => {
     const buttonBase = { type: { name: 'ButtonBase' }, _debugSource: { fileName: 'node_modules/x/a.js', lineNumber: 3 }, return: button };
     (el as unknown as Record<string, unknown>)['__reactFiber$c'] = { type: 'button', return: buttonBase };
     expect(inspectElement(el).react).toEqual({
-      component: 'Button', source: 'src/ui/Button.jsx:2', callers: ['src/App.jsx:9', 'src/App.jsx:20'],
+      component: 'Button', source: 'src/ui/Button.jsx:2', callerLocs: ['src/App.jsx:9', 'src/App.jsx:20'],
     });
   });
 
@@ -76,7 +76,7 @@ describe('inspectElement', () => {
     const buttonBase = { type: { name: 'ButtonBase' }, _debugSource: { fileName: 'node_modules/x/a.js', lineNumber: 3 }, return: button };
     (el as unknown as Record<string, unknown>)['__reactFiber$f'] = { type: 'button', return: buttonBase };
     expect(inspectElement(el).react).toEqual({
-      component: 'Button', source: 'src/ui/Button.jsx:2', callers: ['src/App.jsx:9', 'src/App.jsx:20'],
+      component: 'Button', source: 'src/ui/Button.jsx:2', callerLocs: ['src/App.jsx:9', 'src/App.jsx:20'],
     });
   });
 
