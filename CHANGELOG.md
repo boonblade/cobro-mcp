@@ -3,6 +3,8 @@
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
+### Changed
+- MCP instructions reorganized into 8 short lines (payload reading and ref/region conventions on separate lines); same rules, about 17% shorter.
 
 ## [0.9.2] — 2026-09-22
 ### Added

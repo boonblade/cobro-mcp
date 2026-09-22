@@ -45,6 +45,12 @@ describe('mcp server version', () => {
     expect(client.getInstructions()).toContain('done(summary');
     expect(client.getInstructions()).not.toMatch(HANGUL);
   });
+
+  it('instructions stay within 8 lines and 1600 chars (R155)', () => {
+    const t = client.getInstructions()!;
+    expect(t.split('\n')).toHaveLength(8);
+    expect(t.length).toBeLessThanOrEqual(1600);
+  });
 });
 const call = async (name: string, args: Record<string, unknown> = {}) => {
   const r = await client.callTool({ name, arguments: args });
