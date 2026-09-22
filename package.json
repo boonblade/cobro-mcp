@@ -1,6 +1,6 @@
 {
   "name": "cobro-mcp",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "description": "Co-browse for coding agents: pick elements in the browser, write a note, Send — the context lands in the agent's chat. MCP server with 6 tools.",
   "keywords": [
     "mcp",
