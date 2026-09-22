@@ -10,7 +10,11 @@ import { resolveElementSources } from '../../src/core/sourcemap.js';
 import type { Theme } from '../../src/core/types.js';
 
 const overlaySrc = readFileSync('dist/overlay.js', 'utf8');
-export const injected = (port: number, token: string, root = process.cwd()) => overlaySrc.replace(/__COBRO_PORT__/g, String(port)).replace(/__COBRO_TOKEN__/g, JSON.stringify(token)).replace(/__COBRO_ROOT__/g, JSON.stringify(root));
+// 치환값을 함수로 넘긴다 — 문자열 2번째 인자면 $&·$$ 등이 replace 패턴으로 해석된다(Task 64 M4)
+export const injected = (port: number, token: string, root = process.cwd()) => overlaySrc
+  .replace(/__COBRO_PORT__/g, () => String(port))
+  .replace(/__COBRO_TOKEN__/g, () => JSON.stringify(token))
+  .replace(/__COBRO_ROOT__/g, () => JSON.stringify(root));
 
 export const test = base.extend<{ ctx: BrowserContext; bridge: Bridge; cobroPage: Page; envTheme: Theme | undefined; shotEnabled: boolean }>({
   envTheme: [undefined, { option: true }],

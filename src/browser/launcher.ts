@@ -56,7 +56,11 @@ export class BrowserLauncher {
   wasLaunched(): boolean { return this.launchedOnce; }
 
   private injected(): string {
-    return this.opts.overlaySource.replace(/__COBRO_PORT__/g, String(this.opts.port)).replace(/__COBRO_TOKEN__/g, JSON.stringify(this.opts.token)).replace(/__COBRO_ROOT__/g, JSON.stringify(this.opts.root));
+    // 치환값을 함수로 넘긴다 — 문자열 2번째 인자면 $&·$$ 등이 replace 패턴으로 해석된다(Task 64 M4, root는 사용자 경로라 위험 문자를 담을 수 있다)
+    return this.opts.overlaySource
+      .replace(/__COBRO_PORT__/g, () => String(this.opts.port))
+      .replace(/__COBRO_TOKEN__/g, () => JSON.stringify(this.opts.token))
+      .replace(/__COBRO_ROOT__/g, () => JSON.stringify(this.opts.root));
   }
   private async launch(): Promise<void> {
     const engine = this.opts.engine ?? 'chromium';

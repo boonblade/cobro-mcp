@@ -113,7 +113,7 @@ test('one-line pass-through wrapper: source is the wrapper line, callers carry t
   if (r.status !== 'sent') return;
   const el = r.payload.batches[0]!.elements[0]!;
   expect(el.react).toEqual({ component: 'Button', source: 'src/ui/Button.jsx:2', callers: ['src/react.jsx:4'] });
-  expect(JSON.stringify(r.payload)).not.toContain('callerFrames');
+  expect(JSON.stringify(r.payload)).not.toContain('callerLocs');
   expect(JSON.stringify(r.payload)).not.toContain('"frame"');
 });
 

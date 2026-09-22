@@ -45,9 +45,10 @@ export function resolveOriginal(mapJson: unknown, opts: { moduleUrl: string; map
   return `${path}:${pos.line}`;
 }
 
-/** react·vue를 페이로드용으로 클램프한다(R112·R65·R146·R159 계약) — frame·callerLocs는 항상 제거, component가 문자열이
- * 아니면 키 자체를 삭제, component·source는 200자로, callers는 문자열만 남겨 앞 2개까지 각 200자로 줄인다.
- * 클램프로 바뀌는 게 없으면 원본 참조를 그대로 둔다(바이트 동일) */
+/** react·vue를 페이로드용으로 클램프한다(R112·R65·R146·R159 계약) — frame·callerLocs·알 수 없는 키는 항상 제거,
+ * component가 문자열이 아니면 키 자체를 삭제, component·source는 200자로, callers는 문자열만 남겨 앞 2개까지
+ * 각 200자로 줄인다. 항상 재구성한다(Task 64 M1) — 원본 참조를 돌려주면 빈 callers·구버전 callerFrames·
+ * 알 수 없는 키가 그대로 새어 나간다(옛 세션 복원·페이지 주입 경로) */
 export function stripFrame(e: ElementInfo): ElementInfo {
   let out = e;
   for (const key of FRAMEWORK_KEYS) {
@@ -59,18 +60,12 @@ export function stripFrame(e: ElementInfo): ElementInfo {
       out = rest;
       continue;
     }
-    const component = info.component.slice(0, 200);
-    const source = typeof info.source === 'string' ? info.source.slice(0, 200) : undefined;
-    const callers = Array.isArray(info.callers)
-      ? info.callers.filter((c): c is string => typeof c === 'string').map((c) => c.slice(0, 200)).slice(0, 2)
-      : [];
-    const unchanged = component === info.component && source === info.source
-      && info.frame === undefined && info.callerLocs === undefined
-      && callers.length === (info.callers?.length ?? 0) && callers.every((c, i) => c === info.callers![i]);
-    if (unchanged) continue;
-    const rest: ComponentInfo = { component };
-    if (source !== undefined) rest.source = source;
-    if (callers.length) rest.callers = callers;
+    const rest: ComponentInfo = { component: info.component.slice(0, 200) };
+    if (typeof info.source === 'string') rest.source = info.source.slice(0, 200);
+    if (Array.isArray(info.callers)) {
+      const callers = info.callers.filter((c): c is string => typeof c === 'string').map((c) => c.slice(0, 200)).slice(0, 2);
+      if (callers.length) rest.callers = callers;
+    }
     out = { ...out, [key]: rest };
   }
   return out;
