@@ -6,6 +6,9 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Changed
 - MCP instructions reorganized into 8 short lines (payload reading and ref/region conventions on separate lines); same rules, about 17% shorter.
 
+### Fixed
+- The server now exits when its stdin is a redirected file (EOF without close), not only a pipe.
+
 ## [0.9.2] — 2026-09-22
 ### Added
 - MCP tool annotations (readOnlyHint / destructiveHint / idempotentHint / openWorldHint) on all six tools, so clients can tell which calls are safe to run unattended: wait is read-only, close is destructive, done and screenshot are not idempotent, open reaches the network.
