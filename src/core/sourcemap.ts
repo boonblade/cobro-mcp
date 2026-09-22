@@ -45,15 +45,32 @@ export function resolveOriginal(mapJson: unknown, opts: { moduleUrl: string; map
   return `${path}:${pos.line}`;
 }
 
-/** react·vue 어느 쪽 frame·callerLocs도 페이로드로 내보내지 않는다(R112·R65·R146 계약 불변) — 둘 다 없으면 바이트 동일 */
+/** react·vue를 페이로드용으로 클램프한다(R112·R65·R146·R159 계약) — frame·callerLocs는 항상 제거, component가 문자열이
+ * 아니면 키 자체를 삭제, component·source는 200자로, callers는 문자열만 남겨 앞 2개까지 각 200자로 줄인다.
+ * 클램프로 바뀌는 게 없으면 원본 참조를 그대로 둔다(바이트 동일) */
 export function stripFrame(e: ElementInfo): ElementInfo {
   let out = e;
   for (const key of FRAMEWORK_KEYS) {
     const info = out[key];
-    if (!info?.frame && !info?.callerLocs) continue;
-    const rest: ComponentInfo = { component: info.component };
-    if (info.source) rest.source = info.source;
-    if (info.callers?.length) rest.callers = info.callers;
+    if (!info) continue;
+    if (typeof info.component !== 'string') {
+      const rest = { ...out };
+      delete rest[key];
+      out = rest;
+      continue;
+    }
+    const component = info.component.slice(0, 200);
+    const source = typeof info.source === 'string' ? info.source.slice(0, 200) : undefined;
+    const callers = Array.isArray(info.callers)
+      ? info.callers.filter((c): c is string => typeof c === 'string').map((c) => c.slice(0, 200)).slice(0, 2)
+      : [];
+    const unchanged = component === info.component && source === info.source
+      && info.frame === undefined && info.callerLocs === undefined
+      && callers.length === (info.callers?.length ?? 0) && callers.every((c, i) => c === info.callers![i]);
+    if (unchanged) continue;
+    const rest: ComponentInfo = { component };
+    if (source !== undefined) rest.source = source;
+    if (callers.length) rest.callers = callers;
     out = { ...out, [key]: rest };
   }
   return out;
