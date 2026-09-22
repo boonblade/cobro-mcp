@@ -8,13 +8,16 @@ import { uniqueSelector } from './selector.js';
 import { detectStrategy, applyDone } from './refresh.js';
 import { resolveTheme } from './theme.js';
 import { isChildRef } from './refs.js';
+import { setProjectRoot } from './frameworks/index.js';
 
 declare const __COBRO_PORT__: number;
 declare const __COBRO_TOKEN__: string;
+declare const __COBRO_ROOT__: string;
 
 (() => {
   if (window.top !== window) return; // iframe은 첫 버전 범위 밖
   const PORT = __COBRO_PORT__; const TOKEN = __COBRO_TOKEN__;
+  setProjectRoot(__COBRO_ROOT__);
 
   // init script는 document가 아직 없을 수 있는 시점에 돈다 → DOM 준비 후에만 documentElement를 만진다
   const boot = () => {

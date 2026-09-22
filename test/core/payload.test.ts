@@ -52,7 +52,7 @@ describe('buildPayload', () => {
       batches: [{ id: 'b', note: 'n', status: 'sent', createdAt: 't', elements: [withFrame, noFrame] }],
     });
     expect(p.batches[0]!.elements[0]!.react).toEqual({ component: 'Cta', source: 'src/react.jsx:4' });
-    expect(p.batches[0]!.elements[1]).toBe(noFrame);
+    expect(p.batches[0]!.elements[1]).toEqual(noFrame); // Task 64 M1: stripFrame이 항상 재구성하므로 참조는 더는 보존되지 않는다(값은 동일)
   });
 
   it('T1: passes ref through untouched on elements and regions, and refSeq is excluded (R127)', () => {
@@ -76,5 +76,76 @@ describe('buildPayload', () => {
     });
     expect(p.batches[0]!.elements[0]!.vue).toEqual({ component: 'Cta', source: 'src/Cta.vue' });
     expect(JSON.stringify(p)).not.toContain('"frame"');
+  });
+
+  it('R159 (a): clamps component/source to 200 chars and callers to the first 2, each clamped to 200 chars', () => {
+    const el = {
+      selector: '#a', tag: 'button', classes: [], text: '', rect: { x: 0, y: 0, w: 0, h: 0 }, styles: {},
+      react: {
+        component: 'C'.repeat(300), source: 'S'.repeat(300),
+        callers: ['a'.repeat(250), 'b'.repeat(250), 'c'.repeat(250), 'd'.repeat(250)],
+      },
+    };
+    const p = buildPayload({
+      page, refreshStrategy: 'none', console: [], now: new Date('2026-09-08T00:00:00Z'),
+      batches: [{ id: 'b', note: 'n', status: 'sent', createdAt: 't', elements: [el] }],
+    });
+    const react = p.batches[0]!.elements[0]!.react!;
+    expect(react.component).toBe('C'.repeat(200));
+    expect(react.source).toBe('S'.repeat(200));
+    expect(react.callers).toEqual(['a'.repeat(200), 'b'.repeat(200)]);
+  });
+
+  it('R159 (b): drops a non-string source, keeps only string entries in callers', () => {
+    const el = {
+      selector: '#a', tag: 'button', classes: [], text: '', rect: { x: 0, y: 0, w: 0, h: 0 }, styles: {},
+      react: { component: 'X', source: 42, callers: ['ok', 7, 'x'] },
+    } as unknown as { selector: string; tag: string; classes: string[]; text: string; rect: { x: number; y: number; w: number; h: number }; styles: Record<string, string>; react: unknown };
+    const p = buildPayload({
+      page, refreshStrategy: 'none', console: [], now: new Date('2026-09-08T00:00:00Z'),
+      batches: [{ id: 'b', note: 'n', status: 'sent', createdAt: 't', elements: [el as never] }],
+    });
+    const react = p.batches[0]!.elements[0]!.react!;
+    expect('source' in react).toBe(false);
+    expect(react.callers).toEqual(['ok', 'x']);
+  });
+
+  it('R159 (c): drops the whole react/vue key when component is not a string', () => {
+    const el = {
+      selector: '#a', tag: 'button', classes: [], text: '', rect: { x: 0, y: 0, w: 0, h: 0 }, styles: {},
+      react: { component: 7 }, vue: {},
+    } as unknown as { selector: string; tag: string; classes: string[]; text: string; rect: { x: number; y: number; w: number; h: number }; styles: Record<string, string>; react: unknown; vue: unknown };
+    const p = buildPayload({
+      page, refreshStrategy: 'none', console: [], now: new Date('2026-09-08T00:00:00Z'),
+      batches: [{ id: 'b', note: 'n', status: 'sent', createdAt: 't', elements: [el as never] }],
+    });
+    expect('react' in p.batches[0]!.elements[0]!).toBe(false);
+    expect('vue' in p.batches[0]!.elements[0]!).toBe(false);
+  });
+
+  it('R159 (M1): an empty callers array is omitted, not sent as "callers":[]', () => {
+    const el = {
+      selector: '#a', tag: 'button', classes: [], text: '', rect: { x: 0, y: 0, w: 0, h: 0 }, styles: {},
+      react: { component: 'X', callers: [] },
+    };
+    const p = buildPayload({
+      page, refreshStrategy: 'none', console: [], now: new Date('2026-09-08T00:00:00Z'),
+      batches: [{ id: 'b', note: 'n', status: 'sent', createdAt: 't', elements: [el] }],
+    });
+    expect('callers' in p.batches[0]!.elements[0]!.react!).toBe(false);
+  });
+
+  it('R159 (M1): drops an old-shape callerFrames field and unknown extra keys from a restored session', () => {
+    const el = {
+      selector: '#a', tag: 'button', classes: [], text: '', rect: { x: 0, y: 0, w: 0, h: 0 }, styles: {},
+      react: { component: 'X', callerFrames: [{ url: 'http://x/a.js', line: 1, col: 2 }], extra: 1 },
+    } as unknown as { selector: string; tag: string; classes: string[]; text: string; rect: { x: number; y: number; w: number; h: number }; styles: Record<string, string>; react: unknown };
+    const p = buildPayload({
+      page, refreshStrategy: 'none', console: [], now: new Date('2026-09-08T00:00:00Z'),
+      batches: [{ id: 'b', note: 'n', status: 'sent', createdAt: 't', elements: [el as never] }],
+    });
+    const react = p.batches[0]!.elements[0]!.react!;
+    expect('callerFrames' in react).toBe(false);
+    expect('extra' in react).toBe(false);
   });
 });

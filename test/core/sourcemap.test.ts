@@ -111,6 +111,20 @@ describe('resolveOriginal — sectioned map + file: root (R151·R152)', () => {
     });
     expect(source).toBeUndefined();
   });
+
+  it('⑧ project root itself sits under node_modules — a file inside root still resolves (R157)', () => {
+    const source = resolveOriginal(fileMap('file:///C:/mono/node_modules/@scope/app/src/App.tsx'), {
+      moduleUrl: 'http://x/app.js', line: 1, col: 1, root: 'C:/mono/node_modules/@scope/app',
+    });
+    expect(source).toBe('src/App.tsx:1');
+  });
+
+  it('⑨ a node_modules segment inside root is still a library, even after /src/ normalization (R157)', () => {
+    const source = resolveOriginal(fileMap('file:///C:/mono/node_modules/.pnpm/lib/src/index.js'), {
+      moduleUrl: 'http://x/app.js', line: 1, col: 1, root: 'C:/mono/packages/app',
+    });
+    expect(source).toBeUndefined();
+  });
 });
 
 function makeElement(react: ElementInfo['react']): ElementInfo {
@@ -118,21 +132,21 @@ function makeElement(react: ElementInfo['react']): ElementInfo {
 }
 
 describe('stripFrame with callers (R144·R146)', () => {
-  it('drops callerFrames but keeps callers', () => {
+  it('drops callerLocs but keeps callers', () => {
     const e = makeElement({
       component: 'Button', source: 'src/ui/Button.jsx:2',
       frame: { url: 'http://x/src/main.jsx', line: 3, col: 10 },
       callers: ['src/react.jsx:4'],
-      callerFrames: [{ url: 'http://x/src/main.jsx', line: 3, col: 10 }],
+      callerLocs: [{ url: 'http://x/src/main.jsx', line: 3, col: 10 }],
     });
     const out = stripFrame(e);
     expect(out.react).toEqual({ component: 'Button', source: 'src/ui/Button.jsx:2', callers: ['src/react.jsx:4'] });
-    expect(JSON.stringify(out)).not.toContain('callerFrames');
+    expect(JSON.stringify(out)).not.toContain('callerLocs');
     expect(JSON.stringify(out)).not.toContain('"frame"');
   });
 });
 
-describe('resolveElementSources with callerFrames (R146)', () => {
+describe('resolveElementSources with callerLocs (R146·R158)', () => {
   const page: PageInfo = { url: 'http://x/', title: 'X', viewport: { w: 1, h: 1 } };
   const moduleText = 'console.log(1);\n//# sourceMappingURL=main.jsx.map';
   // resolveOriginal 위쪽 describe와 같은 esbuild 픽스처(재사용, 로컬 스코프라 복제)
@@ -144,13 +158,13 @@ describe('resolveElementSources with callerFrames (R146)', () => {
     names: [],
   };
 
-  it('resolves callerFrames into callers, excluding a value equal to source', async () => {
+  it('resolves callerLocs Frames into callers, excluding a value equal to source', async () => {
     // line 3 col 10 => src/main.jsx:2 (same as source, excluded) / line 2 col 0 => src/main.jsx:1 (kept)
     const batch: Batch = {
       id: 'b1', note: '', status: 'draft', createdAt: '',
       elements: [makeElement({
         component: 'Button', source: 'src/main.jsx:2',
-        callerFrames: [
+        callerLocs: [
           { url: 'http://x/src/main.jsx', line: 3, col: 10 },
           { url: 'http://x/src/main.jsx', line: 2, col: 1 },
         ],
@@ -166,13 +180,13 @@ describe('resolveElementSources with callerFrames (R146)', () => {
     expect(react.callers).toEqual(['src/main.jsx:1']);
   });
 
-  it('skips a callerFrame whose module fetch fails, keeping order of the other two (M3)', async () => {
+  it('skips a callerLocs Frame whose module fetch fails, keeping order of the other two (M3)', async () => {
     // frame 1 => src/main.jsx:1 / frame 2 => fetch 실패(건너뜀) / frame 3 => src/main.jsx:2
     const batch: Batch = {
       id: 'b2', note: '', status: 'draft', createdAt: '',
       elements: [makeElement({
         component: 'Button', source: 'src/other/place.jsx:5',
-        callerFrames: [
+        callerLocs: [
           { url: 'http://x/src/main.jsx', line: 2, col: 1 },
           { url: 'http://x/src/other.jsx', line: 1, col: 1 },
           { url: 'http://x/src/main.jsx', line: 3, col: 10 },
@@ -188,5 +202,41 @@ describe('resolveElementSources with callerFrames (R146)', () => {
     await resolveElementSources(batch, page, fetchText);
     const react = batch.elements[0]!.react!;
     expect(react.callers).toEqual(['src/main.jsx:1', 'src/main.jsx:2']);
+  });
+
+  it('resolves callerLocs in order, a Frame before a string entry (R158)', async () => {
+    // Frame(line 2, col 1) => src/main.jsx:1 / string 'src/other.jsx:9' — 프레임이 문자열보다 먼저 온다
+    const batch: Batch = {
+      id: 'b3', note: '', status: 'draft', createdAt: '',
+      elements: [makeElement({
+        component: 'Button', source: 'src/x.jsx:1',
+        callerLocs: [
+          { url: 'http://x/src/main.jsx', line: 2, col: 1 },
+          'src/other.jsx:9',
+        ],
+      })],
+    };
+    const fetchText = async (url: string) => {
+      if (url === 'http://x/src/main.jsx') return moduleText;
+      if (url === 'http://x/src/main.jsx.map') return JSON.stringify(map);
+      return undefined;
+    };
+    await resolveElementSources(batch, page, fetchText);
+    const react = batch.elements[0]!.react!;
+    expect(react.callers).toEqual(['src/main.jsx:1', 'src/other.jsx:9']);
+  });
+
+  it('ignores page-provided react.callers and rebuilds strictly from callerLocs (R158)', async () => {
+    const batch: Batch = {
+      id: 'b4', note: '', status: 'draft', createdAt: '',
+      elements: [
+        makeElement({ component: 'Button', source: 'src/x.jsx:1', callers: ['evil:1'], callerLocs: ['src/a.jsx:1'] }),
+        makeElement({ component: 'Button', source: 'src/x.jsx:1', callers: ['evil:1'] }),
+      ],
+    };
+    const fetchText = async () => undefined;
+    await resolveElementSources(batch, page, fetchText);
+    expect(batch.elements[0]!.react!.callers).toEqual(['src/a.jsx:1']);
+    expect('callers' in batch.elements[1]!.react!).toBe(false);
   });
 });

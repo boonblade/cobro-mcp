@@ -14,3 +14,20 @@ export function pickUserFrame(stack: string): { url: string; line: number; col: 
   const frame = frames.find((f) => !REACT_INTERNAL_FN.test(f.fn) && !NODE_MODULES_URL.test(f.url));
   return frame ? { url: frame.url, line: frame.line, col: frame.col } : null;
 }
+
+/** Windows 드라이브 선행 슬래시("/C:/x" → "C:/x")를 제거하고 백슬래시를 슬래시로 바꾼다(R152). 드라이브 문자는 소문자로 맞춘다(M1) — 경로 나머지는 대소문자 유지 */
+export function normalizeDrivePath(path: string): string {
+  return path.replace(/\\/g, '/').replace(/^\/?([a-zA-Z]):\//, (_, drive: string) => `${drive.toLowerCase()}:/`);
+}
+
+/** path가 root 아래·root 밖의 라이브러리(node_modules)인지 판정한다(R157) — root가 있으면 root 접두를 뗀 상대경로로,
+ * 없으면 절대경로 그대로 검사해 루트 자체가 node_modules 아래(예: 모노레포 패키지) 있어도 오판하지 않는다 */
+export function isLibraryPath(path: string, root?: string): boolean {
+  const norm = normalizeDrivePath(path);
+  let rel = norm;
+  if (root) {
+    const r = normalizeDrivePath(root).replace(/\/+$/, '');
+    if (norm.startsWith(`${r}/`)) rel = norm.slice(r.length + 1);
+  }
+  return /(^|\/)node_modules\//.test(rel);
+}

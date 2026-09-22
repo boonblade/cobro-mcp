@@ -1,6 +1,7 @@
 // React 19 react.source 복원(R112) — 오버레이는 _debugStack 프레임만 싣고, 서버가 소스맵으로 역변환한다
 // pickUserFrame은 의존성 0인 ./frame.js에 있다(I3) — 여기서 재수출하지 않는다(overlay 번들에 trace-mapping 유입 방지)
 import { FlattenMap, originalPositionFor, TraceMap } from '@jridgewell/trace-mapping';
+import { isLibraryPath, normalizeDrivePath } from './frame.js';
 import type { Batch, ComponentInfo, ElementInfo, Frame, PageInfo } from './types.js';
 
 const FRAMEWORK_KEYS = ['react', 'vue'] as const;
@@ -16,14 +17,8 @@ export function findSourceMapUrl(moduleText: string, moduleUrl: string): string 
   try { return new URL(last, moduleUrl).href; } catch { return undefined; }
 }
 
-/** Windows 드라이브 선행 슬래시("/C:/x" → "C:/x")를 제거하고 백슬래시를 슬래시로 바꾼다(R152). 드라이브 문자는 소문자로 맞춘다(M1) — 경로 나머지는 대소문자 유지 */
-function normalizeDrivePath(path: string): string {
-  return path.replace(/\\/g, '/').replace(/^\/?([a-zA-Z]):\//, (_, drive: string) => `${drive.toLowerCase()}:/`);
-}
-
-/** file: 원본을 프로젝트 루트 상대경로로 줄인다(R152) — root 접두 제거 → 실패 시 `/src/` 폴백 → 그것도 없으면 절대경로 그대로 */
-function normalizeFileSource(pathname: string, root: string | undefined): string {
-  const path = normalizeDrivePath(decodeURIComponent(pathname));
+/** file: 원본을 프로젝트 루트 상대경로로 줄인다(R152) — 이미 정규화된 절대경로(abs)를 받는다. root 접두 제거 → 실패 시 `/src/` 폴백 → 그것도 없으면 절대경로 그대로 */
+function normalizeFileSource(path: string, root: string | undefined): string {
   if (root) {
     const r = normalizeDrivePath(root).replace(/\/+$/, '');
     if (path === r) return '';
@@ -42,20 +37,35 @@ export function resolveOriginal(mapJson: unknown, opts: { moduleUrl: string; map
   if (!pos.source || pos.line == null) return undefined;
   let url: URL;
   try { url = new URL(pos.source); } catch { return undefined; }
-  const path = (url.protocol === 'file:' ? normalizeFileSource(url.pathname, opts.root) : decodeURIComponent(url.pathname).replace(/^\/+/, '')).split('?')[0]!;
-  if (!path || path.includes('node_modules/') || path.split('/').includes('..') || /[\x00-\x1f]/.test(path)) return undefined;
+  const raw = decodeURIComponent(url.pathname);
+  const abs = url.protocol === 'file:' ? normalizeDrivePath(raw) : raw.replace(/^\/+/, '');
+  if (isLibraryPath(abs, opts.root)) return undefined; // R157: 라이브러리 판정은 /src/ 폴백 전에, 프로젝트 루트 기준으로
+  const path = (url.protocol === 'file:' ? normalizeFileSource(abs, opts.root) : abs).split('?')[0]!;
+  if (!path || path.split('/').includes('..') || /[\x00-\x1f]/.test(path)) return undefined;
   return `${path}:${pos.line}`;
 }
 
-/** react·vue 어느 쪽 frame·callerFrames도 페이로드로 내보내지 않는다(R112·R65·R146 계약 불변) — 둘 다 없으면 바이트 동일 */
+/** react·vue를 페이로드용으로 클램프한다(R112·R65·R146·R159 계약) — frame·callerLocs·알 수 없는 키는 항상 제거,
+ * component가 문자열이 아니면 키 자체를 삭제, component·source는 200자로, callers는 문자열만 남겨 앞 2개까지
+ * 각 200자로 줄인다. 항상 재구성한다(Task 64 M1) — 원본 참조를 돌려주면 빈 callers·구버전 callerFrames·
+ * 알 수 없는 키가 그대로 새어 나간다(옛 세션 복원·페이지 주입 경로) */
 export function stripFrame(e: ElementInfo): ElementInfo {
   let out = e;
   for (const key of FRAMEWORK_KEYS) {
     const info = out[key];
-    if (!info?.frame && !info?.callerFrames) continue;
-    const rest: ComponentInfo = { component: info.component };
-    if (info.source) rest.source = info.source;
-    if (info.callers?.length) rest.callers = info.callers;
+    if (!info) continue;
+    if (typeof info.component !== 'string') {
+      const rest = { ...out };
+      delete rest[key];
+      out = rest;
+      continue;
+    }
+    const rest: ComponentInfo = { component: info.component.slice(0, 200) };
+    if (typeof info.source === 'string') rest.source = info.source.slice(0, 200);
+    if (Array.isArray(info.callers)) {
+      const callers = info.callers.filter((c): c is string => typeof c === 'string').map((c) => c.slice(0, 200)).slice(0, 2);
+      if (callers.length) rest.callers = callers;
+    }
     out = { ...out, [key]: rest };
   }
   return out;
@@ -93,7 +103,8 @@ async function resolveFrame(frame: Frame, page: PageInfo, fetchText: (url: strin
   }
 }
 
-/** frame이 있고 source가 없는 요소마다 소스맵을 해석해 e.react.source를 채우고, callerFrames를 같은 방식으로 풀어 callers에 싣는다(R146) */
+/** frame이 있고 source가 없는 요소마다 소스맵을 해석해 e.react.source를 채우고, callerLocs를 만난 순서대로 풀어 react.callers를 새로 만든다(R146·R158) —
+ * 페이지가 보낸 react.callers는 읽지 않는다(스펙 §6: 페이지에서 온 것은 데이터) */
 export async function resolveElementSources(batch: Batch, page: PageInfo, fetchText: (url: string) => Promise<string | undefined>, opts?: { root?: string }): Promise<void> {
   const root = opts?.root;
   for (const e of batch.elements) {
@@ -103,15 +114,13 @@ export async function resolveElementSources(batch: Batch, page: PageInfo, fetchT
       const source = await resolveFrame(react.frame, page, fetchText, root);
       if (source) react.source = source;
     }
-    if (react.callerFrames?.length) {
-      const callers = react.callers ? [...react.callers] : [];
-      for (const frame of react.callerFrames) {
-        if (callers.length >= 2) break;
-        const source = await resolveFrame(frame, page, fetchText, root);
-        if (!source || source === react.source || callers.includes(source)) continue; // M2: caller끼리 중복 제거
-        callers.push(source);
-      }
-      if (callers.length) react.callers = callers; else delete react.callers;
+    const callers: string[] = [];
+    for (const loc of react.callerLocs ?? []) {
+      if (callers.length >= 2) break;
+      const s = typeof loc === 'string' ? loc : await resolveFrame(loc, page, fetchText, root);
+      if (!s || s === react.source || callers.includes(s)) continue; // M2: caller끼리 중복 제거
+      callers.push(s);
     }
+    if (callers.length) react.callers = callers; else delete react.callers;
   }
 }
