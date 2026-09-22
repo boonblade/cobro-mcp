@@ -6,6 +6,7 @@ afterEach(() => {
   for (const k of Object.keys(window)) {
     if (k.startsWith('webpackHotUpdate')) delete (window as unknown as Record<string, unknown>)[k];
   }
+  delete (window as unknown as Record<string, unknown>)['TURBOPACK_CHUNK_UPDATE_LISTENERS'];
 });
 
 describe('detectStrategy', () => {
@@ -21,6 +22,17 @@ describe('detectStrategy', () => {
 
   it('reload otherwise', () => {
     expect(detectStrategy()).toBe('reload');
+  });
+
+  it('none when Turbopack HMR global exists', () => {
+    (window as unknown as Record<string, unknown>)['TURBOPACK_CHUNK_UPDATE_LISTENERS'] = [];
+    expect(detectStrategy()).toBe('none');
+  });
+
+  it('none when Turbopack hmr-client script exists', () => {
+    document.head.innerHTML =
+      '<script src="/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0yjw1oe._.js"></script>';
+    expect(detectStrategy()).toBe('none');
   });
 });
 
