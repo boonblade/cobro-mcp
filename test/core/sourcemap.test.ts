@@ -53,6 +53,66 @@ describe('resolveOriginal', () => {
   });
 });
 
+describe('resolveOriginal — sectioned map + file: root (R151·R152)', () => {
+  // sections[0]은 빈 매핑(자리만 차지), sections[1]이 offset.line=5로 실제 위치를 담는다 —
+  // FlattenMap이 offset을 더해 전체를 한 TraceMap으로 합치므로, 생성 위치 line 8(=5+3)에서 조회한다
+  it('① resolves a position inside the second section of a sectioned (indexed) source map', () => {
+    const sectioned = {
+      version: 3,
+      sections: [
+        { offset: { line: 0, column: 0 }, map: { version: 3, sources: ['a.js'], sourcesContent: [''], names: [], mappings: [[]] } },
+        { offset: { line: 5, column: 0 }, map: { version: 3, sources: ['sectioned/b.jsx'], sourcesContent: ['b'], names: [], mappings: [[], [], [[0, 0, 0, 0]]] } },
+      ],
+    };
+    const source = resolveOriginal(sectioned, { moduleUrl: 'http://x/app.js', line: 8, col: 1 });
+    expect(source).toBe('sectioned/b.jsx:1');
+  });
+
+  const fileMap = (source: string) => ({ version: 3, sources: [source], sourcesContent: [''], names: [], mappings: [[[0, 0, 0, 0]]] });
+
+  it('② file: with a forward-slash root under it → project-relative path', () => {
+    const source = resolveOriginal(fileMap('file:///C:/x/proj/src/a.tsx'), {
+      moduleUrl: 'http://x/app.js', line: 1, col: 1, root: 'C:/x/proj',
+    });
+    expect(source).toBe('src/a.tsx:1');
+  });
+
+  it('③ file: with a backslash root under it → project-relative path', () => {
+    const source = resolveOriginal(fileMap('file:///C:/x/proj/frontend/src/app/p.tsx'), {
+      moduleUrl: 'http://x/app.js', line: 1, col: 1, root: 'C:\\x\\proj',
+    });
+    expect(source).toBe('frontend/src/app/p.tsx:1');
+  });
+
+  it('④ file: outside root falls back to the /src/ segment', () => {
+    const source = resolveOriginal(fileMap('file:///D:/other/src/b.tsx'), {
+      moduleUrl: 'http://x/app.js', line: 1, col: 1, root: 'C:/x/proj',
+    });
+    expect(source).toBe('src/b.tsx:1');
+  });
+
+  it('⑤ POSIX file: under a POSIX root → project-relative path', () => {
+    const source = resolveOriginal(fileMap('file:///home/u/proj/src/a.tsx'), {
+      moduleUrl: 'http://x/app.js', line: 1, col: 1, root: '/home/u/proj',
+    });
+    expect(source).toBe('src/a.tsx:1');
+  });
+
+  it('⑦ Windows drive letter case is ignored when matching root (M1)', () => {
+    const source = resolveOriginal(fileMap('file:///c:/x/proj/frontend/src/a.tsx'), {
+      moduleUrl: 'http://x/app.js', line: 1, col: 1, root: 'C:\\x\\proj',
+    });
+    expect(source).toBe('frontend/src/a.tsx:1');
+  });
+
+  it('⑥ node_modules filter still applies after file: normalization', () => {
+    const source = resolveOriginal(fileMap('file:///C:/x/proj/node_modules/lib/x.js'), {
+      moduleUrl: 'http://x/app.js', line: 1, col: 1,
+    });
+    expect(source).toBeUndefined();
+  });
+});
+
 function makeElement(react: ElementInfo['react']): ElementInfo {
   return { selector: '#x', tag: 'button', classes: [], text: '', rect: { x: 0, y: 0, w: 0, h: 0 }, styles: {}, react };
 }

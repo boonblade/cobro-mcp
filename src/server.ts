@@ -65,7 +65,7 @@ const bridge = await createBridge({
   store, token, settingsFile, envTheme,
   screenshot: async (b) => launcher?.isAlive() ? launcher.screenshot({ rect: union([...b.elements.filter((e) => !e.missing).map((e) => e.rect), ...(b.regions ?? []).map((r) => r.rect)]), outPath: store.shotPath(b.id) }) : undefined,
   consoleEntries: () => launcher?.consoleEntries() ?? [],
-  resolveSource: (b, page) => resolveElementSources(b, page, cachedFetchText),
+  resolveSource: (b, page) => resolveElementSources(b, page, cachedFetchText, { root: process.cwd() }),
 });
 const fixed = configStrategy();
 if (fixed) bridge.core.setStrategy(fixed);
