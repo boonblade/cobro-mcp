@@ -24,8 +24,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - React: `react.source` now points at the picked element's own JSX line when that line is in your code. Previously it was the nearest component's call site — for elements written directly inside a page component (e.g. Next.js app router pages) that was the mount point or nothing. The component call site is still available as `react.callers[0]`.
 
 ### Fixed
-- React: elements rendered by a component library (MUI, Radix, …) now resolve react.source to the JSX call site in your code instead of losing the location (React 19) or pointing into node_modules (React ≤18).
-- React: when the element sits under a one-line pass-through wrapper you wrote around a library component, the payload now carries the call sites above it (`react.callers`, up to 2), so the agent isn't stranded on a file with nothing to change. Reported by u/QuanTradin on r/mcp, along with the component-library case above.
+- React: elements rendered by a component library (MUI, Radix, …) now resolve react.source to the JSX call site in your code instead of losing the location (React 19) or pointing into node_modules (React ≤18). Reported by u/QuanTradin (r/mcp).
+- React: when the element sits under a one-line pass-through wrapper you wrote around a library component, the payload now carries the call sites above it (`react.callers`, up to 2), so the agent isn't stranded on a file with nothing to change. Reported by u/QuanTradin (r/mcp).
 - React on Next.js (Turbopack): sectioned source maps are now resolved and `file://` sources are reported relative to the project root, so elements on app-router pages get a `react.source` (previously nothing).
 - Next.js (Turbopack) dev servers are now detected as hot-reloading, so `done` no longer reloads the page.
 
