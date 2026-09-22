@@ -1,4 +1,4 @@
-import { pickUserFrame } from '../../core/frame.js';
+import { isLibraryPath, pickUserFrame } from '../../core/frame.js';
 import type { Frame } from '../../core/types.js';
 import type { FrameworkAdapter } from './types.js';
 
@@ -10,16 +10,16 @@ type Fiber = {
 
 type ReactInfo = { component: string; source?: string; frame?: Frame; callers?: string[]; callerFrames?: Frame[] };
 
-/** f의 사용자 코드 위치(_debugSource 우선, 없으면 _debugStack). node_modules·못 찾으면 undefined */
-function userLoc(f: Fiber): string | Frame | undefined {
+/** f의 사용자 코드 위치(_debugSource 우선, 없으면 _debugStack). 라이브러리(root 기준)·못 찾으면 undefined */
+function userLoc(f: Fiber, root: string | undefined): string | Frame | undefined {
   const src = f._debugSource;
-  const fileName = src?.fileName?.replace(/\\/g, '/');
-  if (fileName && !fileName.includes('node_modules/')) return `${src!.fileName}${src!.lineNumber ? ':' + src!.lineNumber : ''}`;
+  const fileName = src?.fileName;
+  if (fileName && !isLibraryPath(fileName, root)) return `${fileName}${src!.lineNumber ? ':' + src!.lineNumber : ''}`;
   const stack = typeof f._debugStack === 'string' ? f._debugStack : f._debugStack?.stack;
   return stack ? (pickUserFrame(stack) ?? undefined) : undefined;
 }
 
-function reactInfo(el: Element): ReactInfo | undefined {
+function reactInfo(el: Element, root: string | undefined): ReactInfo | undefined {
   const key = Object.keys(el).find((k) => k.startsWith('__reactFiber$'));
   if (!key) return undefined;
   let f = (el as unknown as Record<string, Fiber | undefined>)[key] ?? null;
@@ -44,25 +44,25 @@ function reactInfo(el: Element): ReactInfo | undefined {
     const t = f.type as { name?: string; displayName?: string } | string | undefined;
     const name = t && typeof t !== 'string' ? t.displayName || t.name : undefined;
     if (loc === undefined) {
-      const l = userLoc(f);
+      const l = userLoc(f, root);
       if (l !== undefined) { loc = l; component = name; continue; }
       if (name) fallback ??= { component: name };
       continue;
     }
     if (!name) { // R150: hit 위 이름 없는 호스트는 callers 대상 아님
-      if ((f._debugSource !== undefined || f._debugStack !== undefined) && userLoc(f) === undefined) libBelow = true;
+      if ((f._debugSource !== undefined || f._debugStack !== undefined) && userLoc(f, root) === undefined) libBelow = true;
       continue;
     }
     if (component === undefined) {
       // R153: libBelow 상태에서 자기 위치도 node_modules면 라이브러리 내부 레이어 — component로 쓰지 않는다
-      if (libBelow && userLoc(f) === undefined) continue;
+      if (libBelow && userLoc(f, root) === undefined) continue;
       component = name;
-      const l = userLoc(f);
+      const l = userLoc(f, root);
       if (l !== undefined) pending = l;
       continue;
     }
     if (pending !== undefined) { commit(pending); pending = undefined; }
-    const l = userLoc(f);
+    const l = userLoc(f, root);
     if (l !== undefined) pending = l;
   }
   if (loc === undefined) return fallback;

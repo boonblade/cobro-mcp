@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pickUserFrame } from '../../src/core/frame.js';
+import { isLibraryPath, pickUserFrame } from '../../src/core/frame.js';
 
 describe('pickUserFrame', () => {
   it('picks the first user frame after esbuild jsxDEV/react_stack_bottom_frame', () => {
@@ -39,5 +39,35 @@ describe('pickUserFrame', () => {
 
     const withUserFrame = libOnly + '\n' + 'at Page (http://localhost:3001/_next/static/chunks/src_0.rza82._.js:506:20)';
     expect(pickUserFrame(withUserFrame)).toEqual({ url: 'http://localhost:3001/_next/static/chunks/src_0.rza82._.js', line: 506, col: 20 });
+  });
+});
+
+describe('isLibraryPath (R157)', () => {
+  it('(a) project root itself sits under node_modules — a file inside root is not a library', () => {
+    expect(isLibraryPath('C:\\mono\\node_modules\\@scope\\app\\src\\App.jsx', 'c:/mono/node_modules/@scope/app')).toBe(false);
+  });
+
+  it('(b) a node_modules segment above the given root is a library', () => {
+    expect(isLibraryPath('C:\\mono\\node_modules\\@scope\\app\\src\\App.jsx', 'C:/mono')).toBe(true);
+  });
+
+  it('(c) without a root, any node_modules segment is a library', () => {
+    expect(isLibraryPath('C:\\mono\\node_modules\\@scope\\app\\src\\App.jsx', undefined)).toBe(true);
+  });
+
+  it('(d) a path under root with no node_modules segment is not a library', () => {
+    expect(isLibraryPath('/home/u/proj/src/vendor/x.js', '/home/u/proj')).toBe(false);
+  });
+
+  it('(e) a node_modules segment inside root (nested package) is a library', () => {
+    expect(isLibraryPath('/home/u/proj/packages/a/node_modules/lib/x.js', '/home/u/proj')).toBe(true);
+  });
+
+  it('(f) relative path with node_modules segment, no root, is a library', () => {
+    expect(isLibraryPath('node_modules/fake-ui/index.js', undefined)).toBe(true);
+  });
+
+  it('(g) relative path without node_modules segment is not a library', () => {
+    expect(isLibraryPath('src/main.jsx', undefined)).toBe(false);
   });
 });

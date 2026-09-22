@@ -111,6 +111,20 @@ describe('resolveOriginal — sectioned map + file: root (R151·R152)', () => {
     });
     expect(source).toBeUndefined();
   });
+
+  it('⑧ project root itself sits under node_modules — a file inside root still resolves (R157)', () => {
+    const source = resolveOriginal(fileMap('file:///C:/mono/node_modules/@scope/app/src/App.tsx'), {
+      moduleUrl: 'http://x/app.js', line: 1, col: 1, root: 'C:/mono/node_modules/@scope/app',
+    });
+    expect(source).toBe('src/App.tsx:1');
+  });
+
+  it('⑨ a node_modules segment inside root is still a library, even after /src/ normalization (R157)', () => {
+    const source = resolveOriginal(fileMap('file:///C:/mono/node_modules/.pnpm/lib/src/index.js'), {
+      moduleUrl: 'http://x/app.js', line: 1, col: 1, root: 'C:/mono/packages/app',
+    });
+    expect(source).toBeUndefined();
+  });
 });
 
 function makeElement(react: ElementInfo['react']): ElementInfo {

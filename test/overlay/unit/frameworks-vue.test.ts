@@ -9,6 +9,10 @@ describe('normalizeVueSource', () => {
     expect(normalizeVueSource('C:/proj/src/A.vue')).toBe('src/A.vue');
     expect(normalizeVueSource('/home/src/proj/src/A.vue')).toBe('src/A.vue'); // 마지막 /src/ 기준(M3)
   });
+
+  it('project root itself sits under node_modules — a file inside root is not dropped (R157)', () => {
+    expect(normalizeVueSource('C:/mono/node_modules/@scope/app/src/A.vue', 'C:/mono/node_modules/@scope/app')).toBe('src/A.vue');
+  });
 });
 
 describe('vue adapter detect', () => {

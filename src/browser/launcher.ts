@@ -50,13 +50,13 @@ export class BrowserLauncher {
   page: Page | null = null;
   private launchedOnce = false;
   private raw: Array<{ level: ConsoleEntry['level']; text: string; at: string }> = [];
-  constructor(private readonly opts: { overlaySource: string; port: number; token: string; profileDir: string; headless?: boolean; channel?: string; engine?: Engine }) {}
+  constructor(private readonly opts: { overlaySource: string; port: number; token: string; root: string; profileDir: string; headless?: boolean; channel?: string; engine?: Engine }) {}
 
   isAlive(): boolean { return !!this.ctx && !!this.page && !this.page.isClosed(); }
   wasLaunched(): boolean { return this.launchedOnce; }
 
   private injected(): string {
-    return this.opts.overlaySource.replace(/__COBRO_PORT__/g, String(this.opts.port)).replace(/__COBRO_TOKEN__/g, JSON.stringify(this.opts.token));
+    return this.opts.overlaySource.replace(/__COBRO_PORT__/g, String(this.opts.port)).replace(/__COBRO_TOKEN__/g, JSON.stringify(this.opts.token)).replace(/__COBRO_ROOT__/g, JSON.stringify(this.opts.root));
   }
   private async launch(): Promise<void> {
     const engine = this.opts.engine ?? 'chromium';

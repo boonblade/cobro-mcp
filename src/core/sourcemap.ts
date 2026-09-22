@@ -1,6 +1,7 @@
 // React 19 react.source 복원(R112) — 오버레이는 _debugStack 프레임만 싣고, 서버가 소스맵으로 역변환한다
 // pickUserFrame은 의존성 0인 ./frame.js에 있다(I3) — 여기서 재수출하지 않는다(overlay 번들에 trace-mapping 유입 방지)
 import { FlattenMap, originalPositionFor, TraceMap } from '@jridgewell/trace-mapping';
+import { isLibraryPath, normalizeDrivePath } from './frame.js';
 import type { Batch, ComponentInfo, ElementInfo, Frame, PageInfo } from './types.js';
 
 const FRAMEWORK_KEYS = ['react', 'vue'] as const;
@@ -16,14 +17,8 @@ export function findSourceMapUrl(moduleText: string, moduleUrl: string): string 
   try { return new URL(last, moduleUrl).href; } catch { return undefined; }
 }
 
-/** Windows 드라이브 선행 슬래시("/C:/x" → "C:/x")를 제거하고 백슬래시를 슬래시로 바꾼다(R152). 드라이브 문자는 소문자로 맞춘다(M1) — 경로 나머지는 대소문자 유지 */
-function normalizeDrivePath(path: string): string {
-  return path.replace(/\\/g, '/').replace(/^\/?([a-zA-Z]):\//, (_, drive: string) => `${drive.toLowerCase()}:/`);
-}
-
-/** file: 원본을 프로젝트 루트 상대경로로 줄인다(R152) — root 접두 제거 → 실패 시 `/src/` 폴백 → 그것도 없으면 절대경로 그대로 */
-function normalizeFileSource(pathname: string, root: string | undefined): string {
-  const path = normalizeDrivePath(decodeURIComponent(pathname));
+/** file: 원본을 프로젝트 루트 상대경로로 줄인다(R152) — 이미 정규화된 절대경로(abs)를 받는다. root 접두 제거 → 실패 시 `/src/` 폴백 → 그것도 없으면 절대경로 그대로 */
+function normalizeFileSource(path: string, root: string | undefined): string {
   if (root) {
     const r = normalizeDrivePath(root).replace(/\/+$/, '');
     if (path === r) return '';
@@ -42,8 +37,11 @@ export function resolveOriginal(mapJson: unknown, opts: { moduleUrl: string; map
   if (!pos.source || pos.line == null) return undefined;
   let url: URL;
   try { url = new URL(pos.source); } catch { return undefined; }
-  const path = (url.protocol === 'file:' ? normalizeFileSource(url.pathname, opts.root) : decodeURIComponent(url.pathname).replace(/^\/+/, '')).split('?')[0]!;
-  if (!path || path.includes('node_modules/') || path.split('/').includes('..') || /[\x00-\x1f]/.test(path)) return undefined;
+  const raw = decodeURIComponent(url.pathname);
+  const abs = url.protocol === 'file:' ? normalizeDrivePath(raw) : raw.replace(/^\/+/, '');
+  if (isLibraryPath(abs, opts.root)) return undefined; // R157: 라이브러리 판정은 /src/ 폴백 전에, 프로젝트 루트 기준으로
+  const path = (url.protocol === 'file:' ? normalizeFileSource(abs, opts.root) : abs).split('?')[0]!;
+  if (!path || path.split('/').includes('..') || /[\x00-\x1f]/.test(path)) return undefined;
   return `${path}:${pos.line}`;
 }
 

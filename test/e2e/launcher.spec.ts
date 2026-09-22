@@ -7,7 +7,7 @@ import { BrowserLauncher } from '../../src/browser/launcher.js';
 test('launches, injects overlay, buffers console errors, takes clipped screenshot, restarts after close', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'cobro-prof-'));
   const overlay = 'window.__injected = __COBRO_PORT__;';
-  const l = new BrowserLauncher({ overlaySource: overlay, port: 4242, token: 't', profileDir: dir, headless: true, channel: process.env.COBRO_TEST_CHANNEL });
+  const l = new BrowserLauncher({ overlaySource: overlay, port: 4242, token: 't', root: dir, profileDir: dir, headless: true, channel: process.env.COBRO_TEST_CHANNEL });
   try {
     const first = await l.open('http://127.0.0.1:4173/basic.html');
     expect(first).toMatchObject({ title: 'Basic', restarted: false });
@@ -33,7 +33,7 @@ test('launches, injects overlay, buffers console errors, takes clipped screensho
 
 test('launches webkit engine and injects overlay', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'cobro-prof-wk-'));
-  const l = new BrowserLauncher({ overlaySource: 'window.__injected = __COBRO_PORT__;', port: 4343, token: 't', profileDir: dir, headless: true, engine: 'webkit' });
+  const l = new BrowserLauncher({ overlaySource: 'window.__injected = __COBRO_PORT__;', port: 4343, token: 't', root: dir, profileDir: dir, headless: true, engine: 'webkit' });
   try {
     const r = await l.open('http://127.0.0.1:4173/basic.html');
     expect(r.title).toBe('Basic');

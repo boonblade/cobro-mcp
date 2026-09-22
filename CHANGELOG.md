@@ -3,6 +3,8 @@
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
+### Fixed
+- Source locations are no longer dropped when the project directory itself sits under a node_modules path (library detection is now relative to the project root).
 
 ## [0.9.3] — 2026-09-22
 ### Changed

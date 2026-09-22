@@ -4,5 +4,5 @@ export type { ComponentInfo };
 
 export interface FrameworkAdapter {
   key: keyof Pick<ElementInfo, 'react' | 'vue'>;
-  detect(el: Element): ComponentInfo | undefined;
+  detect(el: Element, root?: string): ComponentInfo | undefined;
 }

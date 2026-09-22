@@ -69,7 +69,7 @@ const bridge = await createBridge({
 });
 const fixed = configStrategy();
 if (fixed) bridge.core.setStrategy(fixed);
-launcher = new BrowserLauncher({ overlaySource, port: bridge.port, token, profileDir, headless: process.env.COBRO_HEADLESS === '1', engine });
+launcher = new BrowserLauncher({ overlaySource, port: bridge.port, token, root: process.cwd(), profileDir, headless: process.env.COBRO_HEADLESS === '1', engine });
 
 const mcp = createMcpServer({
   core: bridge.core, browser: launcher, done: (info) => bridge.done(info), manualShotPath: (n) => store.manualShotPath(n), defaultWaitSec, tickMs, version,
