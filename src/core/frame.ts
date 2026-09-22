@@ -2,7 +2,8 @@
 // — overlay 번들에 trace-mapping을 유입시키지 않기 위해 sourcemap.ts와 분리한다(I3)
 const REACT_INTERNAL_FN = /jsxDEV|jsx-dev-runtime|react-stack-top-frame|react_stack_bottom_frame/;
 // 라이브러리(compiled) 프레임도 사용자 코드가 아니다(R143)
-const NODE_MODULES_URL = /\/node_modules\//i;
+// Turbopack은 라이브러리 청크를 `node_modules_<hash>._.js` 파일명으로 낸다(R148)
+const NODE_MODULES_URL = /\/node_modules[\/_]/i;
 // V8: "at fn (url:line:col)" / "at url:line:col" — WebKit·Firefox: "fn@url:line:col"
 const FRAME_RE = /(?:at (?:(\S+) \()?|(\S+)@)(https?:\/\/[^\s)]+?):(\d+):(\d+)\)?/g;
 

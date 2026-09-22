@@ -32,4 +32,12 @@ describe('pickUserFrame', () => {
     const withUserFrame = libOnly + '\n' + 'at App (http://localhost:4191/src/App.jsx:6:10)';
     expect(pickUserFrame(withUserFrame)).toEqual({ url: 'http://localhost:4191/src/App.jsx', line: 6, col: 10 });
   });
+
+  it('skips a Turbopack node_modules_ chunk filename and keeps going to the user chunk (R148)', () => {
+    const libOnly = 'at LoginPage (http://localhost:3001/_next/static/chunks/node_modules_next_dist_compiled_abc._.js:10:5)';
+    expect(pickUserFrame(libOnly)).toBeNull();
+
+    const withUserFrame = libOnly + '\n' + 'at Page (http://localhost:3001/_next/static/chunks/src_0.rza82._.js:506:20)';
+    expect(pickUserFrame(withUserFrame)).toEqual({ url: 'http://localhost:3001/_next/static/chunks/src_0.rza82._.js', line: 506, col: 20 });
+  });
 });

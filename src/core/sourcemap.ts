@@ -1,7 +1,7 @@
 // React 19 react.source 복원(R112) — 오버레이는 _debugStack 프레임만 싣고, 서버가 소스맵으로 역변환한다
 // pickUserFrame은 의존성 0인 ./frame.js에 있다(I3) — 여기서 재수출하지 않는다(overlay 번들에 trace-mapping 유입 방지)
 import { TraceMap, originalPositionFor } from '@jridgewell/trace-mapping';
-import type { Batch, ComponentInfo, ElementInfo, PageInfo } from './types.js';
+import type { Batch, ComponentInfo, ElementInfo, Frame, PageInfo } from './types.js';
 
 const FRAMEWORK_KEYS = ['react', 'vue'] as const;
 
@@ -29,14 +29,15 @@ export function resolveOriginal(mapJson: unknown, opts: { moduleUrl: string; map
   return `${path}:${pos.line}`;
 }
 
-/** react·vue 어느 쪽 frame도 페이로드로 내보내지 않는다(R112·R65 계약 불변) — frame이 없으면 바이트 동일 */
+/** react·vue 어느 쪽 frame·callerFrames도 페이로드로 내보내지 않는다(R112·R65·R146 계약 불변) — 둘 다 없으면 바이트 동일 */
 export function stripFrame(e: ElementInfo): ElementInfo {
   let out = e;
   for (const key of FRAMEWORK_KEYS) {
     const info = out[key];
-    if (!info?.frame) continue;
+    if (!info?.frame && !info?.callerFrames) continue;
     const rest: ComponentInfo = { component: info.component };
     if (info.source) rest.source = info.source;
+    if (info.callers?.length) rest.callers = info.callers;
     out = { ...out, [key]: rest };
   }
   return out;
@@ -46,34 +47,52 @@ function sameOrigin(a: string, b: string): boolean {
   try { return new URL(a).origin === new URL(b).origin; } catch { return false; }
 }
 
-/** frame이 있고 source가 없는 요소마다 소스맵을 해석해 e.react.source를 채운다. 실패는 그 요소만 건너뛴다 */
+/** 프레임 하나를 소스맵으로 해석해 "<프로젝트 상대 경로>:<행>"을 돌려준다. 못 풀면 undefined(그 프레임만 건너뜀) */
+async function resolveFrame(frame: Frame, page: PageInfo, fetchText: (url: string) => Promise<string | undefined>): Promise<string | undefined> {
+  if (!sameOrigin(frame.url, page.url)) return undefined;
+  try {
+    const moduleText = await fetchText(frame.url);
+    if (moduleText === undefined) return undefined;
+    const mapRef = findSourceMapUrl(moduleText, frame.url);
+    if (!mapRef) return undefined;
+    let mapJson: unknown;
+    let mapUrl: string | undefined;
+    if (mapRef.startsWith('data:')) {
+      const b64 = mapRef.split(',')[1];
+      if (!b64) return undefined;
+      mapJson = JSON.parse(Buffer.from(b64, 'base64').toString('utf8'));
+    } else {
+      if (!sameOrigin(mapRef, page.url)) return undefined;
+      const mapText = await fetchText(mapRef);
+      if (mapText === undefined) return undefined;
+      mapJson = JSON.parse(mapText);
+      mapUrl = mapRef;
+    }
+    return resolveOriginal(mapJson, { moduleUrl: frame.url, mapUrl, line: frame.line, col: frame.col });
+  } catch (err) {
+    console.error('[cobro] source map 해석 실패', (err as Error).message);
+    return undefined;
+  }
+}
+
+/** frame이 있고 source가 없는 요소마다 소스맵을 해석해 e.react.source를 채우고, callerFrames를 같은 방식으로 풀어 callers에 싣는다(R146) */
 export async function resolveElementSources(batch: Batch, page: PageInfo, fetchText: (url: string) => Promise<string | undefined>): Promise<void> {
   for (const e of batch.elements) {
-    const frame = e.react?.frame;
-    if (!frame || e.react?.source) continue;
-    if (!sameOrigin(frame.url, page.url)) continue;
-    try {
-      const moduleText = await fetchText(frame.url);
-      if (moduleText === undefined) continue;
-      const mapRef = findSourceMapUrl(moduleText, frame.url);
-      if (!mapRef) continue;
-      let mapJson: unknown;
-      let mapUrl: string | undefined;
-      if (mapRef.startsWith('data:')) {
-        const b64 = mapRef.split(',')[1];
-        if (!b64) continue;
-        mapJson = JSON.parse(Buffer.from(b64, 'base64').toString('utf8'));
-      } else {
-        if (!sameOrigin(mapRef, page.url)) continue;
-        const mapText = await fetchText(mapRef);
-        if (mapText === undefined) continue;
-        mapJson = JSON.parse(mapText);
-        mapUrl = mapRef;
+    const react = e.react;
+    if (!react) continue;
+    if (react.frame && !react.source) {
+      const source = await resolveFrame(react.frame, page, fetchText);
+      if (source) react.source = source;
+    }
+    if (react.callerFrames?.length) {
+      const callers = react.callers ? [...react.callers] : [];
+      for (const frame of react.callerFrames) {
+        if (callers.length >= 2) break;
+        const source = await resolveFrame(frame, page, fetchText);
+        if (!source || source === react.source || callers.includes(source)) continue; // M2: caller끼리 중복 제거
+        callers.push(source);
       }
-      const source = resolveOriginal(mapJson, { moduleUrl: frame.url, mapUrl, line: frame.line, col: frame.col });
-      if (source) e.react!.source = source;
-    } catch (err) {
-      console.error('[cobro] source map 해석 실패', (err as Error).message);
+      if (callers.length) react.callers = callers; else delete react.callers;
     }
   }
 }
