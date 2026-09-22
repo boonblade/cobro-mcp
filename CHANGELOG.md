@@ -8,6 +8,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Changed
 - Tool descriptions and argument hints are now in English (they were Korean).
+- React: `react.source` now points at the picked element's own JSX line when that line is in your code. Previously it was the nearest component's call site — for elements written directly inside a page component (e.g. Next.js app router pages) that was the mount point or nothing. The component call site is still available as `react.callers[0]`.
 
 ### Fixed
 - React: elements rendered by a component library (MUI, Radix, …) now resolve react.source to the JSX call site in your code instead of losing the location (React 19) or pointing into node_modules (React ≤18).

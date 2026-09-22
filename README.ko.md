@@ -124,7 +124,7 @@ claude mcp add -s user cobro -- npx -y cobro-mcp@latest
 | `elements[].text` | `textContent`를 공백 정규화한 뒤 앞 40자 |
 | `elements[].rect` | `{ x, y, w, h }` 페이지 좌표(스크롤 포함), 정수 |
 | `elements[].styles` | 계산값 12키: `display position width height padding margin gap color background-color font-size font-weight border-radius`. `none`/`normal`은 생략하되 `display: none`은 "안 보임" 단서로 남긴다 |
-| `elements[].react` | React dev 빌드에서만 `{ component, source?, callers? }`. 아니면 키 자체가 없다. `source`는 소스맵이 있는 dev 서버(React 19) 또는 React 18까지에서만 온다. 컴포넌트 라이브러리 안 요소는 라이브러리 내부가 아니라 사용자가 쓴 JSX 위치. `callers`는 `source` 위의 사용자 코드 호출 지점(가까운 순, 최대 2). `source`가 한 줄 패스스루 래퍼면 보통 첫 caller가 진짜 고칠 자리 |
+| `elements[].react` | React dev 빌드에서만 `{ component, source?, callers? }`. 아니면 키 자체가 없다. `source`는 소스맵이 있는 dev 서버(React 19) 또는 React 18까지에서만 온다. `source`는 찍은 요소 자신의 JSX 줄(사용자 코드일 때). 라이브러리가 그린 요소면 사용자 코드에서 가장 가까운 호출 지점. `callers`는 `source` 위의 사용자 코드 호출 지점(가까운 순, 최대 2). `source`가 한 줄 패스스루 래퍼면 보통 첫 caller가 진짜 고칠 자리 |
 | `elements[].vue` | Vue 3 dev 빌드에서 `{ component, source? }`. `source`는 SFC 경로만(행 없음). 아니면 키 생략 |
 | `elements[].missing` | 재주입 뒤 선택자로 못 찾으면 `true`(드묾) |
 | `elements[].ref` | 패널 행의 안정 번호(`"2"`, 영역 `"1"` 안의 요소면 `"1a"`). 메모가 이 번호를 가리킨다. 초안이 사는 동안 재번호 없음 |

@@ -71,7 +71,7 @@ test('hidden strategy chip stays display:none (B1)', async ({ cobroPage: page })
   await expect(chip2).toBeVisible();
 });
 
-test("React 19 element gets source from the dev server's source maps", async ({ cobroPage: page, bridge }) => {
+test("React 19 element gets source from the dev server's source maps (R149)", async ({ cobroPage: page, bridge }) => {
   bridge.core.setStrategy('none');
   await page.goto('http://127.0.0.1:4174/react.html');
   await selectAt(page, '#cta');
@@ -82,7 +82,7 @@ test("React 19 element gets source from the dev server's source maps", async ({ 
   expect(r.status).toBe('sent');
   if (r.status !== 'sent') return;
   const el = r.payload.batches[0]!.elements[0]!;
-  expect(el.react).toEqual({ component: 'Cta', source: 'src/react.jsx:4' });
+  expect(el.react).toEqual({ component: 'Cta', source: 'src/react.jsx:2', callers: ['src/react.jsx:4'] });
   expect(JSON.stringify(r.payload)).not.toContain('"frame"');
 });
 
@@ -121,6 +121,20 @@ test('plain re-export never needed help: no callers (R144)', async ({ cobroPage:
   bridge.core.setStrategy('none');
   await page.goto('http://127.0.0.1:4174/react.html');
   await selectAt(page, '#recta');
+  await page.locator(`${HOST} textarea`).fill('메모');
+  const waiting = bridge.core.wait(10_000);
+  await page.locator(`${HOST} button.send`).click();
+  const r = await waiting;
+  expect(r.status).toBe('sent');
+  if (r.status !== 'sent') return;
+  const el = r.payload.batches[0]!.elements[0]!;
+  expect(el.react).toEqual({ component: 'Button', source: 'src/react.jsx:4' });
+});
+
+test('user element passed as children of a library component keeps the library tag as component (R153)', async ({ cobroPage: page, bridge }) => {
+  bridge.core.setStrategy('none');
+  await page.goto('http://127.0.0.1:4174/react.html');
+  await selectAt(page, '#slotinner');
   await page.locator(`${HOST} textarea`).fill('메모');
   const waiting = bridge.core.wait(10_000);
   await page.locator(`${HOST} button.send`).click();
