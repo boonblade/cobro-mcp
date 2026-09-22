@@ -101,6 +101,36 @@ test('React element inside a component library resolves to the JSX call site in 
   expect((el.react as { source: string }).source).not.toContain('node_modules');
 });
 
+test('one-line pass-through wrapper: source is the wrapper line, callers carry the real call site (R144)', async ({ cobroPage: page, bridge }) => {
+  bridge.core.setStrategy('none');
+  await page.goto('http://127.0.0.1:4174/react.html');
+  await selectAt(page, '#wrapcta');
+  await page.locator(`${HOST} textarea`).fill('메모');
+  const waiting = bridge.core.wait(10_000);
+  await page.locator(`${HOST} button.send`).click();
+  const r = await waiting;
+  expect(r.status).toBe('sent');
+  if (r.status !== 'sent') return;
+  const el = r.payload.batches[0]!.elements[0]!;
+  expect(el.react).toEqual({ component: 'Button', source: 'src/ui/Button.jsx:2', callers: ['src/react.jsx:4'] });
+  expect(JSON.stringify(r.payload)).not.toContain('callerFrames');
+  expect(JSON.stringify(r.payload)).not.toContain('"frame"');
+});
+
+test('plain re-export never needed help: no callers (R144)', async ({ cobroPage: page, bridge }) => {
+  bridge.core.setStrategy('none');
+  await page.goto('http://127.0.0.1:4174/react.html');
+  await selectAt(page, '#recta');
+  await page.locator(`${HOST} textarea`).fill('메모');
+  const waiting = bridge.core.wait(10_000);
+  await page.locator(`${HOST} button.send`).click();
+  const r = await waiting;
+  expect(r.status).toBe('sent');
+  if (r.status !== 'sent') return;
+  const el = r.payload.batches[0]!.elements[0]!;
+  expect(el.react).toEqual({ component: 'Button', source: 'src/react.jsx:4' });
+});
+
 test('Vue 3 element gets component and SFC path', async ({ cobroPage: page, bridge }) => {
   bridge.core.setStrategy('none');
   await page.goto('http://127.0.0.1:4174/vue.html');

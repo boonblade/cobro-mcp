@@ -6,7 +6,9 @@ export type BatchStatus = 'draft' | 'sent' | 'done' | 'unanswered'; // unanswere
 
 export interface Rect { x: number; y: number; w: number; h: number } // 페이지 좌표
 // frame: React 19 _debugStack 첫 사용자 프레임, 서버가 source로 해석 후 페이로드에서 제거(R112). Vue는 채우지 않는다(행 정보 없음, R114)
-export interface ComponentInfo { component: string; source?: string; frame?: { url: string; line: number; col: number } }
+export type Frame = { url: string; line: number; col: number };
+// callers: source 위 사용자 코드 호출 지점 ≤2, 가까운 순(R144). callerFrames는 오버레이→서버 내부 전달용(_debugStack 기반), 페이로드 제외
+export interface ComponentInfo { component: string; source?: string; frame?: Frame; callers?: string[]; callerFrames?: Frame[] }
 export interface ElementInfo {
   selector: string; tag: string; classes: string[]; text: string; rect: Rect;
   styles: Record<string, string>;
