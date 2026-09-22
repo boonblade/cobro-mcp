@@ -1,6 +1,6 @@
 // React 19 react.source 복원(R112) — 오버레이는 _debugStack 프레임만 싣고, 서버가 소스맵으로 역변환한다
 // pickUserFrame은 의존성 0인 ./frame.js에 있다(I3) — 여기서 재수출하지 않는다(overlay 번들에 trace-mapping 유입 방지)
-import { TraceMap, originalPositionFor } from '@jridgewell/trace-mapping';
+import { FlattenMap, originalPositionFor, TraceMap } from '@jridgewell/trace-mapping';
 import type { Batch, ComponentInfo, ElementInfo, Frame, PageInfo } from './types.js';
 
 const FRAMEWORK_KEYS = ['react', 'vue'] as const;
@@ -16,15 +16,33 @@ export function findSourceMapUrl(moduleText: string, moduleUrl: string): string 
   try { return new URL(last, moduleUrl).href; } catch { return undefined; }
 }
 
+/** Windows 드라이브 선행 슬래시("/C:/x" → "C:/x")를 제거하고 백슬래시를 슬래시로 바꾼다(R152). 드라이브 문자는 소문자로 맞춘다(M1) — 경로 나머지는 대소문자 유지 */
+function normalizeDrivePath(path: string): string {
+  return path.replace(/\\/g, '/').replace(/^\/?([a-zA-Z]):\//, (_, drive: string) => `${drive.toLowerCase()}:/`);
+}
+
+/** file: 원본을 프로젝트 루트 상대경로로 줄인다(R152) — root 접두 제거 → 실패 시 `/src/` 폴백 → 그것도 없으면 절대경로 그대로 */
+function normalizeFileSource(pathname: string, root: string | undefined): string {
+  const path = normalizeDrivePath(decodeURIComponent(pathname));
+  if (root) {
+    const r = normalizeDrivePath(root).replace(/\/+$/, '');
+    if (path === r) return '';
+    if (path.startsWith(`${r}/`)) return path.slice(r.length + 1);
+  }
+  const idx = path.indexOf('/src/');
+  if (idx !== -1) return path.slice(idx + 1);
+  return path;
+}
+
 /** 소스맵으로 생성 위치(1-based line, 1-based col)를 원본 "<프로젝트 상대 경로>:<행>"으로 되돌린다 */
-export function resolveOriginal(mapJson: unknown, opts: { moduleUrl: string; mapUrl?: string; line: number; col: number }): string | undefined {
+export function resolveOriginal(mapJson: unknown, opts: { moduleUrl: string; mapUrl?: string; line: number; col: number; root?: string }): string | undefined {
   let tm: TraceMap;
-  try { tm = new TraceMap(mapJson as ConstructorParameters<typeof TraceMap>[0], opts.mapUrl ?? opts.moduleUrl); } catch { return undefined; }
+  try { tm = new FlattenMap(mapJson as ConstructorParameters<typeof FlattenMap>[0], opts.mapUrl ?? opts.moduleUrl); } catch { return undefined; }
   const pos = originalPositionFor(tm, { line: opts.line, column: opts.col - 1 });
   if (!pos.source || pos.line == null) return undefined;
-  let path: string;
-  try { path = decodeURIComponent(new URL(pos.source).pathname); } catch { return undefined; }
-  path = path.replace(/^\/+/, '').split('?')[0]!;
+  let url: URL;
+  try { url = new URL(pos.source); } catch { return undefined; }
+  const path = (url.protocol === 'file:' ? normalizeFileSource(url.pathname, opts.root) : decodeURIComponent(url.pathname).replace(/^\/+/, '')).split('?')[0]!;
   if (!path || path.includes('node_modules/') || path.split('/').includes('..') || /[\x00-\x1f]/.test(path)) return undefined;
   return `${path}:${pos.line}`;
 }
@@ -48,7 +66,7 @@ function sameOrigin(a: string, b: string): boolean {
 }
 
 /** 프레임 하나를 소스맵으로 해석해 "<프로젝트 상대 경로>:<행>"을 돌려준다. 못 풀면 undefined(그 프레임만 건너뜀) */
-async function resolveFrame(frame: Frame, page: PageInfo, fetchText: (url: string) => Promise<string | undefined>): Promise<string | undefined> {
+async function resolveFrame(frame: Frame, page: PageInfo, fetchText: (url: string) => Promise<string | undefined>, root: string | undefined): Promise<string | undefined> {
   if (!sameOrigin(frame.url, page.url)) return undefined;
   try {
     const moduleText = await fetchText(frame.url);
@@ -68,7 +86,7 @@ async function resolveFrame(frame: Frame, page: PageInfo, fetchText: (url: strin
       mapJson = JSON.parse(mapText);
       mapUrl = mapRef;
     }
-    return resolveOriginal(mapJson, { moduleUrl: frame.url, mapUrl, line: frame.line, col: frame.col });
+    return resolveOriginal(mapJson, { moduleUrl: frame.url, mapUrl, line: frame.line, col: frame.col, root });
   } catch (err) {
     console.error('[cobro] source map 해석 실패', (err as Error).message);
     return undefined;
@@ -76,19 +94,20 @@ async function resolveFrame(frame: Frame, page: PageInfo, fetchText: (url: strin
 }
 
 /** frame이 있고 source가 없는 요소마다 소스맵을 해석해 e.react.source를 채우고, callerFrames를 같은 방식으로 풀어 callers에 싣는다(R146) */
-export async function resolveElementSources(batch: Batch, page: PageInfo, fetchText: (url: string) => Promise<string | undefined>): Promise<void> {
+export async function resolveElementSources(batch: Batch, page: PageInfo, fetchText: (url: string) => Promise<string | undefined>, opts?: { root?: string }): Promise<void> {
+  const root = opts?.root;
   for (const e of batch.elements) {
     const react = e.react;
     if (!react) continue;
     if (react.frame && !react.source) {
-      const source = await resolveFrame(react.frame, page, fetchText);
+      const source = await resolveFrame(react.frame, page, fetchText, root);
       if (source) react.source = source;
     }
     if (react.callerFrames?.length) {
       const callers = react.callers ? [...react.callers] : [];
       for (const frame of react.callerFrames) {
         if (callers.length >= 2) break;
-        const source = await resolveFrame(frame, page, fetchText);
+        const source = await resolveFrame(frame, page, fetchText, root);
         if (!source || source === react.source || callers.includes(source)) continue; // M2: caller끼리 중복 제거
         callers.push(source);
       }
