@@ -198,6 +198,28 @@ describe('mcp tools', () => {
     browser.open = async () => { throw new Error('boom'); };
     expect(await call('done', { summary: 'ok', batchId: 'b' })).toEqual({ ok: true, doneBatches: 1, navigated: false });
   });
+  it('status(text, batchId) does not navigate once following is paused, and omits navigated (R176)', async () => {
+    core.setPage({ url: 'http://x/other', title: 'O', viewport: { w: 1, h: 1 } }, 'reload');
+    core.setDrafts([{ id: 'b', note: 'n', elements: [], status: 'draft', createdAt: 't' }]);
+    core.setPage(page, 'reload');
+    core.markSent(['b'], page);
+    core.noteArrival('http://x/elsewhere'); // 처리 중인데 사용자가 직접 다른 페이지로 이동
+    expect(core.session.followPaused).toBe(true);
+    await call('open', { url: 'http://x/' });
+    calls.length = 0;
+    expect(await call('status', { text: 'editing', batchId: 'b' })).toEqual({ ok: true });
+    expect(calls).toEqual([]);
+  });
+  it('a successful navigateTo marks the destination as the expected arrival (R176)', async () => {
+    core.setPage({ url: 'http://x/other', title: 'O', viewport: { w: 1, h: 1 } }, 'reload');
+    core.setDrafts([{ id: 'b', note: 'n', elements: [], status: 'draft', createdAt: 't' }]);
+    core.setPage(page, 'reload');
+    core.markSent(['b'], page);
+    await call('open', { url: 'http://x/' });
+    calls.length = 0;
+    expect(await call('status', { text: 'editing', batchId: 'b' })).toEqual({ ok: true, navigated: true });
+    expect(core.expectedNavigation()).toBe('http://x/other');
+  });
   it('screenshot returns path and passes selector through; close closes browser', async () => {
     const r = await call('screenshot');
     expect(r.path).toMatch(/^\/s\/manual\/manual-\d+\.png$/); // 배치 샷과 분리된 폴더

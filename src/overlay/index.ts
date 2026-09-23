@@ -34,16 +34,21 @@ declare const __COBRO_ROOT__: string;
     let draftTimer: ReturnType<typeof setTimeout> | null = null;
     let prefs: UiPrefs = { theme: 'auto', themeLocked: false };
     let expandedGroup: string | null = null; // R124: UI 전용, 서버 저장 안 함
+    let tab: 'here' | 'queue' = 'here'; // R172: UI 전용, 서버 저장 안 함
+    let doneOpen = false; // R174: 완료 접힘 행 펼침, UI 전용
+    let panelOpen = false; // R175: 패널 표시 여부 — 잠겨서 선택 모드가 꺼져도 사용자가 닫기 전까지 열려 있는다
     const mq = matchMedia('(prefers-color-scheme: dark)');
 
     const pageInfo = (): PageInfo => ({ url: location.href, title: document.title, viewport: { w: innerWidth, h: innerHeight } });
     // R166: 새 초안은 항상 지금 페이지 것으로 찍는다(오버레이 표시용 — 서버가 실제 값을 다시 찍는다)
     const newBatch = (): Batch => ({ id: crypto.randomUUID(), note: '', elements: [], status: 'draft', createdAt: new Date().toISOString(), page: { url: location.href, title: document.title } });
-    // R166: 현재 페이지 초안 = drafts 중 지금 페이지와 같은 것. 없으면 새로 만든다
-    const ensureCurrent = (): Batch => { drafts ??= []; let b = currentDraft(drafts, location.href); if (!b) { b = newBatch(); drafts.push(b); } return b; };
+    // R166: 현재 페이지 초안 = drafts 중 지금 페이지와 같은 것. 없으면 새로 만든다 — 새로 만들면 R172: 「이 페이지」 탭으로
+    const ensureCurrent = (): Batch => { drafts ??= []; let b = currentDraft(drafts, location.href); if (!b) { b = newBatch(); drafts.push(b); tab = 'here'; } return b; };
     const flushDraft = () => { if (draftTimer) { clearTimeout(draftTimer); draftTimer = null; } chan.send({ type: 'draft', batches: drafts ?? [] }); };
     const pushDraft = () => { if (draftTimer) clearTimeout(draftTimer); draftTimer = setTimeout(flushDraft, 300); };
-    // R165: busy = sent·working 묶음이 하나라도 있다(에이전트가 처리 중) — Send를 막지 않는다, wbox·진행 요약에만 쓴다
+    // R175(R165 개정): locked = 에이전트가 sent·working(처리 중) — Select·Ctrl+Shift+F·textarea를 잠근다
+    const isLocked = () => session?.agent.status === 'sent' || session?.agent.status === 'working';
+    // R165: busy = sent·working 묶음이 하나라도 있다(에이전트가 처리 중) — wbox·진행 요약·큐 카드 범위에 쓴다
     const vm = () => {
       const href = location.href;
       return {
@@ -51,17 +56,27 @@ declare const __COBRO_ROOT__: string;
         strategy: session ? session.strategy ?? session.detected : null, drafts: drafts ?? [],
         current: currentDraft(drafts ?? [], href),
         queue: roundBatches(session?.batches ?? []), // R166·R169: sent·working·라운드 done(현재+다른 페이지 전부)
+        batches: session?.batches ?? [], // R172·R174: 큐 카드·완료 정리는 전체 묶음이 필요
         busy: (session?.batches ?? []).some((b) => b.status === 'sent' || b.status === 'working'),
+        locked: isLocked(), // R175
+        followPaused: !!session?.followPaused, // R176
         pendingElsewhere: pendingElsewhere(session, href), // R171: 다른 페이지에서 끝난 완료의 폴백 "보기" 링크
-        prefs, expanded: expandedGroup, href,
+        prefs, expanded: expandedGroup, href, tab, doneOpen, panelOpen,
       };
     };
     const render = () => ui.render(vm());
     const setSelecting = (on: boolean) => {
+      if (on && isLocked()) return; // R175: 처리 중이면 선택 모드 진입을 거부
       picker.setActive(on);
+      panelOpen = on; // R175: 사용자가 직접 켜고 끄는 경우만 여기서 결정 — 잠금에 의한 강제 비활성은 이 함수를 거치지 않는다
       if (!on) { render(); return; }
       if (!stateSeen) { openPending = true; render(); return; }
       ensureCurrent(); render(); ui.focusNote();
+    };
+    // B2(Task 68 교정): 잠긴 동안 Select는 선택 모드가 아니라 패널(큐 탭) 열기/닫기로 동작한다
+    const togglePanelLocked = () => {
+      if (panelOpen) { panelOpen = false; } else { panelOpen = true; tab = 'queue'; }
+      render();
     };
     const GROUP_LETTERS = 'abcdefghijkl';
     // R127: ref는 안정 번호 — 발급 뒤 다른 항목이 지워져도 바뀌지 않는다. refSeq는 발급 전용 카운터.
@@ -115,7 +130,8 @@ declare const __COBRO_ROOT__: string;
     };
 
     const ui = createUI({
-      onToggleSelect: () => setSelecting(!picker.isActive()),
+      onToggleSelect: () => { if (isLocked()) { togglePanelLocked(); return; } setSelecting(!picker.isActive()); },
+      onClose: () => setSelecting(false), // R175: 패널 헤더 ✕ — 잠겨서 선택이 이미 꺼져 있어도 패널을 닫는다
       onNoteInput: (id, note) => { const b = drafts?.find((d) => d.id === id); if (b) { b.note = note; pushDraft(); } },
       onRemoveElement: (id, i) => {
         const b = drafts?.find((d) => d.id === id); if (!b) return;
@@ -134,10 +150,13 @@ declare const __COBRO_ROOT__: string;
         flushDraft();
         chan.send({ type: 'send', batchIds: ready.map((b) => b.id), page: pageInfo() });
         drafts = (drafts ?? []).filter((b) => !ready.includes(b));
-        picker.setActive(false); expandedGroup = null; render(); // M2: 다음 초안은 접힘부터
+        picker.setActive(false); expandedGroup = null; tab = 'queue'; render(); // M2: 다음 초안은 접힘부터, R172: Send 직후 큐 탭
       },
       onSettings: (patch) => chan.send({ type: 'settings', patch }),
       onToggleGroup: (ref) => { expandedGroup = expandedGroup === ref ? null : ref; render(); },
+      onTab: (t) => { tab = t; render(); },
+      onToggleDone: () => { doneOpen = !doneOpen; render(); },
+      onGoPage: (url) => { if (samePage(url, location.href)) { tab = 'here'; render(); } else location.assign(url); },
     });
     const applyTheme = () => ui.setTheme(resolveTheme(prefs.theme, {
       prefersDark: mq.matches,
@@ -190,8 +209,8 @@ declare const __COBRO_ROOT__: string;
       },
     });
     window.addEventListener('keydown', (e) => {
-      if (e.ctrlKey && e.shiftKey && e.code === 'KeyF') { e.preventDefault(); ui.closePop(); setSelecting(!picker.isActive()); }
-      else if (e.key === 'Escape' && picker.isActive()) { setSelecting(false); }
+      if (e.ctrlKey && e.shiftKey && e.code === 'KeyF') { e.preventDefault(); ui.closePop(); if (isLocked()) { togglePanelLocked(); return; } setSelecting(!picker.isActive()); }
+      else if (e.key === 'Escape' && (picker.isActive() || panelOpen)) { setSelecting(false); } // R175: 잠금으로 선택만 꺼진 채 패널이 열려 있어도 Esc로 닫는다
     }, true);
     const onViewport = () => ui.renderMarkers(vm());
     window.addEventListener('scroll', onViewport, { capture: true, passive: true });
@@ -204,6 +223,7 @@ declare const __COBRO_ROOT__: string;
         session = m.session;
         prefs = m.ui;
         applyTheme();
+        if (isLocked() && picker.isActive()) picker.setActive(false); // R175: 처리 중으로 바뀌면 선택 모드를 끈다
         // 서버가 이미 draft에서 넘긴(sent/done/unanswered) 배치는 로컬 draft에서 지운다.
         // 없으면 send 직후 도착하는 첫 state('draft'로 커밋된 상태)가 방금 보낸 배치를 좀비 draft로 되살린다.
         const nonDraft = new Set(m.session.batches.filter((b) => b.status !== 'draft').map((b) => b.id));

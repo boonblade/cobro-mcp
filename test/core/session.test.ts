@@ -255,12 +255,11 @@ describe('SessionCore', () => {
     vi.useRealTimers();
   });
   it('closeSession clears screenshots of done batches only, keeping unfinished batches\' shots (R81)', () => {
-    core.setDrafts([draft('1')]);
-    core.markSent(['1'], page);
-    core.done({ summary: 'ok', selectors: [], changedFiles: [] });
+    // Task 68 R174: 처리 중 묶음이 남아 있는 동안은(여기서는 '2') 새 done 정리가 끼어들지 않는다 — 같은 라운드에서 '1'만 done
+    core.setDrafts([draft('1'), draft('2')]);
+    core.markSent(['1', '2'], page);
+    core.done({ summary: 'ok', selectors: [], changedFiles: [] }, '1');
     core.setScreenshot('1', store.shotPath('1'));
-    core.setDrafts([draft('2')]);
-    core.markSent(['2'], page);
     core.setScreenshot('2', store.shotPath('2'));
     const spy = vi.spyOn(store, 'clearShots');
     core.closeSession();
@@ -286,5 +285,65 @@ describe('SessionCore', () => {
     expect(spy.mock.calls[0]![0]).toHaveLength(2);
     expect(core.session.batches.map((b) => b.id)).toEqual(['B', 'C']);
     expect(core.session.batches.find((b) => b.id === 'B')!.screenshot).toBe(store.shotPath('B'));
+  });
+  it('setDrafts clears the last round\'s done batches once a new content draft arrives and nothing is active; an empty draft never clears (R174)', () => {
+    core.setDrafts([draft('x'), draft('y')]);
+    core.markSent(['x', 'y'], page);
+    core.done({ summary: 'x done', selectors: [], changedFiles: [] }, 'x');
+    expect(core.session.batches.map((b) => [b.id, b.status])).toEqual([['x', 'done'], ['y', 'sent']]);
+
+    // y가 여전히 처리 중 — 새 내용 초안이 와도 done을 치우지 않는다
+    core.setDrafts([draft('new')]);
+    expect(core.session.batches.find((b) => b.id === 'x')!.status).toBe('done');
+
+    core.done({ summary: 'y done', selectors: [], changedFiles: [] }, 'y');
+    expect(core.session.batches.some((b) => b.status === 'sent' || b.status === 'working')).toBe(false);
+
+    // 빈 초안(요소·영역·메모 없음)은 새 내용으로 치지 않는다 — done이 그대로 남는다
+    core.setDrafts([draft('new'), { ...draft('empty'), elements: [], note: '' }]);
+    expect(core.session.batches.some((b) => b.status === 'done')).toBe(true);
+
+    // 내용 있는 새 초안(브랜드뉴 id) + 처리 중 묶음 없음 → done 전부 제거
+    core.setDrafts([draft('new'), draft('brand-new-2')]);
+    expect(core.session.batches.some((b) => b.status === 'done')).toBe(false);
+    expect(core.session.batches.map((b) => b.id).sort()).toEqual(['brand-new-2', 'new']);
+  });
+  it('an arrival matching the expected navigation does not pause following; an unexpected arrival while busy does; markSent/done clear it once nothing stays active; a restart also clears it (R176)', () => {
+    core.setPage(page, 'reload');
+    core.setDrafts([draft('1')]);
+    core.markSent(['1'], page);
+    core.expectNavigation('http://x/a');
+    core.noteArrival('http://x/a#h'); // 따라간 도착 — hash만 다름
+    expect(core.session.followPaused).toBeFalsy();
+    expect(core.expectedNavigation()).toBeNull();
+
+    core.noteArrival('http://x/c'); // 처리 중인데 예상 밖 페이지로 이동
+    expect(core.session.followPaused).toBe(true);
+
+    core.done({ summary: 'done1', selectors: [], changedFiles: [] }); // 남은 처리 중 묶음 없음 → done()이 해제
+    expect(core.session.followPaused).toBe(false);
+    expect(core.expectedNavigation()).toBeNull();
+
+    core.setDrafts([draft('2')]);
+    core.markSent(['2'], page); // markSent도 처리 중 묶음이 없어지는 시점에는 해제한다(막 보낸 '2'가 있으니 여기선 유지)
+    expect(core.session.followPaused).toBe(false); // 아직 일시정지된 적 없음 — 새 라운드 시작이 되살리지 않는다
+    core.noteArrival('http://x/d');
+    expect(core.session.followPaused).toBe(true);
+    core.done({ summary: 'done2', selectors: [], changedFiles: [] });
+    expect(core.session.followPaused).toBe(false);
+
+    const restarted = new SessionCore(store);
+    expect(restarted.session.followPaused).toBe(false);
+  });
+  it('an unexpected arrival while a navigation is expected clears expectedUrl too, so a later arrival at the original target is not mistaken for having followed (M6, Task 68 교정)', () => {
+    core.setDrafts([draft('1')]);
+    core.markSent(['1'], page); // busy — page는 core의 기본 page('http://x/')
+    core.expectNavigation('http://x/a');
+    core.noteArrival('http://x/c'); // 사용자가 예상 밖 페이지로 이동
+    expect(core.session.followPaused).toBe(true);
+    expect(core.expectedNavigation()).toBeNull();
+
+    core.noteArrival('http://x/a'); // 원래 목적지에 뒤늦게 도착해도 '따라간 도착'으로 오판하지 않는다
+    expect(core.session.followPaused).toBe(true); // 해제는 markSent/done만
   });
 });

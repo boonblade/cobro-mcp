@@ -46,21 +46,47 @@ export function pendingElsewhere(session: Session | null, href: string): { url: 
   try { return { url: item.url, path: pageLoc(item.url, href) }; } catch { return null; }
 }
 
-export interface CartItem {
-  kind: 'other' | 'sent' | 'working' | 'done';
-  page: string; note: string;
-  elementCount?: number; // kind 'other'만
-  summary?: string; // kind 'done'만
+// R172: pathname만(제목 없는 페이지용) — 깨진 url이면 그대로
+function pathnameOf(url: string): string {
+  try { return new URL(url).pathname; } catch { return url; }
 }
 
-// R167: ①다른 페이지 초안(담은 순) → ②진행 묶음(sentAt 순). 현재 페이지 초안(page 없음 포함)은 제외
-export function cartItems(drafts: Batch[], batches: Batch[], href: string): CartItem[] {
-  const others: CartItem[] = drafts
-    .filter((b) => b.page && !samePage(b.page.url, href))
-    .map((b) => ({ kind: 'other', page: pageLabel(b.page, href), note: b.note, elementCount: b.elements.length + (b.regions?.length ?? 0) }));
-  const progress: CartItem[] = roundBatches(batches)
+export interface QueueCard {
+  kind: 'draft' | 'sent' | 'working' | 'done';
+  url: string; title: string; path: string; meta: string;
+  isCurrent: boolean; count: number; // count = elements+regions 수(.thumb 윤곽 사각형용)
+}
+
+// R172: 큐 탭의 카드 목록 — ①내용 있는 초안(현재 페이지 포함, 담은 순) → ②진행 묶음(sentAt 순, busy 아니면 done 제외)
+export function queueCards(drafts: Batch[], batches: Batch[], href: string, busy: boolean, labels: { noNote: string; count: (n: number) => string }): QueueCard[] {
+  const noteMeta = (note: string): string => { const line = note.split('\n')[0] ?? ''; return line ? truncate40(line) : labels.noNote; };
+  const draftCards: QueueCard[] = drafts
+    .filter((b) => b.elements.length || b.regions?.length || b.note.trim())
+    .map((b) => {
+      const url = b.page?.url ?? href;
+      const count = b.elements.length + (b.regions?.length ?? 0);
+      return {
+        kind: 'draft', url, title: b.page?.title || pathnameOf(url), path: pageLoc(url, href),
+        meta: `${labels.count(count)} · ${noteMeta(b.note)}`, isCurrent: samePage(url, href), count,
+      };
+    });
+  const round = roundBatches(batches);
+  const progressSrc = busy ? round : round.filter((b) => b.status !== 'done');
+  const progressCards: QueueCard[] = progressSrc
     .slice()
     .sort((a, b) => (a.sentAt ?? '').localeCompare(b.sentAt ?? ''))
-    .map((b) => ({ kind: b.status as 'sent' | 'working' | 'done', page: pageLabel(b.page, href), note: b.note, ...(b.status === 'done' ? { summary: b.summary } : {}) }));
-  return [...others, ...progress];
+    .map((b) => {
+      const url = b.page?.url ?? href;
+      const count = b.elements.length + (b.regions?.length ?? 0);
+      const meta = b.status === 'done' ? '✓ ' + truncate40(b.summary ?? '') : `${labels.count(count)} · ${noteMeta(b.note)}`;
+      return { kind: b.status as 'sent' | 'working' | 'done', url, title: b.page?.title || pathnameOf(url), path: pageLoc(url, href), meta, isCurrent: samePage(url, href), count };
+    });
+  return [...draftCards, ...progressCards];
 }
+
+// R174: 접힌 완료 행(done-row)용 — busy 아닐 때만 의미가 있다(호출부에서 게이트)
+export function lastRoundDone(batches: Batch[]): Batch[] {
+  return batches.filter((b) => b.status === 'done');
+}
+// M40: 40자 절단 — queueCards의 meta에 쓴다(ui.ts의 기존 truncate40과 동일 규칙)
+function truncate40(s: string): string { return s.length > 40 ? s.slice(0, 40) + '…' : s; }

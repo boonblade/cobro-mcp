@@ -32,8 +32,10 @@ export function createMcpServer(deps: { core: SessionCore; browser: BrowserLike;
   // 한 번 띄운 뒤 사라졌다 = 사용자가 창을 닫았다. 그 상태로 기다리면 영영 오지 않는다(룰링 R34a).
   const browserGone = () => browser.wasLaunched() && !browser.isAlive();
   // R170: 작업 시작·완료 시 그 묶음의 페이지로 브라우저를 옮긴다. 옮길 필요가 없으면 undefined(응답에서 생략).
+  // R176: 사용자가 처리 중인 페이지를 직접 떠났으면(followPaused) 자동으로 다시 끌고 오지 않는다.
   const navigateTo = async (url?: string): Promise<boolean | undefined> => {
-    if (!url || samePage(url, core.session.page?.url ?? '') || !browser.isAlive()) return undefined;
+    if (!url || samePage(url, core.session.page?.url ?? '') || !browser.isAlive() || core.session.followPaused) return undefined;
+    core.expectNavigation(url); // 이동 직전 — noteArrival이 도착 판정에 쓴다
     try { await browser.open(url); return true; } catch (e) { console.error('[cobro] navigate failed', (e as Error).message); return false; }
   };
 

@@ -5,12 +5,13 @@ All notable changes to this project are documented here. The format follows [Kee
 ## [Unreleased]
 ### Added
 - Batches carry the page they were picked on (batches[].page), and status/done accept an optional batchId so an agent can work through several batches in order.
-- Cart: drafts from several pages sit in one list (one draft per page); Send delivers all of them in order, and the toolbar shows progress like "Working 1/3".
+- Queue: the panel has two tabs — This page and Queue (N). Drafts from several pages appear as cards (one draft per page); Send delivers them in order, the toolbar shows progress like "Working 1/3", and finished pages collapse into a done row that clears when you pick again.
 - The browser moves to a batch's page when the agent starts working on it (status with batchId) or finishes it (done with batchId); if it cannot, the toolbar shows a "view /path" link that replays the highlight on arrival.
+- If you leave the page the agent is editing, the browser stops following it for that round and the toolbar shows a "view /path" link when it finishes.
 
 ### Changed
 - Sending a new batch no longer marks an earlier unanswered batch as abandoned; sent batches stay until done.
-- Send is no longer disabled while the agent works; new batches queue behind the current one.
+- While the agent works, Select is disabled (unlocks on the agent's next wait); the Send button appears only when there is something to send.
 
 ### Fixed
 - Under the reload strategy the done highlight now appears after the page reloads.

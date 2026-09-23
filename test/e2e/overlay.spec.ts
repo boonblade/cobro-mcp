@@ -33,12 +33,12 @@ test('select → note → Send arrives in core.wait with selector, then done fla
   if (r.status !== 'sent') return;
   expect(r.payload.batches[0]).toMatchObject({ note: '버튼 작게', elements: [{ selector: '#target', tag: 'button' }] });
   expect(r.payload.page.url).toContain('basic.html');
-  await expect(page.locator(`${HOST} .chip:not(.strategy)`)).toContainText('전송됨');
+  await expect(page.locator(`${HOST} .toolbar .chip:not(.strategy)`)).toContainText('전송됨');
   await expect(page.locator(`${HOST} .status`)).toContainText('에이전트 응답 대기');
   await expect(page.locator(`${HOST} .dot`)).toHaveClass(/sent/);
   await expect(page.locator(`${HOST} .els`)).toHaveCount(0); // 보낸 배치가 좀비 draft로 되살아나면 안 된다
   bridge.done({ summary: '폰트 12px', selectors: ['#target'], changedFiles: ['x.tsx'] });
-  await expect(page.locator(`${HOST} .chip:not(.strategy)`)).toContainText('완료');
+  await expect(page.locator(`${HOST} .toolbar .chip:not(.strategy)`)).toContainText('완료');
   await expect.poll(() => page.evaluate(() => (window as unknown as { __doneEvents: unknown[] }).__doneEvents.length)).toBe(1);
 });
 
@@ -198,8 +198,9 @@ test.describe('en locale', () => {
     await expect(page.locator(`${HOST} .chip:not(.strategy)`)).toContainText('Waiting');
     await selectAt(page, '#target');
     await expect(page.locator(`${HOST} .status`)).toContainText('selected');
-    await expect(page.locator(`${HOST} .panel h4`)).toContainText('element');
+    await expect(page.locator(`${HOST} .panel .sub`)).toContainText('element');
     await expect(page.locator(`${HOST} textarea`)).toHaveAttribute('placeholder', /Describe the change/);
+    await page.locator(`${HOST} textarea`).fill('note'); // R173: Send는 메모가 있어야 뜬다
     await expect(page.locator(`${HOST} button.send`)).toBeVisible();
   });
 });
@@ -284,7 +285,8 @@ test('panel has no batch tabs, Add batch, or history (R64)', async ({ cobroPage:
   const buttonTexts = await page.locator(`${HOST} .panel button`).allTextContents();
   expect(buttonTexts).not.toContain('Add batch');
   expect(buttonTexts).not.toContain('Redo');
-  await expect(page.locator(`${HOST} .tabs`)).toHaveCount(0);
+  // Task 68: `.tabs`는 R172의 이 페이지/큐 탭으로 재사용됐다(R64가 막던 "batch 탭"과는 다른 개념) — Add batch/Redo/history가 없는 것만 확인
+  await expect(page.locator(`${HOST} .tabs .tab`)).toHaveCount(2);
   await expect(page.locator(`${HOST} .hist`)).toHaveCount(0);
   await page.locator(`${HOST} textarea`).fill('x');
   const waiting = bridge.core.wait(10_000);
@@ -293,12 +295,12 @@ test('panel has no batch tabs, Add batch, or history (R64)', async ({ cobroPage:
   expect(r.status).toBe('sent');
   if (r.status === 'sent') expect(r.payload.batches.length).toBe(1);
   bridge.done({ summary: 'ok', selectors: [], changedFiles: [] });
-  await expect(page.locator(`${HOST} .chip:not(.strategy)`)).toContainText('완료');
+  await expect(page.locator(`${HOST} .toolbar .chip:not(.strategy)`)).toContainText('완료');
   await expect(page.locator(`${HOST} .hist`)).toHaveCount(0);
-  await expect(page.locator(`${HOST} .panel`)).not.toBeVisible();
+  await expect(page.locator(`${HOST} .panel`)).toBeVisible(); // Task 68 R172: Send 뒤에는 패널이 큐 탭으로 열린 채 남는다(R64가 막던 batch 탭/이력과는 무관)
 });
 
-test('Send stays enabled while the agent works; a second batch queues behind the first (R165)', async ({ cobroPage: page, bridge }) => {
+test('Select stays clickable while the agent works — it opens the queue instead of picking, and unlocks picking on the next wait() (R175, Task 68 교정 B2)', async ({ cobroPage: page, bridge }) => {
   bridge.core.setStrategy('none');
   await page.goto('http://127.0.0.1:4173/basic.html');
   await selectAt(page, '#target');
@@ -307,23 +309,30 @@ test('Send stays enabled while the agent works; a second batch queues behind the
   await page.locator(`${HOST} button.send`).click();
   const r1 = await waiting1;
   expect(r1.status).toBe('sent');
-  if (r1.status === 'sent') expect(r1.payload.batches[0]?.note).toBe('a');
 
-  const buttonTexts = await page.locator(`${HOST} .panel button`).allTextContents();
-  expect(buttonTexts).not.toContain('Unlock');
-  await selectAt(page, '#card');
-  await expect(page.locator(`${HOST} button.send`)).toBeEnabled();
-  await expect(page.locator(`${HOST} button.send`)).toHaveAttribute('title', '선택한 요소와 메모를 에이전트에 전송');
+  await page.keyboard.press('Escape'); // 잠겨도 닫기는 언제나 된다
+  await expect(page.locator(`${HOST} .panel`)).not.toHaveClass(/show/);
 
-  await page.locator(`${HOST} textarea`).fill('b');
-  const waiting2 = bridge.core.wait(10_000);
-  await page.locator(`${HOST} button.send`).click();
-  const r2 = await waiting2;
-  expect(r2.status).toBe('sent');
-  if (r2.status === 'sent') expect(r2.payload.batches[0]?.note).toBe('b');
+  await expect(page.locator(`${HOST} .ib.select`)).toBeEnabled(); // B2: 잠겨도 클릭은 된다 — 흐린 스타일만
+  await expect(page.locator(`${HOST} .ib.select`)).toHaveClass(/locked/);
+  await expect(page.locator(`${HOST} .ib.select`)).toHaveAttribute('title', /수정 중/);
+  await page.locator(`${HOST} .ib.select`).hover();
+  await page.screenshot({ path: 'screenshots/queue-locked.png' });
 
-  expect(bridge.core.session.batches.filter((b) => b.status === 'sent')).toHaveLength(2);
-  expect(bridge.core.session.batches.filter((b) => b.status === 'unanswered')).toHaveLength(0);
+  await page.locator(`${HOST} .ib.select`).click(); // 패널을 열되 큐 탭으로 — 선택 모드는 켜지 않는다
+  await expect(page.locator(`${HOST} .tab.queue`)).toHaveClass(/on/);
+  await expect(page.locator(`${HOST} .ib.select`)).not.toHaveClass(/on/);
+  await expect(page.locator(`${HOST} .marker`)).toHaveCount(0); // 새 마커가 추가되지 않는다(선택 모드가 아니다)
+
+  await page.keyboard.press('Control+Shift+F'); // 잠긴 동안은 Ctrl+Shift+F도 같은 동작 — 이번엔 닫는다
+  await expect(page.locator(`${HOST} .panel`)).not.toHaveClass(/show/);
+
+  bridge.core.wait(1000); // R74: 에이전트가 done 없이 wait를 다시 부르면 agent가 waiting으로 풀린다
+  await expect(page.locator(`${HOST} .ib.select`)).not.toHaveClass(/locked/);
+  await page.keyboard.press('Control+Shift+F'); // 잠금이 풀리면 선택 모드를 켠다
+  await expect(page.locator(`${HOST} .ib.select`)).toHaveClass(/on/);
+
+  bridge.done({ summary: 'ok', selectors: [], changedFiles: [] });
 });
 
 test('toolbar chip and detail are separate — no duplicated label', async ({ cobroPage: page, bridge }) => {
@@ -331,7 +340,7 @@ test('toolbar chip and detail are separate — no duplicated label', async ({ co
   await selectAt(page, '#target');
   await page.locator(`${HOST} textarea`).fill('메모');
   const waiting = bridge.core.wait(10_000);
-  await expect(page.locator(`${HOST} .chip:not(.strategy)`)).toContainText('대기 중');
+  await expect(page.locator(`${HOST} .toolbar .chip:not(.strategy)`)).toContainText('대기 중');
   await expect(page.locator(`${HOST} .status`)).toContainText('Send로 전송하세요'); // 디바운스된 draft가 반영된 뒤(M1)
   await expect(page.locator(`${HOST} .status-in`)).not.toHaveClass(/enter/); // 슬라이드인 애니메이션이 끝난 뒤 촬영(M2)
   const waitingBox = (await page.locator(`${HOST} .toolbar`).boundingBox())!;
@@ -339,7 +348,7 @@ test('toolbar chip and detail are separate — no duplicated label', async ({ co
   await page.locator(`${HOST} button.send`).click();
   await waiting;
   bridge.core.setAgentText('수정 중: collab.py + page.tsx');
-  await expect(page.locator(`${HOST} .chip:not(.strategy)`)).toHaveText(/수정 중/);
+  await expect(page.locator(`${HOST} .toolbar .chip:not(.strategy)`)).toHaveText(/수정 중/);
   await expect(page.locator(`${HOST} .status`)).toContainText('collab.py + page.tsx');
   await expect(page.locator(`${HOST} .status`)).not.toContainText('수정 중');
   await expect(page.locator(`${HOST} .status-in`)).not.toHaveClass(/enter/); // 슬라이드인 애니메이션이 끝난 뒤 촬영(M2)
@@ -347,7 +356,7 @@ test('toolbar chip and detail are separate — no duplicated label', async ({ co
   await page.screenshot({ path: 'screenshots/toolbar-working.png', clip: { x: workingBox.x - 8, y: workingBox.y - 8, width: workingBox.width + 16, height: workingBox.height + 16 } });
   bridge.core.setStrategy('none'); // done의 reload가 이후 단언을 끊지 않도록
   bridge.done({ summary: '완료: ok', selectors: [], changedFiles: [] });
-  await expect(page.locator(`${HOST} .chip:not(.strategy)`)).toHaveText(/완료/);
+  await expect(page.locator(`${HOST} .toolbar .chip:not(.strategy)`)).toHaveText(/완료/);
   await expect(page.locator(`${HOST} .status`)).toContainText('ok');
 });
 
@@ -361,7 +370,7 @@ test('done summary stays in the detail while waiting, until a new draft starts (
   await waiting;
   bridge.done({ summary: '완료: 색 변경', selectors: ['#target'], changedFiles: ['x.tsx'] });
   bridge.core.wait(10_000);
-  await expect(page.locator(`${HOST} .chip:not(.strategy)`)).toContainText('대기 중');
+  await expect(page.locator(`${HOST} .toolbar .chip:not(.strategy)`)).toContainText('대기 중');
   await expect(page.locator(`${HOST} .status`)).toContainText('✓ 완료: 색 변경');
   await expect(page.locator(`${HOST} .status-in`)).not.toHaveClass(/enter/); // 슬라이드인 애니메이션이 끝난 뒤 촬영(M2)
   const box = (await page.locator(`${HOST} .toolbar`).boundingBox())!;
@@ -385,12 +394,12 @@ test('done clears the note, leaving no leftover draft across reload (T3, R125)',
   await page.keyboard.press('Control+Shift+F');
   await expect(page.locator(`${HOST} textarea`)).toHaveValue('');
   await expect(page.locator(`${HOST} .els > div`)).toHaveCount(0);
-  await expect(page.locator(`${HOST} .panel h4`)).toContainText('요소 없음');
+  await expect(page.locator(`${HOST} .panel .sub`)).toContainText('요소 없음');
   await page.reload();
   await page.keyboard.press('Control+Shift+F');
   await expect(page.locator(`${HOST} textarea`)).toHaveValue('');
   await expect(page.locator(`${HOST} .els > div`)).toHaveCount(0);
-  await expect(page.locator(`${HOST} .panel h4`)).toContainText('요소 없음');
+  await expect(page.locator(`${HOST} .panel .sub`)).toContainText('요소 없음');
   expect(bridge.core.session.batches.filter((b) => b.status === 'draft')).toHaveLength(0);
 });
 
@@ -547,6 +556,8 @@ test.describe('region with screenshot capture', () => {
       expect(r.payload.batches[0]?.screenshot).toBeTruthy();
     }
 
+    bridge.core.wait(1000); // R175: 다시 고르려면 에이전트가 wait()로 풀어줘야 한다
+    await expect(page.locator(`${HOST} .ib.select`)).toBeEnabled(); // 클라이언트가 해제를 받을 때까지
     // M2: page rect.y must include scrollY — the #a/#b gap (208px page-y) can't survive a
     // 300px scroll (grid total height ~208px), so this second region is drawn on the
     // 1500px spacer added below the grid, which stays in view after scrolling.
@@ -658,7 +669,7 @@ test('T3a: header ✕ closes the panel and turns off select mode, keeping the ma
   await expect(page.locator(`${HOST} .marker`)).toHaveCount(1);
 });
 
-test('T3b: a note-only Send delivers an empty elements list and closes the panel (R121)', async ({ cobroPage: page, bridge }) => {
+test('T3b: a note-only Send delivers an empty elements list and switches the panel to the queue tab (R121, Task 68 R172)', async ({ cobroPage: page, bridge }) => {
   await page.goto('http://127.0.0.1:4173/basic.html');
   await page.keyboard.press('Control+Shift+F');
   await expect(page.locator(`${HOST} .panel`)).toHaveClass(/show/);
@@ -674,7 +685,8 @@ test('T3b: a note-only Send delivers an empty elements list and closes the panel
     expect(r.payload.batches[0]).not.toHaveProperty('regions');
     expect(r.payload.batches[0]!.note).toBe('메모만 보냅니다');
   }
-  await expect(page.locator(`${HOST} .panel`)).not.toHaveClass(/show/);
+  await expect(page.locator(`${HOST} .panel`)).toHaveClass(/show/); // Task 68 R172: Send 직후 패널은 큐 탭으로 열린 채 남는다
+  await expect(page.locator(`${HOST} .tab.queue`)).toHaveClass(/on/);
   await expect(page.locator(`${HOST} button.select`)).not.toHaveClass(/on/);
 });
 
@@ -683,7 +695,7 @@ test('M1: panel keeps its dragged position across header ✕ close and Select re
   await selectAt(page, '#target');
   await expect(page.locator(`${HOST} .panel h4 .close`)).toBeVisible();
   const h4 = (await page.locator(`${HOST} .panel h4`).boundingBox())!;
-  const hx = h4.x + 20;
+  const hx = h4.x + 8;
   const hy = h4.y + h4.height / 2;
   await page.mouse.move(hx, hy);
   await page.mouse.down();
@@ -720,11 +732,13 @@ test('rows carry a type chip; region chip is marked', async ({ cobroPage: page }
 test('panel drags by its header and stays put across re-render', async ({ cobroPage: page }) => {
   await page.goto('http://127.0.0.1:4173/basic.html');
   await selectAt(page, '#target');
+  await page.locator(`${HOST} textarea`).fill('x'); // R173: 메모가 있어야 Send 행이 뜬다 — 타이핑 전후로 행 높이를 고정해 둔다
+  await expect(page.locator(`${HOST} button.send`)).toBeVisible();
   await expect(page.locator(`${HOST} .panel h4 .grip svg`)).toBeVisible();
   await expect(page.locator(`${HOST} .panel h4 .close`)).toBeVisible();
   const before = (await page.locator(`${HOST} .panel`).boundingBox())!;
   const h4 = (await page.locator(`${HOST} .panel h4`).boundingBox())!;
-  const hx = h4.x + 20;
+  const hx = h4.x + 8;
   const hy = h4.y + h4.height / 2;
   await page.mouse.move(hx, hy);
   await page.mouse.down();
@@ -750,18 +764,18 @@ test('dragging the panel twice moves it by the same amount each time (no duplica
   await page.waitForTimeout(600);
   const before = (await page.locator(`${HOST} .panel`).boundingBox())!;
   const h4a = (await page.locator(`${HOST} .panel h4`).boundingBox())!;
-  await page.mouse.move(h4a.x + 20, h4a.y + h4a.height / 2);
+  await page.mouse.move(h4a.x + 8, h4a.y + h4a.height / 2);
   await page.mouse.down();
-  await page.mouse.move(h4a.x + 20 - 80, h4a.y + h4a.height / 2 - 40, { steps: 5 });
+  await page.mouse.move(h4a.x + 8 - 80, h4a.y + h4a.height / 2 - 40, { steps: 5 });
   await page.mouse.up();
   const mid = (await page.locator(`${HOST} .panel`).boundingBox())!;
   const delta1 = { x: mid.x - before.x, y: mid.y - before.y };
   expect(Math.abs(delta1.x + 80)).toBeLessThanOrEqual(2); // 절대 이동량 — 드래그가 죽어도(delta1=0) 통과하지 않도록(M1)
   expect(Math.abs(delta1.y + 40)).toBeLessThanOrEqual(2);
   const h4b = (await page.locator(`${HOST} .panel h4`).boundingBox())!;
-  await page.mouse.move(h4b.x + 20, h4b.y + h4b.height / 2);
+  await page.mouse.move(h4b.x + 8, h4b.y + h4b.height / 2);
   await page.mouse.down();
-  await page.mouse.move(h4b.x + 20 - 80, h4b.y + h4b.height / 2 - 40, { steps: 5 });
+  await page.mouse.move(h4b.x + 8 - 80, h4b.y + h4b.height / 2 - 40, { steps: 5 });
   await page.mouse.up();
   const after2 = (await page.locator(`${HOST} .panel`).boundingBox())!;
   const delta2 = { x: after2.x - mid.x, y: after2.y - mid.y };
@@ -952,6 +966,7 @@ test('T8: an old draft without refs gets them assigned in order on reload (eleme
     expect(r.payload.batches[0]!.elements.every((e) => !!e.ref)).toBe(true);
     expect(r.payload.batches[0]!.regions!.every((rg) => !!rg.ref)).toBe(true);
   }
+  bridge.core.wait(1000); // R175: 다시 고르려면 에이전트가 wait()로 풀어줘야 한다(서버 상태라 reload에도 남는다)
   // M1(리뷰): ref는 있는데 refSeq가 없는 초안 — 다음 발급이 기존 숫자와 겹치면 안 된다
   bridge.core.setDrafts([{
     id: 'legacy2', note: '', status: 'draft', createdAt: new Date().toISOString(),
@@ -1084,7 +1099,7 @@ test('working effect is static under prefers-reduced-motion (R131)', async ({ co
   await expect(page.locator(`${HOST} .wbox`)).toHaveCount(1);
 });
 
-test('cart: drafts from two pages send together, each with its own page (R166·R167)', async ({ cobroPage: page, bridge }) => {
+test('queue: drafts from two pages show as cards; Send delivers both in order (R172)', async ({ cobroPage: page, bridge }) => {
   await page.goto('http://127.0.0.1:4173/region.html');
   await selectAt(page, '#a');
   await page.locator(`${HOST} textarea`).fill('r');
@@ -1092,12 +1107,9 @@ test('cart: drafts from two pages send together, each with its own page (R166·R
 
   await page.goto('http://127.0.0.1:4173/basic.html');
   await startSelect(page);
-  await expect(page.locator(`${HOST} .cart .item.other`)).toHaveCount(1);
-  await expect(page.locator(`${HOST} .cart .item.other .page`)).toContainText('/region.html');
-
   await pickAt(page, '#target');
   await page.locator(`${HOST} textarea`).fill('b');
-  // M2: 카운트 1만으로는 마커 소스가 vm.current인지 구분 못 한다 — 좌표·ref로 #target(basic 초안)의 것임을 확인
+  // B3(Task 68 교정, 검토 M2 원 단언 복원): 마커가 vm.current(basic 초안)의 것인지 좌표·ref로 확인 — 다른 페이지(region) 초안이 renderMarkers로 새지 않는다
   await expect(page.locator(`${HOST} .marker`)).toHaveCount(1); // basic 페이지 마커만 — region 초안은 마커에 안 나온다
   await expect(page.locator(`${HOST} .marker .n`)).toHaveText('1');
   const markerBox = (await page.locator(`${HOST} .marker`).boundingBox())!;
@@ -1105,8 +1117,14 @@ test('cart: drafts from two pages send together, each with its own page (R166·R
   expect(Math.abs(markerBox.x - targetBox.x)).toBeLessThanOrEqual(3);
   expect(Math.abs(markerBox.y - targetBox.y)).toBeLessThanOrEqual(3);
 
+  await page.locator(`${HOST} .tab.queue`).click();
+  await expect(page.locator(`${HOST} .queue .card`)).toHaveCount(2);
+  await expect(page.locator(`${HOST} .queue .card`).nth(0).locator('.path')).toContainText('/region.html');
+  await expect(page.locator(`${HOST} .queue .card`).nth(1).locator('.path')).toContainText('/basic.html');
+  await expect(page.locator(`${HOST} .queue .card`).nth(1)).toHaveClass(/here/);
+  await page.screenshot({ path: 'screenshots/queue-cards.png' });
+
   const waiting = bridge.core.wait(10_000);
-  await page.screenshot({ path: 'screenshots/cart-two-pages.png' });
   await page.locator(`${HOST} button.send`).click();
   const r = await waiting;
   expect(r.status).toBe('sent');
@@ -1114,9 +1132,10 @@ test('cart: drafts from two pages send together, each with its own page (R166·R
   expect(r.payload.batches).toHaveLength(2);
   expect(r.payload.batches[0]?.page?.url).toContain('/region.html');
   expect(r.payload.batches[1]?.page?.url).toContain('/basic.html');
+  await expect(page.locator(`${HOST} .tab.queue`)).toHaveClass(/on/); // R172: Send 직후 자동으로 큐 탭
 });
 
-test('cart: progress chip counts the round and done items leave when the round ends (R169)', async ({ cobroPage: page, bridge }) => {
+test('queue: Send hides when nothing to send; the round ends with a collapsed done row that clears on the next pick (R173·R174)', async ({ cobroPage: page, bridge }) => {
   bridge.core.setStrategy('none');
   await page.goto('http://127.0.0.1:4173/basic.html');
   await selectAt(page, '#target');
@@ -1128,6 +1147,8 @@ test('cart: progress chip counts the round and done items leave when the round e
   if (r1.status !== 'sent') return;
   const firstId = r1.payload.batches[0]!.id;
 
+  bridge.core.wait(1000); // R175: 두 번째를 고르려면 에이전트가 먼저 wait()로 풀어줘야 한다
+  await expect(page.locator(`${HOST} .ib.select`)).toBeEnabled(); // 클라이언트가 해제를 받을 때까지
   await selectAt(page, '#card');
   await page.locator(`${HOST} textarea`).fill('b');
   const waiting2 = bridge.core.wait(10_000);
@@ -1135,18 +1156,67 @@ test('cart: progress chip counts the round and done items leave when the round e
   const r2 = await waiting2;
   expect(r2.status).toBe('sent');
 
-  // 툴바 칩만(장바구니 진행 항목도 .chip을 쓰므로 .toolbar로 범위를 좁힌다)
-  await expect(page.locator(`${HOST} .toolbar .chip:not(.strategy)`)).toContainText('0/2');
+  await expect(page.locator(`${HOST} .row button.send`)).toHaveCount(0);
+  await expect(page.locator(`${HOST} .row .foot`)).toContainText('처리 중 0/2');
 
   bridge.done({ summary: 'ok', selectors: [], changedFiles: [] }, firstId);
   await expect(page.locator(`${HOST} .toolbar .chip:not(.strategy)`)).toContainText('1/2');
-  await startSelect(page); // 패널을 다시 열어 .cart를 확인
-  await expect(page.locator(`${HOST} .cart .item.done`)).toHaveCount(1);
-  await page.screenshot({ path: 'screenshots/cart-progress.png' });
 
   bridge.done({ summary: 'ok', selectors: [], changedFiles: [] });
-  await expect(page.locator(`${HOST} .toolbar .chip:not(.strategy)`)).not.toContainText('/');
-  await expect(page.locator(`${HOST} .cart`)).toHaveCount(0);
+  await expect(page.locator(`${HOST} .done-row`)).toHaveCount(1);
+  await expect(page.locator(`${HOST} .done-row`)).toContainText('완료 2');
+  await expect(page.locator(`${HOST} .row .foot`)).toHaveClass(/ok/);
+  await page.screenshot({ path: 'screenshots/queue-done-row.png' }); // 접힘 상태
+
+  await page.locator(`${HOST} .done-row`).click(); // M1(Task 68 교정): 펼침 분기
+  await expect(page.locator(`${HOST} .done-item`)).toHaveCount(2);
+  await expect(page.locator(`${HOST} .done-item`).nth(0)).toContainText('✓ ');
+  await expect(page.locator(`${HOST} .done-item`).nth(1)).toContainText('✓ ');
+
+  bridge.core.wait(1000); // 잠금 해제
+  await expect(page.locator(`${HOST} .ib.select`)).toBeEnabled(); // 클라이언트가 해제를 받을 때까지
+  await selectAt(page, '#title');
+  await page.locator(`${HOST} .tab.queue`).click(); // ensureCurrent가 새 초안을 만들며 「이 페이지」 탭으로 돌아간다 — 큐 탭에서 정리를 확인
+  await expect(page.locator(`${HOST} .done-row`)).toHaveCount(0);
+  await expect.poll(() => bridge.core.session.batches.filter((b) => b.status === 'done').length).toBe(0);
+});
+
+test('queue card click moves to that page (R172)', async ({ cobroPage: page, bridge }) => {
+  await page.goto('http://127.0.0.1:4173/region.html');
+  await selectAt(page, '#a');
+  await page.locator(`${HOST} textarea`).fill('r');
+  await expect.poll(() => bridge.core.session.batches.length).toBe(1);
+
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await startSelect(page);
+  await page.locator(`${HOST} .tab.queue`).click();
+  await expect(page.locator(`${HOST} .queue .card`)).toHaveCount(1);
+  await page.locator(`${HOST} .queue .card`).first().click();
+  await expect(page).toHaveURL(/region\.html/);
+});
+
+test('user navigation during work pauses following (R176)', async ({ cobroPage: page, bridge }) => {
+  bridge.core.setStrategy('none');
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await selectAt(page, '#target');
+  await page.locator(`${HOST} textarea`).fill('a');
+  const waiting = bridge.core.wait(10_000);
+  await page.locator(`${HOST} button.send`).click();
+  const r = await waiting;
+  expect(r.status).toBe('sent');
+  if (r.status !== 'sent') return;
+  const id = r.payload.batches[0]!.id;
+
+  bridge.core.setAgentText('x', id); // status(text, batchId) — 묶음을 working으로
+  await page.goto('http://127.0.0.1:4173/region.html'); // 사용자가 직접 다른 페이지로 이동
+
+  await expect.poll(() => bridge.core.session.followPaused).toBe(true);
+  await expect(page.locator(`${HOST} .status`)).toContainText('따라가기'); // R176: 툴바 힌트(페이지 이동으로 패널은 새로 뜬 오버레이라 닫혀 있다)
+
+  bridge.done({ summary: 'ok', selectors: [], changedFiles: [] }, id);
+  await expect.poll(() => (bridge.core.session.pendingDone ?? []).some((p) => p.url.includes('basic.html'))).toBe(true);
+  expect(page.url()).toContain('region.html'); // 자동 이동하지 않는다
+  await expect(page.locator(`${HOST} .status-in a.goto`)).toHaveCount(1);
 });
 
 test('working boxes are drawn only for batches of the current page (R168)', async ({ cobroPage: page, bridge }) => {

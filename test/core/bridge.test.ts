@@ -322,4 +322,26 @@ describe('createBridge', () => {
     expect(shotCalls).toEqual([]);
     ws.close();
   });
+
+  it('while busy, a socket that reports a different page pauses following; a same-page hash reconnect does not (R176)', async () => {
+    b = await createBridge({ store: new Store(mkdtempSync(join(tmpdir(), 'cobro-'))), token: 't', screenshot: async (batch) => `/shots/${batch.id}.png` });
+    const ws = new WebSocket(`ws://127.0.0.1:${b.port}`);
+    await new Promise((r) => ws.once('open', r));
+    ws.send(JSON.stringify({ type: 'hello', token: 't' }));
+    ws.send(JSON.stringify({ type: 'page', page, detected: 'none' }));
+    ws.send(JSON.stringify({ type: 'draft', batches: [{ id: 'b1', note: '줄여줘', elements: [el], status: 'draft', createdAt: 't' }] }));
+    const waiting = b.core.wait(5000);
+    ws.send(JSON.stringify({ type: 'send', batchIds: ['b1'], page }));
+    await waiting;
+    expect(b.core.session.followPaused).toBeFalsy();
+
+    ws.send(JSON.stringify({ type: 'page', page: { ...page, url: 'http://x/#h' }, detected: 'none' })); // hash만 다름
+    await new Promise((r) => setTimeout(r, 50));
+    expect(b.core.session.followPaused).toBeFalsy();
+
+    ws.send(JSON.stringify({ type: 'page', page: { ...page, url: 'http://x/c' }, detected: 'none' })); // 사용자가 직접 이동
+    await new Promise((r) => setTimeout(r, 50));
+    expect(b.core.session.followPaused).toBe(true);
+    ws.close();
+  });
 });

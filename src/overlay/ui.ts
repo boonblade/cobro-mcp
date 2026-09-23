@@ -4,13 +4,17 @@ import { stripStatusLabel } from './status-text.js';
 import type { ResolvedTheme } from './theme.js';
 import { svg } from './icons.js';
 import { isChildRef } from './refs.js';
-import { cartItems, roundOf } from './cart.js';
+import { queueCards, lastRoundDone, roundOf, pageLoc } from './cart.js';
 import { samePage } from '../core/page.js';
 type IconName = Parameters<typeof svg>[0];
 
+// R172: 가로 막대 2개 — 큐 탭 아이콘(이모지 금지)
+const QUEUE_ICON = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="2" y="5" width="12" height="2" rx="1" fill="currentColor"/><rect x="2" y="9" width="12" height="2" rx="1" fill="currentColor"/></svg>';
+
 // R166·R169: current = 현재 페이지 초안, queue = sent·working·라운드 done(전 페이지), busy = sent·working 묶음 존재
-export interface ViewModel { selecting: boolean; connected: boolean; agent: { status: AgentStatus; text: string }; strategy: RefreshStrategy | null; drafts: Batch[]; current: Batch | null; queue: Batch[]; busy: boolean; pendingElsewhere: { url: string; path: string } | null; prefs: UiPrefs; expanded: string | null; href: string }
-export interface UIHandlers { onToggleSelect(): void; onNoteInput(id: string, note: string): void; onRemoveElement(id: string, index: number): void; onRemoveRegion(id: string, index: number): void; onSend(): void; onSettings(patch: { theme?: Theme }): void; onToggleGroup(ref: string): void }
+// R172·R174·R175·R176: batches = 전체 묶음(큐 카드·완료 정리용), locked = 에이전트 기준 잠금, tab·doneOpen = UI 전용 상태, panelOpen = 패널 표시 여부(선택 모드와 분리 — R175)
+export interface ViewModel { selecting: boolean; connected: boolean; agent: { status: AgentStatus; text: string }; strategy: RefreshStrategy | null; drafts: Batch[]; current: Batch | null; queue: Batch[]; batches: Batch[]; busy: boolean; locked: boolean; followPaused: boolean; pendingElsewhere: { url: string; path: string } | null; prefs: UiPrefs; expanded: string | null; href: string; tab: 'here' | 'queue'; doneOpen: boolean; panelOpen: boolean }
+export interface UIHandlers { onToggleSelect(): void; onClose(): void; onNoteInput(id: string, note: string): void; onRemoveElement(id: string, index: number): void; onRemoveRegion(id: string, index: number): void; onSend(): void; onSettings(patch: { theme?: Theme }): void; onToggleGroup(ref: string): void; onTab(tab: 'here' | 'queue'): void; onToggleDone(): void; onGoPage(url: string): void }
 
 const CSS = `
 :host{
@@ -48,6 +52,9 @@ const CSS = `
 .toolbar button:hover,.panel button:hover{background:var(--hover);border-color:var(--hover-border);color:var(--fg-hover)}
 .toolbar button:focus-visible,.panel button:focus-visible{outline:2px solid var(--info);outline-offset:1px}
 .toolbar button.on{color:var(--fg-on-accent);background:var(--accent);border-color:var(--accent)}
+.toolbar button:disabled,.panel button:disabled{opacity:.4;cursor:not-allowed}
+.toolbar button.locked{opacity:.6}
+textarea:disabled{opacity:.6;cursor:not-allowed}
 .els button{background:transparent;border-color:transparent;color:var(--fg-5);padding:0 6px}
 .els button:hover{background:var(--hover);color:var(--fg-hover)}
 .chip{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;background:var(--chip);border:1px solid transparent;color:var(--fg-3);white-space:nowrap;cursor:default;user-select:none}
@@ -88,6 +95,12 @@ const CSS = `
 .panel h4 .grip svg{width:14px;height:16px;fill:currentColor;display:block}
 .panel h4 .close{margin-left:auto;background:transparent;border-color:transparent;color:var(--fg-5);padding:0 6px}
 .panel h4 .close:hover{background:var(--hover);color:var(--fg-hover)}
+.panel .tabs{display:flex;flex:1;border-bottom:1px solid var(--border)}
+.panel .tabs button.tab{flex:1;min-height:40px;background:none;border:0;border-bottom:2px solid transparent;color:var(--fg-4);font-weight:600;font-family:inherit;letter-spacing:0;display:inline-flex;align-items:center;justify-content:center;gap:5px;border-radius:0;padding:4px 6px}
+.panel .tabs button.tab.on{color:var(--fg);border-bottom-color:var(--accent)}
+.panel .tabs .badge{display:inline-flex;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:var(--chip);font-size:10px;line-height:16px;text-align:center}
+.sub{display:flex;align-items:center;gap:6px;margin:12px 0;color:var(--fg);font-size:12px;font-weight:700}
+.sub .mark{color:var(--accent)}
 .els{max-height:min(45vh,260px);overflow:auto;margin-bottom:8px;color:var(--fg-3);font-size:11px}
 .els div{display:flex;align-items:center;gap:8px;padding:8px 10px;margin-bottom:8px;background:var(--bg-3);border:1px solid var(--border);border-radius:8px;word-break:break-all}
 .els div:last-child{margin-bottom:0}
@@ -104,18 +117,34 @@ const CSS = `
 .marker.child{border-style:dotted}
 .marker.child .n{background:#fff;color:var(--accent);border:1.5px solid var(--accent)}
 textarea{width:100%;min-height:80px;resize:none;font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--border-2);border-radius:8px;padding:10px;margin-bottom:0;display:block}
-.cart{margin-top:8px;border-top:1px solid var(--border);padding-top:6px}
-.cart .item{display:flex;gap:6px;align-items:center;font-size:12px;padding:3px 0;opacity:.85}
-.cart .item.other{opacity:.6}
-.cart .item .page{max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cart .item .note{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cart .item .chip{flex:none;font-size:10px;line-height:16px;padding:0 6px;border-radius:999px;background:var(--chip);border:1px solid var(--border);color:var(--fg-4)}
-.cart .item.working .chip{color:var(--accent)}
-.cart .item.done .chip{color:var(--ok)}
+div.queue{display:flex;flex-direction:column;gap:8px;max-height:min(45vh,320px);overflow:auto;margin:12px 0}
+.queue .card{display:flex;gap:8px;padding:8px;border:1px solid var(--border);border-radius:10px;text-decoration:none;color:inherit;align-items:center}
+.card.working{border-color:var(--accent)}
+.card.here{background:var(--chip)}
+.queue .card .body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.queue .card .title{font-weight:600;color:var(--fg-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.queue .card .path{font-size:10px;color:var(--fg-5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.queue .card .meta{font-size:11px;color:var(--fg-4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.queue .card .chip{flex:none;font-size:10px;line-height:16px;padding:0 6px;border-radius:999px;background:var(--chip);border:1px solid var(--border);color:var(--fg-4);align-self:flex-start}
+.queue .card.working .chip{color:var(--accent)}
+.queue .card.done .chip{color:var(--ok)}
+.queue .card .here{flex:none;font-size:10px;color:var(--fg-5)}
+.thumb{flex:none;width:44px;height:32px;background:#fff;border-radius:6px;display:flex;align-items:center;justify-content:center;gap:3px;padding:4px}
+.thumb .rect{display:block;width:10px;height:14px;border:1.5px solid var(--border-2);border-radius:2px}
+.thumb .rect.sent{border-color:var(--warn)}
+.thumb .rect.working{border-color:var(--accent)}
+.thumb .rect.done{border-color:var(--ok)}
+.done-row{display:block;width:100%;text-align:left;background:transparent;border:1px dashed var(--border);color:var(--fg-4);padding:8px 10px;border-radius:8px}
+.done-item{display:flex;gap:8px;padding:6px 10px;font-size:11px;color:var(--fg-4)}
+.done-item .title{flex:none;color:var(--fg-3)}
+.done-item .path{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.done-item .summary{color:var(--ok)}
 .row{display:flex;justify-content:space-between;margin-top:8px;gap:6px;align-items:center}
 .row .sends{color:var(--fg-5);font-size:11px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .row .send{color:var(--fg-on-accent);background:var(--accent);border-color:var(--accent);font-weight:700;flex:none;white-space:nowrap}
 .row .send:disabled{opacity:.4;cursor:not-allowed}
+.row .foot{font-size:11px;color:var(--fg-4)}
+.row .foot.ok{color:var(--ok)}
 .marker{position:fixed;border:2px solid var(--accent);border-radius:2px;pointer-events:none;box-sizing:border-box}
 .marker.region{border-style:dashed;background:color-mix(in srgb, var(--accent) 6%, transparent)}
 .marker .n{position:absolute;left:-2px;top:-2px;transform:translate(-50%,-50%);min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--accent);color:#fff;font:700 11px/18px ui-monospace,Menlo,Consolas,monospace;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.4)}
@@ -183,9 +212,19 @@ const T = {
     sends: '선택자 · 스타일 · 스크린샷 · 콘솔',
     tipSend: '선택한 요소와 메모를 에이전트에 전송',
     tipRemove: '이 요소 빼기',
-    cartCount: (n: number) => `${n}개 항목`, cartNoNote: '메모 없음',
-    tipOtherPage: '다른 페이지의 초안 — 그 페이지에서 편집',
+    cartNoNote: '메모 없음',
     doneElsewhere: (path: string) => `✓ 완료 · ${path} 보기`,
+    tabHere: '이 페이지', tabQueue: '큐', herePage: '지금 보고 있는 페이지',
+    queueCount: (n: number) => `${n}개`,
+    footBusy: (d: number, n: number) => `처리 중 ${d}/${n} — 끝나면 담을 수 있어요`,
+    footPaused: (d: number, n: number) => `처리 중 ${d}/${n} — 이 페이지를 떠나 따라가기를 멈췄어요`,
+    footAllDone: (n: number) => `✓ ${n}페이지 완료 — 요소를 고르면 새 요청이 시작됩니다`,
+    footHint: '메모를 적으면 보낼 수 있어요',
+    tipSelectLocked: '에이전트가 수정 중 — 큐를 볼 수 있어요, 담기는 완료 후',
+    followPaused: '따라가기 중지 — 완료되면 「보기」 링크로 확인',
+    doneRow: (n: number) => `✓ 완료 ${n}페이지 · 새로 담으면 정리됩니다`,
+    sendPages: (n: number) => `Send · ${n}페이지 →`,
+    chipDraft: '초안',
     progress: (d: number, n: number) => `${d}/${n}`,
     tipSettings: '설정', theme: '테마', themeAuto: '자동', themeDark: '어둡게', themeLight: '밝게', themeFrost: '유리',
     themeLocked: 'COBRO_THEME 환경 변수로 고정됨',
@@ -213,9 +252,19 @@ const T = {
     sends: 'Sends selector · styles · shot · console',
     tipSend: 'Send the selected elements and note to the agent',
     tipRemove: 'Remove this element',
-    cartCount: (n: number) => `${n} item${n === 1 ? '' : 's'}`, cartNoNote: 'No note',
-    tipOtherPage: 'Draft on another page — edit it there',
+    cartNoNote: 'No note',
     doneElsewhere: (path: string) => `✓ Done · view ${path}`,
+    tabHere: 'This page', tabQueue: 'Queue', herePage: 'The page you\'re on',
+    queueCount: (n: number) => `${n} element${n === 1 ? '' : 's'}`,
+    footBusy: (d: number, n: number) => `Working ${d}/${n} — you can add more once it's done`,
+    footPaused: (d: number, n: number) => `Working ${d}/${n} — you left this page, so following paused`,
+    footAllDone: (n: number) => `✓ ${n} page${n === 1 ? '' : 's'} done — pick an element to start a new request`,
+    footHint: 'Write a note to send',
+    tipSelectLocked: 'Agent is working — view the queue; picking resumes after done',
+    followPaused: 'Following paused — check the "view" link when it\'s done',
+    doneRow: (n: number) => `✓ ${n} done · cleared when you pick again`,
+    sendPages: (n: number) => `Send · ${n} pages →`,
+    chipDraft: 'Draft',
     progress: (d: number, n: number) => `${d}/${n}`,
     tipSettings: 'Settings', theme: 'Theme', themeAuto: 'Auto', themeDark: 'Dark', themeLight: 'Light', themeFrost: 'Frost',
     themeLocked: 'Pinned by COBRO_THEME',
@@ -228,7 +277,7 @@ const AGENT_TEXT: Record<AgentStatus, (t: string) => string> = {
   working: (t) => stripStatusLabel(t, LABELS.working), done: (t) => stripStatusLabel(t, LABELS.done),
 };
 const DOT_TITLE: Record<AgentStatus, string> = { idle: T.agentIdle, waiting: T.agentWaiting, sent: T.agentSent, working: T.agentWorking, done: T.agentDone };
-const CHIP_LABEL: Record<AgentStatus, string> = { idle: T.chipIdle, waiting: T.chipWaiting, sent: T.chipSent, working: T.chipWorking, done: T.chipDone };
+const CHIP_LABEL: Record<AgentStatus | 'draft', string> = { idle: T.chipIdle, waiting: T.chipWaiting, sent: T.chipSent, working: T.chipWorking, done: T.chipDone, draft: T.chipDraft };
 
 // 드래그: CSS translate로 오프셋만 얹는다(transform의 -50% 중앙 정렬과 독립). 저장 없음(R101)
 // off는 target.style.translate에서 읽어 시작한다 — 재호출(패널처럼 매 render마다 새 handle에 다시 붙는 경우)에도
@@ -368,6 +417,8 @@ export function createUI(h: UIHandlers) {
     const wasTa = active instanceof HTMLTextAreaElement ? active : null;
     const sel: [number, number] | null = wasTa ? [wasTa.selectionStart, wasTa.selectionEnd] : null;
     selectBtn.classList.toggle('on', vm.selecting);
+    selectBtn.classList.toggle('locked', vm.locked); // B2: 잠겨도 클릭은 된다 — 패널(큐 탭) 열기/닫기로 동작, 흐린 스타일만
+    selectBtn.title = vm.locked ? T.tipSelectLocked : T.tipSelect;
     for (const btn of segButtons) { btn.classList.toggle('on', btn.dataset.theme === vm.prefs.theme); btn.disabled = vm.prefs.themeLocked; }
     popNote.hidden = !vm.prefs.themeLocked;
     const cur = vm.current;
@@ -376,6 +427,7 @@ export function createUI(h: UIHandlers) {
     let gotoUrl: string | null = null; // R171: 다른 페이지에서 끝난 완료의 폴백 "보기" 링크
     if (!vm.connected) hint = T.disconnected;
     else if (!vm.busy && vm.pendingElsewhere) { hint = T.doneElsewhere(vm.pendingElsewhere.path); gotoUrl = vm.pendingElsewhere.url; }
+    else if (vm.locked && vm.followPaused) hint = T.followPaused; // R176: 폴백 링크보다 낮은 우선순위
     else {
       let text: string;
       if (vm.agent.status === 'sent' || vm.agent.status === 'working' || vm.agent.status === 'done') text = AGENT_TEXT[vm.agent.status](vm.agent.text);
@@ -415,20 +467,35 @@ export function createUI(h: UIHandlers) {
     chip.title = vm.connected ? DOT_TITLE[vm.agent.status] + roundSuffix : T.disconnected;
     chip2.hidden = !vm.strategy;
     if (vm.strategy) { chip2Label.textContent = vm.strategy; chip2.title = T.tipStrategy(vm.strategy); }
-    const show = vm.selecting;
-    panel.classList.toggle('show', show);
-    // R167: .cart(다른 페이지 초안·진행 묶음)는 현재 초안이 없어도 보일 수 있다
-    const items = cartItems(vm.drafts, vm.queue, vm.href);
-    if (!cur && items.length === 0) { panel.textContent = ''; textareas.clear(); return; }
-    if (!show) return;
+    panel.classList.toggle('show', vm.panelOpen); // R175: 선택 모드와 분리 — 잠겨서 선택이 꺼져도 패널은 열어 둘 수 있다
+    if (!vm.panelOpen) { panel.textContent = ''; textareas.clear(); return; }
     panel.textContent = '';
-    if (cur) {
-      const h4 = el('h4');
-      const g = el('span', 'grip'); g.innerHTML = svg('drag'); g.setAttribute('aria-hidden', 'true'); h4.append(g);
-      h4.append(el('span', 'mark', '▮'), document.createTextNode(cur.regions?.length ? T.selCountMixed(cur.elements.length, cur.regions.length) : cur.elements.length > 0 ? T.selCount(cur.elements.length) : T.selNone));
-      const close = el('button', 'close', '✕'); close.title = T.tipClose; close.setAttribute('aria-label', 'Close'); close.onclick = () => h.onToggleSelect();
-      h4.append(close);
-      panel.append(h4);
+    // R172: 큐 카드·완료 목록 — 패널 머리(탭)의 N과 큐 탭 본문에 함께 쓴다
+    const labels = { noNote: T.cartNoNote, count: T.queueCount };
+    const cards = queueCards(vm.drafts, vm.batches, vm.href, vm.busy, labels);
+    const doneList = lastRoundDone(vm.batches);
+    const queueN = cards.length > 0 ? cards.length : doneList.length;
+
+    const h4 = el('h4');
+    const g = el('span', 'grip'); g.innerHTML = svg('drag'); g.setAttribute('aria-hidden', 'true'); h4.append(g);
+    const tabs = el('div', 'tabs');
+    const tabHereBtn = el('button', 'tab current' + (vm.tab === 'here' ? ' on' : ''), T.tabHere);
+    tabHereBtn.onclick = () => h.onTab('here');
+    const tabQueueBtn = el('button', 'tab queue' + (vm.tab === 'queue' ? ' on' : ''));
+    tabQueueBtn.innerHTML = QUEUE_ICON;
+    tabQueueBtn.append(document.createTextNode(T.tabQueue), el('span', 'badge', String(queueN)));
+    tabQueueBtn.onclick = () => h.onTab('queue');
+    tabs.append(tabHereBtn, tabQueueBtn);
+    h4.append(tabs);
+    const close = el('button', 'close', '✕'); close.title = T.tipClose; close.setAttribute('aria-label', 'Close'); close.onclick = () => h.onClose();
+    h4.append(close);
+    panel.append(h4);
+
+    if (vm.tab === 'here') {
+      if (cur) {
+      const sub = el('div', 'sub');
+      sub.append(el('span', 'mark', '▮'), document.createTextNode(cur.regions?.length ? T.selCountMixed(cur.elements.length, cur.regions.length) : cur.elements.length > 0 ? T.selCount(cur.elements.length) : T.selNone));
+      panel.append(sub);
       const list = el('div', 'els');
       // 행 목록 = 낱개 요소(ref에 글자 없음) ∪ 영역, ref 오름차순(R127·R128). 그룹 자식은 여기 안 나오고 펼침에서만 보인다
       const looseEls = cur.elements.filter((e) => /^\d+$/.test(e.ref ?? ''));
@@ -478,30 +545,57 @@ export function createUI(h: UIHandlers) {
       if (!ta) { ta = document.createElement('textarea'); const id = cur.id; ta.addEventListener('input', () => h.onNoteInput(id, ta!.value)); textareas.set(id, ta); }
       ta.placeholder = (cur.elements.length + (cur.regions?.length ?? 0)) >= 2 ? T.notePlaceholderMulti : T.notePlaceholder;
       if (ta.value !== cur.note) ta.value = cur.note;
+      ta.disabled = vm.locked; // R175
       panel.append(ta);
-    }
-    // R167: 장바구니 절 — 다른 페이지 초안(담은 순) → 진행 묶음(sentAt 순), 있을 때만
-    if (items.length) {
-      const cart = el('div', 'cart');
-      for (const it of items) {
-        const row = el('div', `item ${it.kind}`);
-        if (it.kind === 'other') row.title = T.tipOtherPage;
-        row.append(el('span', 'page', it.page));
-        if (it.kind === 'other') row.append(el('span', 'cnt', T.cartCount(it.elementCount ?? 0)));
-        else row.append(el('span', 'chip', CHIP_LABEL[it.kind]));
-        const firstLine = it.note.split('\n')[0] ?? '';
-        const noteText = it.kind === 'done' ? '✓ ' + truncate40(it.summary ?? '') : firstLine ? truncate40(firstLine) : T.cartNoNote;
-        row.append(el('span', 'note', noteText));
-        cart.append(row);
       }
-      panel.append(cart);
+    } else {
+      // R172: 큐 탭 — 카드(초안·진행 묶음) + R174 완료 접힘 행(busy 아닐 때만)
+      const queue = el('div', 'queue');
+      for (const c of cards) {
+        const a = document.createElement('a');
+        a.className = `card ${c.kind}` + (c.isCurrent ? ' here' : '');
+        a.href = c.url;
+        a.onclick = (ev) => { ev.preventDefault(); h.onGoPage(c.url); };
+        const thumb = el('div', 'thumb');
+        for (let i = 0; i < Math.min(c.count, 2); i++) thumb.append(el('span', `rect ${c.kind}`));
+        a.append(thumb);
+        const body = el('div', 'body');
+        body.append(el('div', 'title', c.title), el('div', 'path', c.path), el('div', 'meta', c.meta));
+        a.append(body);
+        a.append(el('span', 'chip', CHIP_LABEL[c.kind]));
+        if (c.isCurrent) a.append(el('span', 'here', T.herePage));
+        queue.append(a);
+      }
+      if (!vm.busy && doneList.length > 0) {
+        const doneRow = el('button', 'done-row', `${vm.doneOpen ? '▾' : '▸'} ${T.doneRow(doneList.length)}`);
+        doneRow.onclick = () => h.onToggleDone();
+        queue.append(doneRow);
+        if (vm.doneOpen) {
+          for (const b of doneList) {
+            const url = b.page?.url ?? vm.href;
+            const item = el('div', 'done-item');
+            item.append(el('span', 'title', b.page?.title || url), el('span', 'path', pageLoc(url, vm.href)), el('span', 'summary', '✓ ' + truncate40(b.summary ?? '')));
+            queue.append(item);
+          }
+        }
+      }
+      panel.append(queue);
     }
+    // R173: 메모 있는 초안이 하나도 없으면 Send 대신 상태 문장
+    const readyDrafts = vm.drafts.filter((b) => b.note.trim());
     const row = el('div', 'row');
-    // R165: Send는 연결돼 있으면 항상 활성 — 전송·수정 중 묶음은 초안이 아니므로 잠글 대상이 아니다
-    const send = el('button', 'send', 'Send →') as HTMLButtonElement;
-    send.title = T.tipSend;
-    send.onclick = () => { closePop(); h.onSend(); };
-    row.append(el('span', 'sends', T.sends), send);
+    if (readyDrafts.length > 0) {
+      const send = el('button', 'send', readyDrafts.length >= 2 ? T.sendPages(readyDrafts.length) : 'Send →') as HTMLButtonElement;
+      send.title = T.tipSend;
+      send.onclick = () => { closePop(); h.onSend(); };
+      row.append(el('span', 'sends', T.sends), send);
+    } else {
+      let footText: string; let footOk = false;
+      if (vm.busy) footText = vm.followPaused ? T.footPaused(round.done, round.total) : T.footBusy(round.done, round.total);
+      else if (doneList.length > 0) { footText = T.footAllDone(doneList.length); footOk = true; }
+      else footText = T.footHint;
+      row.append(el('span', `foot${footOk ? ' ok' : ''}`, footText));
+    }
     panel.append(row);
     for (const id of [...textareas.keys()]) if (!vm.drafts.some((b) => b.id === id)) textareas.delete(id);
     // 다시 붙은 textarea가 아까 그 textarea면(= 현재 배치의 것) 포커스와 선택 범위를 되돌린다

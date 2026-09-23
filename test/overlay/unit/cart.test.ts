@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { currentDraft, roundOf, pageLabel, cartItems, pageLoc, pendingElsewhere } from '../../../src/overlay/cart.js';
+import { currentDraft, roundOf, pageLabel, queueCards, lastRoundDone, pageLoc, pendingElsewhere } from '../../../src/overlay/cart.js';
 import type { Batch, Session } from '../../../src/core/types.js';
 
 const el = { selector: '#a', tag: 'div', classes: [], text: '', rect: { x: 0, y: 0, w: 1, h: 1 }, styles: {} };
@@ -93,22 +93,49 @@ describe('pendingElsewhere', () => {
   });
 });
 
-describe('cartItems', () => {
-  it('lists other-page drafts first (in drafts order), then progress batches (sentAt order); current-page drafts are excluded', () => {
+describe('queueCards', () => {
+  const labels = { noNote: 'No note', count: (n: number) => `${n}x` };
+  it('orders drafts (insertion order, current page included) before progress batches (sentAt order)', () => {
     const drafts = [
       b('cur', { page: { url: 'http://x/here', title: 'Here' }, note: 'current note' }),
       b('o1', { page: { url: 'http://x/one', title: 'One' }, note: 'note one' }),
-      b('o2', { page: { url: 'http://x/two', title: 'Two' }, note: 'note two' }),
     ];
     const batches = [
       b('s2', { status: 'sent', sentAt: '2026-01-01T00:00:20.000Z', page: { url: 'http://x/here', title: 'Here' } }),
       b('s1', { status: 'sent', sentAt: '2026-01-01T00:00:10.000Z', page: { url: 'http://x/one', title: 'One' } }),
     ];
-    const items = cartItems(drafts, batches, 'http://x/here');
-    expect(items.map((i) => i.kind)).toEqual(['other', 'other', 'sent', 'sent']);
-    expect(items[0]?.page).toBe('One · /one');
-    expect(items[1]?.page).toBe('Two · /two');
-    expect(items[2]?.page).toBe('One · /one'); // s1, 더 이른 sentAt
-    expect(items[3]?.page).toBe('Here · /here'); // s2
+    const cards = queueCards(drafts, batches, 'http://x/here', true, labels);
+    expect(cards.map((c) => c.kind)).toEqual(['draft', 'draft', 'sent', 'sent']);
+    expect(cards[0]?.isCurrent).toBe(true); // cur
+    expect(cards[1]?.isCurrent).toBe(false);
+    expect(cards[2]?.url).toContain('/one'); // s1 — 더 이른 sentAt
+    expect(cards[3]?.url).toContain('/here'); // s2
+  });
+  it('excludes done batches when not busy; includes round-scoped done cards when busy', () => {
+    const doneOnly = [b('d1', { status: 'done', sentAt: '2026-01-01T00:00:00.000Z', doneAt: '2026-01-01T00:00:05.000Z', page: { url: 'http://x/here', title: 'Here' } })];
+    expect(queueCards([], doneOnly, 'http://x/here', false, labels)).toEqual([]);
+    const active = [
+      b('s1', { status: 'sent', sentAt: '2026-01-01T00:00:00.000Z', page: { url: 'http://x/here', title: 'Here' } }),
+      b('d2', { status: 'done', sentAt: '2026-01-01T00:00:00.000Z', doneAt: '2026-01-01T00:00:03.000Z', page: { url: 'http://x/here', title: 'Here' } }),
+    ];
+    const cards = queueCards([], active, 'http://x/here', true, labels);
+    expect(cards.map((c) => c.kind).sort()).toEqual(['done', 'sent']);
+  });
+  it('meta is "count · note" for draft/active cards and "✓ summary" for done; no note falls back to labels.noNote', () => {
+    const drafts = [b('a', { page: { url: 'http://x/here', title: 'Here' }, note: '' })];
+    const [card] = queueCards(drafts, [], 'http://x/here', false, labels);
+    expect(card?.meta).toBe('1x · No note');
+    const t1 = '2026-01-01T00:00:00.000Z'; const t2 = '2026-01-01T00:00:01.000Z';
+    const done = [b('d', { status: 'done', sentAt: t1, doneAt: t2, summary: '완료 요약', page: { url: 'http://x/here', title: 'Here' } })];
+    const active = [b('s', { status: 'sent', sentAt: t1, page: { url: 'http://x/here', title: 'Here' } }), ...done];
+    const [, doneCard] = queueCards([], active, 'http://x/here', true, labels);
+    expect(doneCard?.meta).toBe('✓ 완료 요약');
+  });
+});
+
+describe('lastRoundDone', () => {
+  it('returns every done batch, regardless of round scoping', () => {
+    const batches = [b('d1', { status: 'done' }), b('s1', { status: 'sent' }), b('d2', { status: 'done' })];
+    expect(lastRoundDone(batches).map((x) => x.id)).toEqual(['d1', 'd2']);
   });
 });
