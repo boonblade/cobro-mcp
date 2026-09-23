@@ -357,19 +357,19 @@ describe('SessionCore', () => {
     };
     // (a) 같은 페이지 초안 교체, 다른 페이지 초안 유지
     const c1 = freshWithAB();
-    c1.setDrafts([draft('a2')], 'http://x/a');
+    c1.setDrafts([draft('a2')], { url: 'http://x/a', title: 'A' });
     expect(c1.session.batches.map((b) => b.id).sort()).toEqual(['a2', 'b1']);
 
     // (b) 빈 배열 → 같은 페이지 초안만 삭제, 다른 페이지 유지
     const c2 = freshWithAB();
-    c2.setDrafts([], 'http://x/a');
+    c2.setDrafts([], { url: 'http://x/a', title: 'A' });
     expect(c2.session.batches.map((b) => b.id)).toEqual(['b1']);
 
     // (c) page 없는 옛 초안은 같은 페이지로 취급돼 교체됨
     const c3 = new SessionCore(new Store(mkdtempSync(join(tmpdir(), 'cobro-'))));
     c3.setDrafts([draft('legacy')]); // s.page가 없어 page 필드가 안 찍힌다
     expect(c3.session.batches[0]!.page).toBeUndefined();
-    c3.setDrafts([draft('new')], 'http://x/a');
+    c3.setDrafts([draft('new')], { url: 'http://x/a', title: 'A' });
     expect(c3.session.batches.map((b) => b.id)).toEqual(['new']);
 
     // (d) pageUrl 없으면 전체 교체(기존 동작)
@@ -379,7 +379,26 @@ describe('SessionCore', () => {
 
     // (e) hash만 다른 pageUrl은 같은 페이지
     const c5 = freshWithAB();
-    c5.setDrafts([draft('a3')], 'http://x/a#zzz');
+    c5.setDrafts([draft('a3')], { url: 'http://x/a#zzz', title: 'A' });
     expect(c5.session.batches.map((b) => b.id).sort()).toEqual(['a3', 'b1']);
+  });
+  it('setDrafts stamps a brand-new draft with the message\'s own page, not the global s.page — a later tab connecting no longer mislabels an earlier tab\'s new draft, and a same-id resend never leaves a duplicate (Task 69 B1)', () => {
+    const A = { url: 'http://x/a', title: 'A', viewport: { w: 1, h: 1 } };
+    const B = { url: 'http://x/b', title: 'B', viewport: { w: 1, h: 1 } };
+    // B가 나중에 연결돼 s.page가 B로 바뀐 뒤에도, A 페이지에서 온 새 초안은 메시지의 page로 찍힌다
+    const c1 = new SessionCore(new Store(mkdtempSync(join(tmpdir(), 'cobro-'))));
+    c1.setPage(A, 'none');
+    c1.setPage(B, 'none'); // 다른 탭이 나중에 연결 — 전역 s.page는 B
+    for (let i = 0; i < 3; i++) c1.setDrafts([draft('a1')], { url: A.url, title: A.title });
+    expect(c1.session.batches.map((b) => [b.id, b.page?.url])).toEqual([['a1', A.url]]);
+
+    // (a) 케이스와 같은 방향: B 페이지 초안이 A 재전송에 밀려나지 않고 유지된다
+    const c2 = new SessionCore(new Store(mkdtempSync(join(tmpdir(), 'cobro-'))));
+    c2.setPage(A, 'none');
+    c2.setDrafts([draft('a1')], { url: A.url, title: A.title });
+    c2.setPage(B, 'none');
+    c2.setDrafts([draft('a1'), draft('b1')], { url: B.url, title: B.title });
+    c2.setDrafts([draft('a1')], { url: A.url, title: A.title }); // A 재전송(새 요소 추가 등)
+    expect(c2.session.batches.map((b) => b.id).sort()).toEqual(['a1', 'b1']);
   });
 });

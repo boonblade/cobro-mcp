@@ -1272,14 +1272,23 @@ async function focusedTag(page: Page): Promise<string | undefined> {
 }
 
 test('two tabs on different pages keep each other\'s drafts; Send from either delivers both (R177)', async ({ cobroPage: page, bridge, ctx }) => {
+  // Task 69 B1 조건: 첫 탭(region)이 먼저 연결해 놓고 재접속 없이 기다리다가, 둘째 탭(basic)이 열려 서버 전역 page를
+  // 바꾼 뒤에야 첫 탭에서 처음으로 요소를 담아 "새" 초안을 만든다(review B1의 순차 탭 전환 재현)
   await page.goto('http://127.0.0.1:4173/region.html');
-  await selectAt(page, '#a');
-  await page.locator(`${HOST} textarea`).fill('r');
-  await page.keyboard.press('Escape');
-  await expect.poll(() => bridge.core.session.batches.length).toBe(1); // Task 66 T1 관례: 다음 탭을 열기 전 서버 반영을 기다린다
+  await expect.poll(() => bridge.core.session.page?.url).toContain('/region.html');
 
   const p2 = await ctx.newPage();
   await p2.goto('http://127.0.0.1:4173/basic.html');
+  await expect.poll(() => bridge.core.session.page?.url).toContain('/basic.html'); // 전역 page가 basic으로 바뀐다
+
+  await selectAt(page, '#a'); // 첫 탭은 재접속 없이 — 전역 page는 여전히 basic
+  await page.locator(`${HOST} textarea`).fill('r');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(500); // 디바운스(300ms) 여유
+  expect(bridge.core.session.batches.length).toBeLessThanOrEqual(1); // Task 69 B1: 중복 증식하지 않는다
+  await expect.poll(() => bridge.core.session.batches.length).toBe(1);
+  expect(bridge.core.session.batches[0]?.page?.url).toContain('/region.html'); // 전역 page(basic)가 아니라 보낸 탭의 page로 찍힌다
+
   await selectAt(p2, '#target');
   await p2.locator(`${HOST} textarea`).fill('b');
   await expect.poll(() => bridge.core.session.batches.length).toBe(2);

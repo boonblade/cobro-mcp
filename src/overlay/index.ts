@@ -49,7 +49,7 @@ declare const __COBRO_ROOT__: string;
       if (draftTimer) { clearTimeout(draftTimer); draftTimer = null; }
       const href = location.href;
       const here = (drafts ?? []).filter((d) => !d.page || samePage(d.page.url, href));
-      chan.send({ type: 'draft', batches: here, page: href });
+      chan.send({ type: 'draft', batches: here, page: { url: href, title: document.title } }); // Task 69 B1: 새 초안을 이 탭의 페이지로 찍도록 객체로 보낸다
     };
     const pushDraft = () => { if (draftTimer) clearTimeout(draftTimer); draftTimer = setTimeout(flushDraft, 300); };
     // R175(R165 개정): locked = 에이전트가 sent·working(처리 중) — Select·Ctrl+Shift+F·textarea를 잠근다

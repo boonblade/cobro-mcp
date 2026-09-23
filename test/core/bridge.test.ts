@@ -323,7 +323,7 @@ describe('createBridge', () => {
     ws.close();
   });
 
-  it('two sockets drafting on different pages keep each other\'s draft; a re-draft from one does not wipe the other\'s (R177)', async () => {
+  it('two sockets drafting on different pages keep each other\'s draft; a page-before-draft ordering across tabs never duplicates a batch (R177, Task 69 B1)', async () => {
     b = await createBridge({ store: new Store(mkdtempSync(join(tmpdir(), 'cobro-'))), token: 't' });
     const wsA = new WebSocket(`ws://127.0.0.1:${b.port}`);
     const wsB = new WebSocket(`ws://127.0.0.1:${b.port}`);
@@ -333,17 +333,27 @@ describe('createBridge', () => {
     wsB.send(JSON.stringify({ type: 'hello', token: 't' }));
     const pageA = { url: 'http://x/a', title: 'A', viewport: { w: 1, h: 1 } };
     const pageB = { url: 'http://x/b', title: 'B', viewport: { w: 1, h: 1 } };
-    wsA.send(JSON.stringify({ type: 'page', page: pageA, detected: 'none' }));
-    wsB.send(JSON.stringify({ type: 'page', page: pageB, detected: 'none' }));
-    wsA.send(JSON.stringify({ type: 'draft', batches: [{ id: 'a1', note: 'n', elements: [el], status: 'draft', createdAt: 't' }], page: pageA.url }));
-    await new Promise((r) => setTimeout(r, 30));
-    wsB.send(JSON.stringify({ type: 'draft', batches: [{ id: 'b1', note: 'n', elements: [el], status: 'draft', createdAt: 't' }], page: pageB.url }));
-    await new Promise((r) => setTimeout(r, 30));
-    expect(b.core.session.batches).toHaveLength(2);
 
-    wsA.send(JSON.stringify({ type: 'draft', batches: [{ id: 'a1', note: 'n2', elements: [el], status: 'draft', createdAt: 't' }], page: pageA.url }));
-    await new Promise((r) => setTimeout(r, 30));
-    expect(b.core.session.batches.map((x) => x.id).sort()).toEqual(['a1', 'b1']);
+    // B1 조건: A가 먼저 열려 page를 보내고, B가 나중에 열려 전역 session.page를 덮어쓴 뒤에야 A가 새 초안을 flush한다
+    wsA.send(JSON.stringify({ type: 'page', page: pageA, detected: 'none' }));
+    await expect.poll(() => b!.core.session.page?.url).toBe(pageA.url);
+    wsB.send(JSON.stringify({ type: 'page', page: pageB, detected: 'none' }));
+    await expect.poll(() => b!.core.session.page?.url).toBe(pageB.url);
+
+    // A가 자신의 페이지로 새 초안을 2회(재입력 시뮬레이션) flush — 전역 session.page는 이미 B
+    wsA.send(JSON.stringify({ type: 'draft', batches: [{ id: 'a1', note: 'n', elements: [el], status: 'draft', createdAt: 't' }], page: { url: pageA.url, title: pageA.title } }));
+    await expect.poll(() => b!.core.session.batches.length).toBe(1);
+    wsA.send(JSON.stringify({ type: 'draft', batches: [{ id: 'a1', note: 'n2', elements: [el], status: 'draft', createdAt: 't' }], page: { url: pageA.url, title: pageA.title } }));
+    await expect.poll(() => b!.core.session.batches.find((x) => x.id === 'a1')?.note).toBe('n2');
+    expect(b.core.session.batches).toHaveLength(1); // 중복 증식 없음(Task 69 B1)
+    expect(b.core.session.batches[0]!.page?.url).toBe(pageA.url); // 전역 session.page(B)가 아니라 보낸 탭의 page로 찍힌다
+
+    wsB.send(JSON.stringify({ type: 'draft', batches: [{ id: 'b1', note: 'n', elements: [el], status: 'draft', createdAt: 't' }], page: { url: pageB.url, title: pageB.title } }));
+    await expect.poll(() => b!.core.session.batches.length).toBe(2);
+
+    wsA.send(JSON.stringify({ type: 'draft', batches: [{ id: 'a1', note: 'n3', elements: [el], status: 'draft', createdAt: 't' }], page: { url: pageA.url, title: pageA.title } }));
+    await expect.poll(() => b!.core.session.batches.find((x) => x.id === 'a1')?.note).toBe('n3');
+    expect(b.core.session.batches.map((x) => x.id).sort()).toEqual(['a1', 'b1']); // 재전송해도 중복 없음
     wsA.close(); wsB.close();
   });
 
