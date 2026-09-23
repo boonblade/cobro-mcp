@@ -42,6 +42,8 @@ export { expect };
 export const HOST = '[data-cobro-host]';
 // webkit에서 Ctrl+Shift+F 직후 선택 레이어(glass)가 켜지기 전에 마우스 이벤트가 나가면 간헐 실패한다(부채 #3)
 export async function startSelect(page: Page) {
+  // R175 경합: done()의 state 방송이 닿기 전 몇 ms 동안 .locked면 Ctrl+Shift+F가 "큐 열기"로 소비된다(Task 68 교정 라운드 2)
+  await expect(page.locator(`${HOST} .ib.select`)).not.toHaveClass(/locked/);
   await page.keyboard.press('Control+Shift+F');
   await expect(page.locator(`${HOST} .ib.select`)).toHaveClass(/on/);
 }
