@@ -11,13 +11,14 @@ export function currentDraft(drafts: Batch[], href: string): Batch | null {
 export function roundBatches(batches: Batch[]): Batch[] {
   const active = batches.filter((b) => b.status === 'sent' || b.status === 'working');
   if (active.length === 0) return [];
-  const minSentAt = Math.min(...active.map((b) => Date.parse(b.sentAt ?? '') || 0));
+  // M4: sentAt이 없거나 파싱 실패하면 Infinity — 옛 done을 라운드로 끌어들이는 쪽(0)이 아니라 배제하는 쪽으로 안전하게 실패한다
+  const parseSentAt = (b: Batch): number => { const t = Date.parse(b.sentAt ?? ''); return Number.isNaN(t) ? Infinity : t; };
+  const minSentAt = Math.min(...active.map(parseSentAt));
   const done = batches.filter((b) => b.status === 'done' && b.doneAt && Date.parse(b.doneAt) >= minSentAt);
   return [...active, ...done];
 }
 
-// now는 시그니처 자리만 — 라운드 판정은 sentAt/doneAt만으로 결정되고 현재 시각에 의존하지 않는다
-export function roundOf(batches: Batch[], _now: number = Date.now()): { queue: number; done: number; total: number } {
+export function roundOf(batches: Batch[]): { queue: number; done: number; total: number } {
   const round = roundBatches(batches);
   const done = round.filter((b) => b.status === 'done').length;
   return { queue: round.length - done, done, total: round.length };

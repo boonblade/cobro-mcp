@@ -40,6 +40,13 @@ describe('roundOf', () => {
     const batches = [b('old', { status: 'done', sentAt: 't1', doneAt: 't2' })];
     expect(roundOf(batches)).toEqual({ queue: 0, done: 0, total: 0 });
   });
+  it('an active batch with no sentAt treats the round minimum as Infinity, so an old done never joins it (M4)', () => {
+    const batches = [
+      b('s1', { status: 'sent', sentAt: undefined }),
+      b('old', { status: 'done', sentAt: '2025-01-01T00:00:00.000Z', doneAt: '2025-01-01T00:00:01.000Z' }),
+    ];
+    expect(roundOf(batches)).toEqual({ queue: 1, done: 0, total: 1 });
+  });
 });
 
 describe('pageLabel', () => {

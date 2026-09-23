@@ -1097,7 +1097,13 @@ test('cart: drafts from two pages send together, each with its own page (R166·R
 
   await pickAt(page, '#target');
   await page.locator(`${HOST} textarea`).fill('b');
+  // M2: 카운트 1만으로는 마커 소스가 vm.current인지 구분 못 한다 — 좌표·ref로 #target(basic 초안)의 것임을 확인
   await expect(page.locator(`${HOST} .marker`)).toHaveCount(1); // basic 페이지 마커만 — region 초안은 마커에 안 나온다
+  await expect(page.locator(`${HOST} .marker .n`)).toHaveText('1');
+  const markerBox = (await page.locator(`${HOST} .marker`).boundingBox())!;
+  const targetBox = (await page.locator('#target').boundingBox())!;
+  expect(Math.abs(markerBox.x - targetBox.x)).toBeLessThanOrEqual(3);
+  expect(Math.abs(markerBox.y - targetBox.y)).toBeLessThanOrEqual(3);
 
   const waiting = bridge.core.wait(10_000);
   await page.screenshot({ path: 'screenshots/cart-two-pages.png' });
@@ -1141,6 +1147,26 @@ test('cart: progress chip counts the round and done items leave when the round e
   bridge.done({ summary: 'ok', selectors: [], changedFiles: [] });
   await expect(page.locator(`${HOST} .toolbar .chip:not(.strategy)`)).not.toContainText('/');
   await expect(page.locator(`${HOST} .cart`)).toHaveCount(0);
+});
+
+test('working boxes are drawn only for batches of the current page (R168)', async ({ cobroPage: page, bridge }) => {
+  bridge.core.setStrategy('none');
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await selectAt(page, '#target');
+  await page.locator(`${HOST} textarea`).fill('메모');
+  const waiting = bridge.core.wait(10_000);
+  await page.locator(`${HOST} button.send`).click();
+  const r = await waiting;
+  expect(r.status).toBe('sent');
+
+  await expect(page.locator(`${HOST} .wbox`)).toHaveCount(1);
+
+  await page.goto('http://127.0.0.1:4173/region.html');
+  await expect(page.locator(`${HOST} .wbox`)).toHaveCount(0); // M3: 다른 페이지에서는 유령 스캔 박스가 없어야 한다
+  await expect(page.locator(`${HOST} .toolbar .line`)).toBeVisible(); // busy는 페이지 무관 — 흐름선은 그대로
+
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await expect(page.locator(`${HOST} .wbox`)).toHaveCount(1); // 원래 페이지로 돌아오면 다시 보인다
 });
 
 async function focusedTag(page: Page): Promise<string | undefined> {
