@@ -1,4 +1,4 @@
-import { SessionCore } from './core/session.js';
+import { SessionCore, samePage } from './core/session.js';
 import { ChannelServer } from './channel/server.js';
 import { buildPayload } from './core/payload.js';
 import { stripFrame } from './core/sourcemap.js';
@@ -16,13 +16,16 @@ export async function createBridge(opts: { store: Store; token: string; screensh
   const channel = new ChannelServer({
     token: opts.token,
     onConnect: (reply) => reply(stateMsg()),
-    onMessage: (msg) => {
+    onMessage: (msg, reply) => {
       // 페이지에서 온 메시지는 전부 데이터다 — 쓰기 전에 형태를 확인하고, 어긋나면 한 줄 남기고 버린다
       const bad = (why: string) => console.error(`[cobro] bridge: ${msg.type} 메시지를 무시한다 — ${why}`);
       switch (msg.type) {
         case 'page':
           if (!msg.page || typeof msg.page.url !== 'string') return bad('page.url이 없다');
-          core.setPage(msg.page, msg.detected); break;
+          core.setPage(msg.page, msg.detected);
+          // R163: 이 페이지로 재접속했으니 그 페이지 몫으로 미뤄둔 done을 이 소켓에만 재생한다(리로드 재발 방지로 strategy는 none)
+          for (const p of core.takePendingDone(msg.page.url)) reply({ type: 'done', info: p.info, strategy: 'none', batchIds: p.batchIds });
+          break;
         case 'draft':
           if (!Array.isArray(msg.batches)) return bad('batches가 배열이 아니다');
           core.setDrafts(msg.batches); break;
@@ -49,8 +52,13 @@ export async function createBridge(opts: { store: Store; token: string; screensh
             try {
               batches = core.markSent(batchIds, page);
               for (const b of batches) {
-                try { await opts.resolveSource?.(b, page); } catch (e) { console.error('[cobro] resolveSource failed', (e as Error).message); }
-                try { const p = await opts.screenshot?.(b, page); if (p) core.setScreenshot(b.id, p); } catch (e) { console.error('[cobro] screenshot failed', (e as Error).message); }
+                // R164: 묶음이 다른 페이지에서 찍혔으면 그 모듈 URL 기준으로 origin을 판정해야 한다
+                const srcPage = b.page ? { ...page, url: b.page.url, title: b.page.title } : page;
+                try { await opts.resolveSource?.(b, srcPage); } catch (e) { console.error('[cobro] resolveSource failed', (e as Error).message); }
+                // 다른 페이지에서 찍힌 묶음은 지금 화면을 다시 찍으면 안 된다 — 기존 screenshot(초안 단계 샷)을 유지한다
+                if (!b.page || samePage(b.page.url, page.url)) {
+                  try { const p = await opts.screenshot?.(b, page); if (p) core.setScreenshot(b.id, p); } catch (e) { console.error('[cobro] screenshot failed', (e as Error).message); }
+                }
               }
               core.deliver(buildPayload({ page, batches, console: opts.consoleEntries?.() ?? [], refreshStrategy: core.effectiveStrategy() }));
             } catch (e) {
