@@ -3,7 +3,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Store, emptySession } from '../../src/core/store.js';
-import { SessionCore } from '../../src/core/session.js';
+import { SessionCore, samePage } from '../../src/core/session.js';
 import type { Batch, Payload, PageInfo } from '../../src/core/types.js';
 
 const page: PageInfo = { url: 'http://x/', title: 'X', viewport: { w: 800, h: 600 } };
@@ -144,6 +144,15 @@ describe('SessionCore', () => {
     expect(out2.map((b) => b.id)).toEqual(['2']);
     expect(core.session.agent).toEqual({ status: 'done', text: 's2' });
   });
+  it('done() with no batchId also closes working batches, not only sent (M2)', () => {
+    core.setDrafts([draft('1')]);
+    core.markSent(['1'], page);
+    core.setAgentText('x', '1');
+    expect(core.session.batches[0]!.status).toBe('working');
+    const out = core.done({ summary: 'ok', selectors: [], changedFiles: [] });
+    expect(out.map((b) => b.id)).toEqual(['1']);
+    expect(core.session.batches[0]!.status).toBe('done');
+  });
   it('restart normalizes a working batch back to sent (R160)', () => {
     core.setDrafts([draft('1')]);
     core.markSent(['1'], page);
@@ -169,6 +178,13 @@ describe('SessionCore', () => {
     core.pushPendingDone({ url: 'http://q/', batchIds: ['q'], info: { summary: 'q', selectors: [], changedFiles: [] } });
     core.closeSession();
     expect(core.session.pendingDone).toEqual([]);
+  });
+  it('samePage ignores hash, distinguishes search and origin, and falls back to string equality for non-URLs (B2)', () => {
+    expect(samePage('http://x/a#foo', 'http://x/a#bar')).toBe(true);
+    expect(samePage('http://x/a?x=1', 'http://x/a?x=2')).toBe(false);
+    expect(samePage('http://x/a', 'http://y/a')).toBe(false);
+    expect(samePage('a', 'a')).toBe(true);
+    expect(samePage('a', 'b')).toBe(false);
   });
   it('setScreenshot persists the path so a fresh core sees it', () => {
     core.setDrafts([draft('1')]);

@@ -32,6 +32,28 @@ describe('createBridge', () => {
     ws.close();
   });
 
+  it('broadcasts done immediately when the current page only differs by hash from the batch page (B1, R163)', async () => {
+    b = await createBridge({ store: new Store(mkdtempSync(join(tmpdir(), 'cobro-'))), token: 't', screenshot: async (batch) => `/shots/${batch.id}.png` });
+    const ws = new WebSocket(`ws://127.0.0.1:${b.port}`);
+    const msgs: Array<{ type: string }> = [];
+    ws.on('message', (d) => msgs.push(JSON.parse(d.toString())));
+    await new Promise((r) => ws.once('open', r));
+    ws.send(JSON.stringify({ type: 'hello', token: 't' }));
+    ws.send(JSON.stringify({ type: 'page', page: { ...page, url: page.url + '#a' }, detected: 'none' }));
+    ws.send(JSON.stringify({ type: 'draft', batches: [{ id: 'h1', note: 'n', elements: [el], status: 'draft', createdAt: 't' }] }));
+    const waiting = b.core.wait(5000);
+    ws.send(JSON.stringify({ type: 'send', batchIds: ['h1'], page: { ...page, url: page.url + '#a' } }));
+    await waiting;
+    ws.send(JSON.stringify({ type: 'page', page: { ...page, url: page.url + '#b' }, detected: 'none' })); // 같은 페이지, hash만 이동
+    await new Promise((r) => setTimeout(r, 30));
+
+    msgs.length = 0;
+    b.done({ summary: 'ok', selectors: [], changedFiles: [] });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(msgs.filter((m) => m.type === 'done')).toHaveLength(1);
+    ws.close();
+  });
+
   it('replays a pending done once when the same page reconnects after a reload (R163)', async () => {
     b = await createBridge({ store: new Store(mkdtempSync(join(tmpdir(), 'cobro-'))), token: 't', screenshot: async (batch) => `/shots/${batch.id}.png` });
     const ws = new WebSocket(`ws://127.0.0.1:${b.port}`);

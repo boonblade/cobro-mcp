@@ -143,7 +143,8 @@ export class SessionCore extends EventEmitter {
   }
   // R163: 같은 url 항목은 교체, 최대 20개(오래된 것부터 버림)
   pushPendingDone(e: { url: string; batchIds: string[]; info: DoneInfo }): void {
-    const list = (this.s.pendingDone ?? []).filter((p) => p.url !== e.url);
+    // M1: takePendingDone과 같은 기준(samePage) — hash만 다른 push가 별개 항목으로 쌓여 done이 중복 재생되는 것을 막는다
+    const list = (this.s.pendingDone ?? []).filter((p) => !samePage(p.url, e.url));
     list.push(e);
     this.s.pendingDone = list.slice(-20);
     this.commit();

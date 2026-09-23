@@ -122,8 +122,9 @@ export async function createBridge(opts: { store: Store; token: string; screensh
       }
       const urls = out.length === 0 ? [cur] : [...new Set(out.map((b) => b.page?.url ?? cur))];
       for (const url of urls) {
-        const batchIds = out.filter((b) => (b.page?.url ?? cur) === url).map((b) => b.id);
-        if (url === cur) {
+        // B1: hash만 다른 재접속도 '현재 페이지'로 봐야 한다 — 정확 일치(===) 대신 samePage
+        const batchIds = out.filter((b) => samePage(b.page?.url ?? cur, url)).map((b) => b.id);
+        if (samePage(url, cur)) {
           channel.broadcast({ type: 'done', info, strategy, batchIds });
           if (strategy === 'reload') core.pushPendingDone({ url, batchIds, info });
         } else {
