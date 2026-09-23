@@ -346,4 +346,40 @@ describe('SessionCore', () => {
     core.noteArrival('http://x/a'); // 원래 목적지에 뒤늦게 도착해도 '따라간 도착'으로 오판하지 않는다
     expect(core.session.followPaused).toBe(true); // 해제는 markSent/done만
   });
+  it('setDrafts replaces drafts per page when a pageUrl is given (R177)', () => {
+    const A = { url: 'http://x/a', title: 'A', viewport: { w: 1, h: 1 } };
+    const B = { url: 'http://x/b', title: 'B', viewport: { w: 1, h: 1 } };
+    const freshWithAB = () => {
+      const c = new SessionCore(new Store(mkdtempSync(join(tmpdir(), 'cobro-'))));
+      c.setPage(A, 'none'); c.setDrafts([draft('a1')]);
+      c.setPage(B, 'none'); c.setDrafts([draft('a1'), draft('b1')]);
+      return c;
+    };
+    // (a) 같은 페이지 초안 교체, 다른 페이지 초안 유지
+    const c1 = freshWithAB();
+    c1.setDrafts([draft('a2')], 'http://x/a');
+    expect(c1.session.batches.map((b) => b.id).sort()).toEqual(['a2', 'b1']);
+
+    // (b) 빈 배열 → 같은 페이지 초안만 삭제, 다른 페이지 유지
+    const c2 = freshWithAB();
+    c2.setDrafts([], 'http://x/a');
+    expect(c2.session.batches.map((b) => b.id)).toEqual(['b1']);
+
+    // (c) page 없는 옛 초안은 같은 페이지로 취급돼 교체됨
+    const c3 = new SessionCore(new Store(mkdtempSync(join(tmpdir(), 'cobro-'))));
+    c3.setDrafts([draft('legacy')]); // s.page가 없어 page 필드가 안 찍힌다
+    expect(c3.session.batches[0]!.page).toBeUndefined();
+    c3.setDrafts([draft('new')], 'http://x/a');
+    expect(c3.session.batches.map((b) => b.id)).toEqual(['new']);
+
+    // (d) pageUrl 없으면 전체 교체(기존 동작)
+    const c4 = freshWithAB();
+    c4.setDrafts([draft('only')]);
+    expect(c4.session.batches.map((b) => b.id)).toEqual(['only']);
+
+    // (e) hash만 다른 pageUrl은 같은 페이지
+    const c5 = freshWithAB();
+    c5.setDrafts([draft('a3')], 'http://x/a#zzz');
+    expect(c5.session.batches.map((b) => b.id).sort()).toEqual(['a3', 'b1']);
+  });
 });

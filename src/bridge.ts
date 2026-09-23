@@ -34,7 +34,7 @@ export async function createBridge(opts: { store: Store; token: string; screensh
         case 'draft': {
           if (!Array.isArray(msg.batches)) return bad('batches가 배열이 아니다');
           const prevSigs = new Map(core.session.batches.filter((b) => b.status === 'draft').map((b) => [b.id, draftSig(b)]));
-          core.setDrafts(msg.batches);
+          core.setDrafts(msg.batches, typeof msg.page === 'string' ? msg.page : undefined); // R177
           const curPage = core.session.page;
           for (const b of core.session.batches) {
             if (b.status !== 'draft') continue;

@@ -31,8 +31,14 @@ export class SessionCore extends EventEmitter {
   setStrategy(strategy: RefreshStrategy | null): void { this.s.strategy = strategy; this.commit(); }
   effectiveStrategy(): RefreshStrategy { return this.s.strategy ?? this.s.detected ?? 'reload'; }
 
-  setDrafts(batches: Batch[]): void {
-    const others = this.s.batches.filter((b) => b.status !== 'draft');
+  // R177: pageUrl이 있으면 같은 페이지 초안만 교체 대상 — page 없는 옛 초안도 같은 페이지로 취급한다.
+  // pageUrl이 없으면(호환) 드래프트 전체를 교체한다(기존 동작)
+  setDrafts(batches: Batch[], pageUrl?: string): void {
+    const others = this.s.batches.filter((b) => {
+      if (b.status !== 'draft') return true;
+      if (!pageUrl) return false;
+      return !!b.page && !samePage(b.page.url, pageUrl);
+    });
     const prevById = new Map(this.s.batches.map((b) => [b.id, b]));
     // R129: 빈 초안은 저장하지 않는다(부채 #9)
     const kept = batches.filter((b) => b.elements.length || b.regions?.length || b.note.trim());

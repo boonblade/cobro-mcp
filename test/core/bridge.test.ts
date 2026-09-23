@@ -323,6 +323,30 @@ describe('createBridge', () => {
     ws.close();
   });
 
+  it('two sockets drafting on different pages keep each other\'s draft; a re-draft from one does not wipe the other\'s (R177)', async () => {
+    b = await createBridge({ store: new Store(mkdtempSync(join(tmpdir(), 'cobro-'))), token: 't' });
+    const wsA = new WebSocket(`ws://127.0.0.1:${b.port}`);
+    const wsB = new WebSocket(`ws://127.0.0.1:${b.port}`);
+    await new Promise((r) => wsA.once('open', r));
+    await new Promise((r) => wsB.once('open', r));
+    wsA.send(JSON.stringify({ type: 'hello', token: 't' }));
+    wsB.send(JSON.stringify({ type: 'hello', token: 't' }));
+    const pageA = { url: 'http://x/a', title: 'A', viewport: { w: 1, h: 1 } };
+    const pageB = { url: 'http://x/b', title: 'B', viewport: { w: 1, h: 1 } };
+    wsA.send(JSON.stringify({ type: 'page', page: pageA, detected: 'none' }));
+    wsB.send(JSON.stringify({ type: 'page', page: pageB, detected: 'none' }));
+    wsA.send(JSON.stringify({ type: 'draft', batches: [{ id: 'a1', note: 'n', elements: [el], status: 'draft', createdAt: 't' }], page: pageA.url }));
+    await new Promise((r) => setTimeout(r, 30));
+    wsB.send(JSON.stringify({ type: 'draft', batches: [{ id: 'b1', note: 'n', elements: [el], status: 'draft', createdAt: 't' }], page: pageB.url }));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(b.core.session.batches).toHaveLength(2);
+
+    wsA.send(JSON.stringify({ type: 'draft', batches: [{ id: 'a1', note: 'n2', elements: [el], status: 'draft', createdAt: 't' }], page: pageA.url }));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(b.core.session.batches.map((x) => x.id).sort()).toEqual(['a1', 'b1']);
+    wsA.close(); wsB.close();
+  });
+
   it('while busy, a socket that reports a different page pauses following; a same-page hash reconnect does not (R176)', async () => {
     b = await createBridge({ store: new Store(mkdtempSync(join(tmpdir(), 'cobro-'))), token: 't', screenshot: async (batch) => `/shots/${batch.id}.png` });
     const ws = new WebSocket(`ws://127.0.0.1:${b.port}`);
