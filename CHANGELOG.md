@@ -5,9 +5,11 @@ All notable changes to this project are documented here. The format follows [Kee
 ## [Unreleased]
 ### Added
 - Batches carry the page they were picked on (batches[].page), and status/done accept an optional batchId so an agent can work through several batches in order.
+- Cart: drafts from several pages sit in one list (one draft per page); Send delivers all of them in order, and the toolbar shows progress like "Working 1/3".
 
 ### Changed
 - Sending a new batch no longer marks an earlier unanswered batch as abandoned; sent batches stay until done.
+- Send is no longer disabled while the agent works; new batches queue behind the current one.
 
 ### Fixed
 - Under the reload strategy the done highlight now appears after the page reloads.

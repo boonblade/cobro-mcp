@@ -1,4 +1,5 @@
-import { SessionCore, samePage } from './core/session.js';
+import { SessionCore } from './core/session.js';
+import { samePage } from './core/page.js';
 import { ChannelServer } from './channel/server.js';
 import { buildPayload } from './core/payload.js';
 import { stripFrame } from './core/sourcemap.js';

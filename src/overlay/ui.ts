@@ -4,9 +4,12 @@ import { stripStatusLabel } from './status-text.js';
 import type { ResolvedTheme } from './theme.js';
 import { svg } from './icons.js';
 import { isChildRef } from './refs.js';
+import { cartItems, roundOf } from './cart.js';
+import { samePage } from '../core/page.js';
 type IconName = Parameters<typeof svg>[0];
 
-export interface ViewModel { selecting: boolean; connected: boolean; agent: { status: AgentStatus; text: string }; strategy: RefreshStrategy | null; drafts: Batch[]; sent: Batch[]; locked: boolean; prefs: UiPrefs; expanded: string | null }
+// R166·R169: current = 현재 페이지 초안, queue = sent·working·라운드 done(전 페이지), busy = sent·working 묶음 존재
+export interface ViewModel { selecting: boolean; connected: boolean; agent: { status: AgentStatus; text: string }; strategy: RefreshStrategy | null; drafts: Batch[]; current: Batch | null; queue: Batch[]; busy: boolean; prefs: UiPrefs; expanded: string | null; href: string }
 export interface UIHandlers { onToggleSelect(): void; onNoteInput(id: string, note: string): void; onRemoveElement(id: string, index: number): void; onRemoveRegion(id: string, index: number): void; onSend(): void; onSettings(patch: { theme?: Theme }): void; onToggleGroup(ref: string): void }
 
 const CSS = `
@@ -100,6 +103,14 @@ const CSS = `
 .marker.child{border-style:dotted}
 .marker.child .n{background:#fff;color:var(--accent);border:1.5px solid var(--accent)}
 textarea{width:100%;min-height:80px;resize:none;font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--border-2);border-radius:8px;padding:10px;margin-bottom:0;display:block}
+.cart{margin-top:8px;border-top:1px solid var(--border);padding-top:6px}
+.cart .item{display:flex;gap:6px;align-items:center;font-size:12px;padding:3px 0;opacity:.85}
+.cart .item.other{opacity:.6}
+.cart .item .page{max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cart .item .note{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cart .item .chip{flex:none;font-size:10px;line-height:16px;padding:0 6px;border-radius:999px;background:var(--chip);border:1px solid var(--border);color:var(--fg-4)}
+.cart .item.working .chip{color:var(--accent)}
+.cart .item.done .chip{color:var(--ok)}
 .row{display:flex;justify-content:space-between;margin-top:8px;gap:6px;align-items:center}
 .row .sends{color:var(--fg-5);font-size:11px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .row .send{color:var(--fg-on-accent);background:var(--accent);border-color:var(--accent);font-weight:700;flex:none;white-space:nowrap}
@@ -170,8 +181,10 @@ const T = {
     tipSelect: '요소 선택 모드 (Ctrl+Shift+F)', tipClose: '닫기 (Esc)', tipDrag: '툴바 이동',
     sends: '선택자 · 스타일 · 스크린샷 · 콘솔',
     tipSend: '선택한 요소와 메모를 에이전트에 전송',
-    tipSendLocked: '에이전트가 작업 중 — done 뒤에 보낼 수 있습니다',
     tipRemove: '이 요소 빼기',
+    cartCount: (n: number) => `${n}개 항목`, cartNoNote: '메모 없음',
+    tipOtherPage: '다른 페이지의 초안 — 그 페이지에서 편집',
+    progress: (d: number, n: number) => `${d}/${n}`,
     tipSettings: '설정', theme: '테마', themeAuto: '자동', themeDark: '어둡게', themeLight: '밝게', themeFrost: '유리',
     themeLocked: 'COBRO_THEME 환경 변수로 고정됨',
   },
@@ -197,8 +210,10 @@ const T = {
     tipSelect: 'Pick mode (Ctrl+Shift+F)', tipClose: 'Close (Esc)', tipDrag: 'Move toolbar',
     sends: 'Sends selector · styles · shot · console',
     tipSend: 'Send the selected elements and note to the agent',
-    tipSendLocked: 'Agent is working — you can send after done',
     tipRemove: 'Remove this element',
+    cartCount: (n: number) => `${n} item${n === 1 ? '' : 's'}`, cartNoNote: 'No note',
+    tipOtherPage: 'Draft on another page — edit it there',
+    progress: (d: number, n: number) => `${d}/${n}`,
     tipSettings: 'Settings', theme: 'Theme', themeAuto: 'Auto', themeDark: 'Dark', themeLight: 'Light', themeFrost: 'Frost',
     themeLocked: 'Pinned by COBRO_THEME',
   },
@@ -340,6 +355,7 @@ export function createUI(h: UIHandlers) {
   mount();
 
   const el = (tag: string, cls?: string, text?: string) => { const d = document.createElement(tag); if (cls) d.className = cls; if (text != null) d.textContent = text; return d; };
+  const truncate40 = (s: string) => (s.length > 40 ? s.slice(0, 40) + '…' : s);
 
   function render(vm: ViewModel) {
     renderMarkers(vm); // 패널이 닫혀 있거나 draft가 비어도(= 이른 return) 마커는 매번 갱신(R103)
@@ -351,7 +367,7 @@ export function createUI(h: UIHandlers) {
     selectBtn.classList.toggle('on', vm.selecting);
     for (const btn of segButtons) { btn.classList.toggle('on', btn.dataset.theme === vm.prefs.theme); btn.disabled = vm.prefs.themeLocked; }
     popNote.hidden = !vm.prefs.themeLocked;
-    const cur = vm.drafts[vm.drafts.length - 1];
+    const cur = vm.current;
     const hasElements = !!cur && (cur.elements.length + (cur.regions?.length ?? 0)) > 0;
     let hint: string;
     if (!vm.connected) hint = T.disconnected;
@@ -381,13 +397,18 @@ export function createUI(h: UIHandlers) {
     status.classList.toggle('off', !vm.connected);
     chip.classList.toggle('off', !vm.connected);
     dot.className = vm.connected ? 'dot ' + vm.agent.status : 'dot';
-    chipLabel.textContent = vm.connected ? CHIP_LABEL[vm.agent.status] : T.chipOff;
-    chip.title = vm.connected ? DOT_TITLE[vm.agent.status] : T.disconnected;
+    // R169: busy면 라운드 진행 숫자(done/total)를 칩 라벨·title에 붙인다
+    const round = roundOf(vm.queue);
+    const roundSuffix = vm.busy ? ' ' + T.progress(round.done, round.total) : '';
+    chipLabel.textContent = vm.connected ? CHIP_LABEL[vm.agent.status] + roundSuffix : T.chipOff;
+    chip.title = vm.connected ? DOT_TITLE[vm.agent.status] + roundSuffix : T.disconnected;
     chip2.hidden = !vm.strategy;
     if (vm.strategy) { chip2Label.textContent = vm.strategy; chip2.title = T.tipStrategy(vm.strategy); }
     const show = vm.selecting;
     panel.classList.toggle('show', show);
-    if (vm.drafts.length === 0) { panel.textContent = ''; textareas.clear(); return; }
+    // R167: .cart(다른 페이지 초안·진행 묶음)는 현재 초안이 없어도 보일 수 있다
+    const items = cartItems(vm.drafts, vm.queue, vm.href);
+    if (!cur && items.length === 0) { panel.textContent = ''; textareas.clear(); return; }
     if (!show) return;
     panel.textContent = '';
     if (cur) {
@@ -448,9 +469,26 @@ export function createUI(h: UIHandlers) {
       if (ta.value !== cur.note) ta.value = cur.note;
       panel.append(ta);
     }
+    // R167: 장바구니 절 — 다른 페이지 초안(담은 순) → 진행 묶음(sentAt 순), 있을 때만
+    if (items.length) {
+      const cart = el('div', 'cart');
+      for (const it of items) {
+        const row = el('div', `item ${it.kind}`);
+        if (it.kind === 'other') row.title = T.tipOtherPage;
+        row.append(el('span', 'page', it.page));
+        if (it.kind === 'other') row.append(el('span', 'cnt', T.cartCount(it.elementCount ?? 0)));
+        else row.append(el('span', 'chip', CHIP_LABEL[it.kind]));
+        const firstLine = it.note.split('\n')[0] ?? '';
+        const noteText = it.kind === 'done' ? '✓ ' + truncate40(it.summary ?? '') : firstLine ? truncate40(firstLine) : T.cartNoNote;
+        row.append(el('span', 'note', noteText));
+        cart.append(row);
+      }
+      panel.append(cart);
+    }
     const row = el('div', 'row');
-    const send = el('button', 'send', 'Send →') as HTMLButtonElement; send.disabled = vm.locked;
-    send.title = vm.locked ? T.tipSendLocked : T.tipSend;
+    // R165: Send는 연결돼 있으면 항상 활성 — 전송·수정 중 묶음은 초안이 아니므로 잠글 대상이 아니다
+    const send = el('button', 'send', 'Send →') as HTMLButtonElement;
+    send.title = T.tipSend;
     send.onclick = () => { closePop(); h.onSend(); };
     row.append(el('span', 'sends', T.sends), send);
     panel.append(row);
@@ -472,7 +510,7 @@ export function createUI(h: UIHandlers) {
         m.append(el('span', 'n', String(n)));
         root.append(m);
       };
-      const cur = vm.drafts.length ? vm.drafts[vm.drafts.length - 1] : null;
+      const cur = vm.current;
       if (cur) {
         cur.elements.forEach((e) => {
           if (e.missing) return;
@@ -489,12 +527,15 @@ export function createUI(h: UIHandlers) {
           place(el('div', 'marker region'), r.rect.x - scrollX, r.rect.y - scrollY, r.rect.w, r.rect.h, r.ref ?? '');
         });
       }
-      // R131: 작업 중 표시 — 서버가 sent로 든 배치의 요소·영역 위에 스캔 테두리
-      const working = vm.locked && vm.connected;
+      // R131: 작업 중 표시 — 서버가 sent·working으로 든 배치의 요소·영역 위에 스캔 테두리
+      const working = vm.busy && vm.connected;
       line.hidden = !working;
       if (working) {
         const wbox = (cls: string) => { const m = el('div', cls); const clip = el('div', 'clip'); clip.append(el('span', 'sweep')); m.append(clip); return m; };
-        for (const b of vm.sent) {
+        // R168: 현재 페이지 묶음만(page 없는 옛 묶음은 그대로 그린다) · done은 스캔 대상이 아니다
+        for (const b of vm.queue) {
+          if (b.status === 'done') continue;
+          if (b.page && !samePage(b.page.url, vm.href)) continue;
           b.elements.forEach((e) => {
             if (e.missing) return;
             if (/[a-z]$/.test(e.ref ?? '')) return; // sent 배치에는 펼침 상태가 없다 — 접힌 상태와 동일, 자식은 그리지 않는다

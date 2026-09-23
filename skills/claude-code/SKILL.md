@@ -6,7 +6,7 @@ description: Use when the user wants to look at the screen while requesting chan
 # cobro (Cobro operating protocol)
 
 ## Loop
-0. Tell the user how to interact: on the page, toggle pick mode with **`Ctrl+Shift+F`**, `Esc` to exit. Click selects one element; drag selects the topmost elements inside the band.
+0. Tell the user how to interact: on the page, toggle pick mode with **`Ctrl+Shift+F`**, `Esc` to exit. Click selects one element; drag selects the topmost elements inside the band. Pages can be visited freely — each page keeps its own draft; Send delivers every draft with a note.
 1. `open(url)` — the dev server address. Check the returned `strategy` (no HMR → `reload`).
 2. `wait()` — with no arguments. Claude Code defaults to 1800 seconds, sends a progress notification every 30 seconds, and moves to the background automatically after 120 seconds (measured 2026-09-09). When the completion notification arrives, read the result.
    - `status: "pending"` → **call `wait()` again immediately**. Do not ask the user.
