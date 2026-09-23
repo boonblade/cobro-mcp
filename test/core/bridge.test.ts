@@ -32,6 +32,110 @@ describe('createBridge', () => {
     ws.close();
   });
 
+  it('broadcasts done immediately when the current page only differs by hash from the batch page (B1, R163)', async () => {
+    b = await createBridge({ store: new Store(mkdtempSync(join(tmpdir(), 'cobro-'))), token: 't', screenshot: async (batch) => `/shots/${batch.id}.png` });
+    const ws = new WebSocket(`ws://127.0.0.1:${b.port}`);
+    const msgs: Array<{ type: string }> = [];
+    ws.on('message', (d) => msgs.push(JSON.parse(d.toString())));
+    await new Promise((r) => ws.once('open', r));
+    ws.send(JSON.stringify({ type: 'hello', token: 't' }));
+    ws.send(JSON.stringify({ type: 'page', page: { ...page, url: page.url + '#a' }, detected: 'none' }));
+    ws.send(JSON.stringify({ type: 'draft', batches: [{ id: 'h1', note: 'n', elements: [el], status: 'draft', createdAt: 't' }] }));
+    const waiting = b.core.wait(5000);
+    ws.send(JSON.stringify({ type: 'send', batchIds: ['h1'], page: { ...page, url: page.url + '#a' } }));
+    await waiting;
+    ws.send(JSON.stringify({ type: 'page', page: { ...page, url: page.url + '#b' }, detected: 'none' })); // 같은 페이지, hash만 이동
+    await new Promise((r) => setTimeout(r, 30));
+
+    msgs.length = 0;
+    b.done({ summary: 'ok', selectors: [], changedFiles: [] });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(msgs.filter((m) => m.type === 'done')).toHaveLength(1);
+    ws.close();
+  });
+
+  it('replays a pending done once when the same page reconnects after a reload (R163)', async () => {
+    b = await createBridge({ store: new Store(mkdtempSync(join(tmpdir(), 'cobro-'))), token: 't', screenshot: async (batch) => `/shots/${batch.id}.png` });
+    const ws = new WebSocket(`ws://127.0.0.1:${b.port}`);
+    const msgs: Array<{ type: string; strategy?: string }> = [];
+    ws.on('message', (d) => msgs.push(JSON.parse(d.toString())));
+    await new Promise((r) => ws.once('open', r));
+    ws.send(JSON.stringify({ type: 'hello', token: 't' }));
+    ws.send(JSON.stringify({ type: 'page', page, detected: 'reload' }));
+    ws.send(JSON.stringify({ type: 'draft', batches: [{ id: 'r1', note: 'n', elements: [el], status: 'draft', createdAt: 't' }] }));
+    const waiting = b.core.wait(5000);
+    ws.send(JSON.stringify({ type: 'send', batchIds: ['r1'], page }));
+    await waiting;
+
+    msgs.length = 0;
+    b.done({ summary: 'ok', selectors: [], changedFiles: [] });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(msgs.filter((m) => m.type === 'done')).toHaveLength(1);
+
+    msgs.length = 0;
+    ws.send(JSON.stringify({ type: 'page', page: { ...page, url: page.url + '#x' }, detected: 'reload' }));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(msgs.filter((m) => m.type === 'done')).toHaveLength(1);
+    expect(msgs.find((m) => m.type === 'done')).toMatchObject({ strategy: 'none' });
+
+    msgs.length = 0;
+    ws.send(JSON.stringify({ type: 'page', page: { ...page, url: page.url + '#y' }, detected: 'reload' }));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(msgs.filter((m) => m.type === 'done')).toHaveLength(0);
+    ws.close();
+  });
+
+  it('a batch drafted on another page does not broadcast on done; it replays when that page reconnects (R163)', async () => {
+    b = await createBridge({ store: new Store(mkdtempSync(join(tmpdir(), 'cobro-'))), token: 't', screenshot: async (batch) => `/shots/${batch.id}.png` });
+    const ws = new WebSocket(`ws://127.0.0.1:${b.port}`);
+    const msgs: Array<{ type: string }> = [];
+    ws.on('message', (d) => msgs.push(JSON.parse(d.toString())));
+    await new Promise((r) => ws.once('open', r));
+    ws.send(JSON.stringify({ type: 'hello', token: 't' }));
+    const otherPage = { url: 'http://x/other', title: 'Other', viewport: { w: 1, h: 1 } };
+    ws.send(JSON.stringify({ type: 'page', page: otherPage, detected: 'none' }));
+    ws.send(JSON.stringify({ type: 'draft', batches: [{ id: 'o1', note: 'n', elements: [el], status: 'draft', createdAt: 't' }] }));
+    const waiting = b.core.wait(5000);
+    ws.send(JSON.stringify({ type: 'send', batchIds: ['o1'], page: otherPage }));
+    await waiting;
+    ws.send(JSON.stringify({ type: 'page', page, detected: 'none' })); // 사용자가 http://x/로 이동
+    await new Promise((r) => setTimeout(r, 30));
+
+    msgs.length = 0;
+    b.done({ summary: 'ok', selectors: [], changedFiles: [] });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(msgs.some((m) => m.type === 'done')).toBe(false);
+
+    msgs.length = 0;
+    ws.send(JSON.stringify({ type: 'page', page: otherPage, detected: 'none' }));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(msgs.some((m) => m.type === 'done')).toBe(true);
+    ws.close();
+  });
+
+  it('Send skips re-shooting a batch drafted on a different page and keeps its existing screenshot (R164)', async () => {
+    const shotCalls: string[] = [];
+    b = await createBridge({
+      store: new Store(mkdtempSync(join(tmpdir(), 'cobro-'))), token: 't',
+      screenshot: async (batch) => { shotCalls.push(batch.id); return `/shots/${batch.id}.png`; },
+    });
+    const otherPage = { url: 'http://x/other', title: 'Other', viewport: { w: 1, h: 1 } };
+    b.core.setPage(otherPage, 'none');
+    b.core.setDrafts([{ id: 'd1', note: 'n', elements: [el], status: 'draft', createdAt: 't' }]);
+    b.core.setScreenshot('d1', '/shots/d1-draft.png');
+    b.core.setPage(page, 'none'); // 사용자가 http://x/로 이동
+    const ws = new WebSocket(`ws://127.0.0.1:${b.port}`);
+    ws.on('message', () => {});
+    await new Promise((r) => ws.once('open', r));
+    ws.send(JSON.stringify({ type: 'hello', token: 't' }));
+    const waiting = b.core.wait(5000);
+    ws.send(JSON.stringify({ type: 'send', batchIds: ['d1'], page }));
+    const r = await waiting;
+    expect(shotCalls).toEqual([]);
+    expect(r).toMatchObject({ status: 'sent', payload: { batches: [{ id: 'd1', screenshot: '/shots/d1-draft.png' }] } });
+    ws.close();
+  });
+
   it('ignores a malformed draft and still delivers a later valid send', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     b = await createBridge({ store: new Store(mkdtempSync(join(tmpdir(), 'cobro-'))), token: 't' });
@@ -170,6 +274,52 @@ describe('createBridge', () => {
     expect(b.ui()).toEqual({ theme: 'auto', themeLocked: false });
     expect(err.mock.calls.some((c) => String(c[0]).includes('settingsFile 없음'))).toBe(true);
     err.mockRestore();
+    ws.close();
+  });
+
+  it('shoots a draft with elements after a 500ms debounce; note-only changes do not reshoot, rect changes do (R164)', async () => {
+    const shotCalls: string[] = [];
+    b = await createBridge({
+      store: new Store(mkdtempSync(join(tmpdir(), 'cobro-'))), token: 't',
+      screenshot: async (batch) => { shotCalls.push(batch.id); return `/shots/${batch.id}.png`; },
+    });
+    const ws = new WebSocket(`ws://127.0.0.1:${b.port}`);
+    await new Promise((r) => ws.once('open', r));
+    ws.send(JSON.stringify({ type: 'hello', token: 't' }));
+    ws.send(JSON.stringify({ type: 'page', page, detected: 'none' }));
+    ws.send(JSON.stringify({ type: 'draft', batches: [{ id: 'd1', note: '', elements: [el], status: 'draft', createdAt: 't' }] }));
+    await new Promise((r) => setTimeout(r, 600));
+    expect(shotCalls).toEqual(['d1']);
+    expect(b!.core.session.batches[0]!.screenshot).toBe('/shots/d1.png');
+
+    ws.send(JSON.stringify({ type: 'draft', batches: [{ id: 'd1', note: '메모', elements: [el], status: 'draft', createdAt: 't' }] }));
+    await new Promise((r) => setTimeout(r, 600));
+    expect(shotCalls).toEqual(['d1']);
+
+    const moved = { ...el, rect: { x: 5, y: 5, w: 1, h: 1 } };
+    ws.send(JSON.stringify({ type: 'draft', batches: [{ id: 'd1', note: '메모', elements: [moved], status: 'draft', createdAt: 't' }] }));
+    await new Promise((r) => setTimeout(r, 600));
+    expect(shotCalls).toEqual(['d1', 'd1']);
+    ws.close();
+  });
+
+  it('does not shoot a draft stamped on another page even while it is current (R164)', async () => {
+    const shotCalls: string[] = [];
+    b = await createBridge({
+      store: new Store(mkdtempSync(join(tmpdir(), 'cobro-'))), token: 't',
+      screenshot: async (batch) => { shotCalls.push(batch.id); return `/shots/${batch.id}.png`; },
+    });
+    const otherPage = { url: 'http://x/other', title: 'Other', viewport: { w: 1, h: 1 } };
+    b.core.setPage(otherPage, 'none');
+    b.core.setDrafts([{ id: 'd2', note: '', elements: [el], status: 'draft', createdAt: 't' }]);
+    b.core.setPage(page, 'none'); // 사용자가 http://x/로 이동, d2는 http://x/other에 찍힌 초안
+    const ws = new WebSocket(`ws://127.0.0.1:${b.port}`);
+    await new Promise((r) => ws.once('open', r));
+    ws.send(JSON.stringify({ type: 'hello', token: 't' }));
+    const moved = { ...el, rect: { x: 9, y: 9, w: 1, h: 1 } };
+    ws.send(JSON.stringify({ type: 'draft', batches: [{ id: 'd2', note: '', elements: [moved], status: 'draft', createdAt: 't', page: otherPage }] }));
+    await new Promise((r) => setTimeout(r, 600));
+    expect(shotCalls).toEqual([]);
     ws.close();
   });
 });

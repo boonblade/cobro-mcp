@@ -4,6 +4,14 @@ import type { Batch, DoneInfo, PageInfo, Payload, RefreshStrategy, Session, Wait
 
 type Waiter = { resolve: (r: WaitResult) => void };
 
+// R163: 페이지 비교는 origin+pathname+search만(hash 무시). URL 파싱 실패 시 문자열 비교로 되돌아간다
+export function samePage(a: string, b: string): boolean {
+  try {
+    const ua = new URL(a); const ub = new URL(b);
+    return ua.origin + ua.pathname + ua.search === ub.origin + ub.pathname + ub.search;
+  } catch { return a === b; }
+}
+
 export class SessionCore extends EventEmitter {
   private s: Session;
   private queue: Array<{ payload: Payload; browserRestarted?: boolean }> = [];
@@ -16,6 +24,8 @@ export class SessionCore extends EventEmitter {
     // 상태의 주인이 서버이므로 재시작해도 남긴다(M1)
     if (this.s.agent.status === 'waiting') this.s.agent = { status: 'idle', text: this.s.agent.text };
     else if (this.s.agent.status === 'working') this.s.agent = { status: 'idle', text: '' };
+    // R160: 재시작 시 처리 중이던 묶음은 '건드리는 중' 표시만 사라지고 sent로 되돌아간다(내용은 유지)
+    for (const b of this.s.batches) if (b.status === 'working') b.status = 'sent';
   }
   get session(): Session { return this.s; }
 
@@ -27,16 +37,24 @@ export class SessionCore extends EventEmitter {
 
   setDrafts(batches: Batch[]): void {
     const others = this.s.batches.filter((b) => b.status !== 'draft');
+    const prevById = new Map(this.s.batches.map((b) => [b.id, b]));
     // R129: 빈 초안은 저장하지 않는다(부채 #9)
     const kept = batches.filter((b) => b.elements.length || b.regions?.length || b.note.trim());
-    this.s.batches = [...others, ...kept.map((b) => ({ ...b, status: 'draft' as const }))];
+    this.s.batches = [...others, ...kept.map((b): Batch => {
+      const draft: Batch = { ...b, status: 'draft' };
+      // R161: page는 서버가 찍는다 — 처음 보는 초안만 현재 s.page를 찍고, 이미 있던 초안은 기존 page를 유지(오버레이가 보낸 값은 무시)
+      const prev = prevById.get(b.id);
+      const page = prev ? prev.page : (this.s.page ? { url: this.s.page.url, title: this.s.page.title } : undefined);
+      if (page) draft.page = page; else delete draft.page;
+      return draft;
+    })];
     this.commit();
   }
   markSent(batchIds: string[], page: PageInfo): Batch[] {
     const now = new Date().toISOString();
     const sent: Batch[] = [];
     for (const b of this.s.batches) {
-      if (b.status === 'sent') b.status = 'unanswered';
+      // R160(R79 폐기): 앞선 sent/working 묶음은 건드리지 않는다 — 장바구니는 처리 중에도 계속 담아 보낼 수 있어야 한다
       if (b.status === 'draft' && batchIds.includes(b.id)) { b.status = 'sent'; b.sentAt = now; sent.push(b); }
     }
     this.s.page = page; this.s.agent = { status: 'sent', text: '' };
@@ -96,17 +114,48 @@ export class SessionCore extends EventEmitter {
     this.dropEmptyDrafts();
     this.store.clearShots(this.s.batches.filter((b) => b.status !== 'done').map((b) => b.id));
     for (const b of this.s.batches) if (b.status === 'done') b.screenshot = undefined;
+    this.s.pendingDone = []; // R163
     this.commit();
   }
-  setAgentText(text: string): void { this.s.agent = { status: 'working', text }; this.commit(); }
-  done(info: DoneInfo): Batch[] {
+  setAgentText(text: string, batchId?: string): void {
+    // R162: batchId가 sent/working 묶음이면 그 묶음을 working으로. 아니면 무시(agent text만)
+    if (batchId) {
+      const b = this.s.batches.find((x) => x.id === batchId);
+      if (b && (b.status === 'sent' || b.status === 'working')) b.status = 'working';
+    }
+    this.s.agent = { status: 'working', text };
+    this.commit();
+  }
+  done(info: DoneInfo, batchId?: string): Batch[] {
     const now = new Date().toISOString();
     const out: Batch[] = [];
-    for (const b of this.s.batches) if (b.status === 'sent') { b.status = 'done'; b.doneAt = now; b.summary = info.summary; out.push(b); }
-    this.s.agent = { status: 'done', text: info.summary };
+    // R162: batchId가 있으면 그 id 중 sent/working인 것만, 없으면 sent/working 전부
+    for (const b of this.s.batches) {
+      if ((b.status === 'sent' || b.status === 'working') && (!batchId || b.id === batchId)) {
+        b.status = 'done'; b.doneAt = now; b.summary = info.summary; out.push(b);
+      }
+    }
+    const remaining = this.s.batches.some((b) => b.status === 'sent' || b.status === 'working');
+    this.s.agent = remaining ? { status: 'sent', text: info.summary } : { status: 'done', text: info.summary };
     this.store.pruneShots(this.s.batches.filter((b) => b.status !== 'done').map((b) => b.id));
     this.commit();
     return out;
+  }
+  // R163: 같은 url 항목은 교체, 최대 20개(오래된 것부터 버림)
+  pushPendingDone(e: { url: string; batchIds: string[]; info: DoneInfo }): void {
+    // M1: takePendingDone과 같은 기준(samePage) — hash만 다른 push가 별개 항목으로 쌓여 done이 중복 재생되는 것을 막는다
+    const list = (this.s.pendingDone ?? []).filter((p) => !samePage(p.url, e.url));
+    list.push(e);
+    this.s.pendingDone = list.slice(-20);
+    this.commit();
+  }
+  takePendingDone(url: string): Array<{ url: string; batchIds: string[]; info: DoneInfo }> {
+    const list = this.s.pendingDone ?? [];
+    const matched = list.filter((p) => samePage(p.url, url));
+    if (matched.length === 0) return [];
+    this.s.pendingDone = list.filter((p) => !samePage(p.url, url));
+    this.commit();
+    return matched;
   }
   markResolved(batchId: string, index: number, missing: boolean): void {
     const e = this.s.batches.find((b) => b.id === batchId)?.elements[index];

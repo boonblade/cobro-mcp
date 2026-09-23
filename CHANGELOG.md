@@ -3,6 +3,14 @@
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
+### Added
+- Batches carry the page they were picked on (batches[].page), and status/done accept an optional batchId so an agent can work through several batches in order.
+
+### Changed
+- Sending a new batch no longer marks an earlier unanswered batch as abandoned; sent batches stay until done.
+
+### Fixed
+- Under the reload strategy the done highlight now appears after the page reloads.
 
 ## [0.9.4] — 2026-09-22
 ### Fixed

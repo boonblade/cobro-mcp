@@ -2,7 +2,8 @@ export const THEMES = ['auto', 'dark', 'light', 'frost'] as const;
 export type Theme = typeof THEMES[number];
 export type RefreshStrategy = 'none' | 'reload' | 'event';
 export type AgentStatus = 'idle' | 'waiting' | 'sent' | 'working' | 'done';
-export type BatchStatus = 'draft' | 'sent' | 'done' | 'unanswered'; // unanswered: done 없이 다음 Send가 오면 앞 묶음이 이 상태가 된다(R79)
+// working: batchId로 status/done을 받아 처리 중인 묶음(R162). unanswered: 옛 session.json 호환용 — R160(R79 폐기)으로 더는 만들지 않는다
+export type BatchStatus = 'draft' | 'sent' | 'working' | 'done' | 'unanswered';
 
 export interface Rect { x: number; y: number; w: number; h: number } // 페이지 좌표
 // frame: React 19 _debugStack 첫 사용자 프레임, 서버가 source로 해석 후 페이로드에서 제거(R112). Vue는 채우지 않는다(행 정보 없음, R114)
@@ -24,21 +25,23 @@ export interface Batch {
   createdAt: string; sentAt?: string; doneAt?: string; screenshot?: string; summary?: string;
   regions?: RegionInfo[];
   refSeq?: number; // R127: ref 발급용 내부 카운터. 페이로드에는 안 나감(buildPayload의 Pick이 걸러줌)
+  page?: { url: string; title: string }; // R161: 묶음이 찍힌 페이지. 서버가 setDrafts에서 처음 보는 초안에만 찍는다
 }
 export interface PageInfo { url: string; title: string; viewport: { w: number; h: number } }
+export interface DoneInfo { summary: string; selectors: string[]; changedFiles: string[] }
 export interface Session {
   version: 1; page: PageInfo | null; batches: Batch[];
   agent: { status: AgentStatus; text: string };
   strategy: RefreshStrategy | null;  // 설정·open 인자로 고정된 값
   detected: RefreshStrategy | null;  // 오버레이 자동 감지
+  pendingDone?: Array<{ url: string; batchIds: string[]; info: DoneInfo }>; // R163: 다른 페이지에서 닫힌 묶음의 done을 그 페이지가 재접속할 때까지 들고 있는다
 }
 export interface ConsoleEntry { level: 'error' | 'warning' | 'pageerror' | 'requestfailed'; text: string; count: number; last: string }
 export interface Payload {
   origin: 'human'; sentAt: string; page: PageInfo;
-  batches: Array<Pick<Batch, 'id' | 'note' | 'elements' | 'screenshot' | 'regions'>>;
+  batches: Array<Pick<Batch, 'id' | 'note' | 'elements' | 'screenshot' | 'regions' | 'page'>>;
   console: ConsoleEntry[]; refreshStrategy: RefreshStrategy;
 }
-export interface DoneInfo { summary: string; selectors: string[]; changedFiles: string[] }
 export interface UiPrefs { theme: Theme; themeLocked: boolean }
 
 // 오버레이 → 서버
@@ -52,7 +55,7 @@ export type OverlayMsg =
 // 서버 → 오버레이
 export type ServerMsg =
   | { type: 'state'; session: Session; ui: UiPrefs }
-  | { type: 'done'; info: DoneInfo; strategy: RefreshStrategy }
+  | { type: 'done'; info: DoneInfo; strategy: RefreshStrategy; batchIds?: string[] } // R163: pendingDone 재생 대상. 오버레이는 무시(기존 필드만 읽음)
   | { type: 'error'; message: string };
 
 export type WaitResult = { status: 'sent'; payload: Payload; browserRestarted?: boolean } | { status: 'pending'; browserGone?: boolean };

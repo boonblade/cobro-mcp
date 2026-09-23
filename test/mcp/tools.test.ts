@@ -27,7 +27,7 @@ beforeEach(async () => {
     isAlive: () => state.alive,
     wasLaunched: () => state.launched,
   };
-  const server = createMcpServer({ core, browser, manualShotPath: (n) => `/s/manual/${n}.png`, done: (info) => core.done(info), defaultWaitSec: 1, version: 'test-1.2.3' });
+  const server = createMcpServer({ core, browser, manualShotPath: (n) => `/s/manual/${n}.png`, done: (info, batchId) => core.done(info, batchId), defaultWaitSec: 1, version: 'test-1.2.3' });
   const [ct, st] = InMemoryTransport.createLinkedPair();
   client = new Client({ name: 't', version: '0' });
   await server.connect(st); await client.connect(ct);
@@ -125,6 +125,30 @@ describe('mcp tools', () => {
     expect(core.session.agent).toEqual({ status: 'working', text: '수정 중' });
     expect(await call('done', { summary: '완료', selectors: ['#a'] })).toEqual({ ok: true, doneBatches: 1 });
     expect(core.session.batches[0]!.status).toBe('done');
+  });
+  it('status(text, batchId) marks that batch working (R162)', async () => {
+    core.setDrafts([{ id: 'b', note: 'n', elements: [], status: 'draft', createdAt: 't' }]);
+    core.markSent(['b'], page);
+    expect(await call('status', { text: '수정 중', batchId: 'b' })).toEqual({ ok: true });
+    expect(core.session.batches[0]!.status).toBe('working');
+  });
+  it('done(summary, ..., batchId) completes only that batch; a later done() with no batchId completes the rest (R162)', async () => {
+    core.setDrafts([
+      { id: 'b', note: 'n', elements: [], status: 'draft', createdAt: 't' },
+      { id: 'c', note: 'n', elements: [], status: 'draft', createdAt: 't' },
+    ]);
+    core.markSent(['b', 'c'], page);
+    expect(await call('done', { summary: 'ok', batchId: 'b' })).toEqual({ ok: true, doneBatches: 1 });
+    expect(core.session.batches.find((x) => x.id === 'c')!.status).toBe('sent');
+    expect(core.session.agent.status).toBe('sent');
+    expect(await call('done', { summary: '완료' })).toEqual({ ok: true, doneBatches: 1 });
+    expect(core.session.agent.status).toBe('done');
+  });
+  it('done with an unknown batchId completes nothing (R162)', async () => {
+    core.setDrafts([{ id: 'b', note: 'n', elements: [], status: 'draft', createdAt: 't' }]);
+    core.markSent(['b'], page);
+    expect(await call('done', { summary: 'x', batchId: 'nope' })).toEqual({ ok: true, doneBatches: 0 });
+    expect(core.session.batches[0]!.status).toBe('sent');
   });
   it('screenshot returns path and passes selector through; close closes browser', async () => {
     const r = await call('screenshot');

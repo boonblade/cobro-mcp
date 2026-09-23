@@ -44,6 +44,18 @@ describe('buildPayload', () => {
     expect('regions' in p.batches[2]!).toBe(false);
   });
 
+  it('keeps page only when present on the batch (R161)', () => {
+    const p = buildPayload({
+      page, refreshStrategy: 'none', console: [], now: new Date('2026-09-08T00:00:00Z'),
+      batches: [
+        { id: 'b1', note: 'n', status: 'sent', createdAt: 't', elements: [], page: { url: 'http://y/', title: 'Y' } },
+        { id: 'b2', note: 'n', status: 'sent', createdAt: 't', elements: [] },
+      ],
+    });
+    expect(p.batches[0]).toEqual({ id: 'b1', note: 'n', elements: [], page: { url: 'http://y/', title: 'Y' } });
+    expect('page' in p.batches[1]!).toBe(false);
+  });
+
   it('strips react.frame, keeps component/source, and leaves elements without frame untouched', () => {
     const withFrame = { selector: '#a', tag: 'button', classes: [], text: '', rect: { x: 0, y: 0, w: 0, h: 0 }, styles: {}, react: { component: 'Cta', source: 'src/react.jsx:4', frame: { url: 'http://x/a.js', line: 1, col: 2 } } };
     const noFrame = { selector: '#b', tag: 'div', classes: [], text: '', rect: { x: 0, y: 0, w: 0, h: 0 }, styles: {}, react: { component: 'App' } };
