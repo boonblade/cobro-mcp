@@ -254,4 +254,50 @@ describe('createBridge', () => {
     err.mockRestore();
     ws.close();
   });
+
+  it('shoots a draft with elements after a 500ms debounce; note-only changes do not reshoot, rect changes do (R164)', async () => {
+    const shotCalls: string[] = [];
+    b = await createBridge({
+      store: new Store(mkdtempSync(join(tmpdir(), 'cobro-'))), token: 't',
+      screenshot: async (batch) => { shotCalls.push(batch.id); return `/shots/${batch.id}.png`; },
+    });
+    const ws = new WebSocket(`ws://127.0.0.1:${b.port}`);
+    await new Promise((r) => ws.once('open', r));
+    ws.send(JSON.stringify({ type: 'hello', token: 't' }));
+    ws.send(JSON.stringify({ type: 'page', page, detected: 'none' }));
+    ws.send(JSON.stringify({ type: 'draft', batches: [{ id: 'd1', note: '', elements: [el], status: 'draft', createdAt: 't' }] }));
+    await new Promise((r) => setTimeout(r, 600));
+    expect(shotCalls).toEqual(['d1']);
+    expect(b!.core.session.batches[0]!.screenshot).toBe('/shots/d1.png');
+
+    ws.send(JSON.stringify({ type: 'draft', batches: [{ id: 'd1', note: '메모', elements: [el], status: 'draft', createdAt: 't' }] }));
+    await new Promise((r) => setTimeout(r, 600));
+    expect(shotCalls).toEqual(['d1']);
+
+    const moved = { ...el, rect: { x: 5, y: 5, w: 1, h: 1 } };
+    ws.send(JSON.stringify({ type: 'draft', batches: [{ id: 'd1', note: '메모', elements: [moved], status: 'draft', createdAt: 't' }] }));
+    await new Promise((r) => setTimeout(r, 600));
+    expect(shotCalls).toEqual(['d1', 'd1']);
+    ws.close();
+  });
+
+  it('does not shoot a draft stamped on another page even while it is current (R164)', async () => {
+    const shotCalls: string[] = [];
+    b = await createBridge({
+      store: new Store(mkdtempSync(join(tmpdir(), 'cobro-'))), token: 't',
+      screenshot: async (batch) => { shotCalls.push(batch.id); return `/shots/${batch.id}.png`; },
+    });
+    const otherPage = { url: 'http://x/other', title: 'Other', viewport: { w: 1, h: 1 } };
+    b.core.setPage(otherPage, 'none');
+    b.core.setDrafts([{ id: 'd2', note: '', elements: [el], status: 'draft', createdAt: 't' }]);
+    b.core.setPage(page, 'none'); // 사용자가 http://x/로 이동, d2는 http://x/other에 찍힌 초안
+    const ws = new WebSocket(`ws://127.0.0.1:${b.port}`);
+    await new Promise((r) => ws.once('open', r));
+    ws.send(JSON.stringify({ type: 'hello', token: 't' }));
+    const moved = { ...el, rect: { x: 9, y: 9, w: 1, h: 1 } };
+    ws.send(JSON.stringify({ type: 'draft', batches: [{ id: 'd2', note: '', elements: [moved], status: 'draft', createdAt: 't', page: otherPage }] }));
+    await new Promise((r) => setTimeout(r, 600));
+    expect(shotCalls).toEqual([]);
+    ws.close();
+  });
 });

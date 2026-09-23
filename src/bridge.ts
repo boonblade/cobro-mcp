@@ -13,6 +13,9 @@ export async function createBridge(opts: { store: Store; token: string; screensh
   let cachedTheme: Theme | undefined = opts.settingsFile ? readUserSettings(opts.settingsFile).theme : undefined;
   const uiPrefs = (): UiPrefs => ({ theme: opts.envTheme ?? cachedTheme ?? 'auto', themeLocked: !!opts.envTheme });
   const stateMsg = (): ServerMsg => ({ type: 'state', session: core.session, ui: uiPrefs() });
+  // R164: 초안 단계 스크린샷 — id별 500ms 디바운스 타이머. close()에서 정리한다
+  const draftShotTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const draftSig = (b: Batch): string => JSON.stringify([b.elements.map((e) => [e.selector, e.rect]), (b.regions ?? []).map((r) => r.rect)]);
   const channel = new ChannelServer({
     token: opts.token,
     onConnect: (reply) => reply(stateMsg()),
@@ -26,9 +29,35 @@ export async function createBridge(opts: { store: Store; token: string; screensh
           // R163: 이 페이지로 재접속했으니 그 페이지 몫으로 미뤄둔 done을 이 소켓에만 재생한다(리로드 재발 방지로 strategy는 none)
           for (const p of core.takePendingDone(msg.page.url)) reply({ type: 'done', info: p.info, strategy: 'none', batchIds: p.batchIds });
           break;
-        case 'draft':
+        case 'draft': {
           if (!Array.isArray(msg.batches)) return bad('batches가 배열이 아니다');
-          core.setDrafts(msg.batches); break;
+          const prevSigs = new Map(core.session.batches.filter((b) => b.status === 'draft').map((b) => [b.id, draftSig(b)]));
+          core.setDrafts(msg.batches);
+          const curPage = core.session.page;
+          for (const b of core.session.batches) {
+            if (b.status !== 'draft') continue;
+            const hasContent = b.elements.length > 0 || (b.regions?.length ?? 0) > 0;
+            if (!hasContent) continue;
+            if (prevSigs.get(b.id) === draftSig(b)) continue; // 메모만 바뀐 초안은 안 찍는다
+            if (b.page && (!curPage || !samePage(b.page.url, curPage.url))) continue; // 다른 페이지 초안은 지금 화면을 찍으면 안 된다
+            const id = b.id;
+            const existing = draftShotTimers.get(id);
+            if (existing) clearTimeout(existing);
+            draftShotTimers.set(id, setTimeout(() => {
+              draftShotTimers.delete(id);
+              void (async () => {
+                try {
+                  const target = core.session.batches.find((x) => x.id === id);
+                  const now = core.session.page;
+                  if (!target || target.status !== 'draft' || !now) return;
+                  const p = await opts.screenshot?.(target, now);
+                  if (p) core.setScreenshot(id, p);
+                } catch (e) { console.error('[cobro] draft screenshot failed', (e as Error).message); }
+              })();
+            }, 500));
+          }
+          break;
+        }
         case 'resolved':
           if (typeof msg.batchId !== 'string') return bad('batchId가 문자열이 아니다');
           core.markResolved(msg.batchId, msg.index, msg.missing); break;
@@ -103,6 +132,6 @@ export async function createBridge(opts: { store: Store; token: string; screensh
       }
       return out;
     },
-    close: () => channel.close(),
+    close: () => { for (const t of draftShotTimers.values()) clearTimeout(t); draftShotTimers.clear(); return channel.close(); },
   };
 }
