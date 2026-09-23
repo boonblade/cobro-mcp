@@ -3,7 +3,8 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Store, emptySession } from '../../src/core/store.js';
-import { SessionCore, samePage } from '../../src/core/session.js';
+import { SessionCore } from '../../src/core/session.js';
+import { samePage } from '../../src/core/page.js';
 import type { Batch, Payload, PageInfo } from '../../src/core/types.js';
 
 const page: PageInfo = { url: 'http://x/', title: 'X', viewport: { w: 800, h: 600 } };
