@@ -1,4 +1,4 @@
-import type { Batch } from '../core/types.js';
+import type { Batch, Session } from '../core/types.js';
 import { samePage } from '../core/page.js';
 
 // R166: 현재 페이지 초안 — drafts 중 현재 페이지(href)와 같은 첫 초안. page 없는 옛 초안은 현재 페이지 것으로 본다
@@ -24,14 +24,24 @@ export function roundOf(batches: Batch[]): { queue: number; done: number; total:
   return { queue: round.length - done, done, total: round.length };
 }
 
-// R167: 같은 origin이면 pathname(+search)만, 다른 origin이면 host를 붙인다. title이 있으면 앞에 " · "로 붙이고,
-// 없으면 위치만(중복 방지 — "path · path"를 만들지 않는다)
+// R171: 위치 부분만(제목 제외) — 같은 origin이면 pathname(+search)만, 다른 origin이면 host를 붙인다. pageLabel이 재사용
+export function pageLoc(url: string, href: string): string {
+  const u = new URL(url); const cur = new URL(href);
+  return u.origin === cur.origin ? u.pathname + u.search : u.host + u.pathname + u.search;
+}
+
+// R167: title이 있으면 앞에 " · "로 붙이고, 없으면 위치만(중복 방지 — "path · path"를 만들지 않는다)
 export function pageLabel(page: { url: string; title: string } | undefined, href: string): string {
   if (!page) return '';
-  let u: URL; let cur: URL;
-  try { u = new URL(page.url); cur = new URL(href); } catch { return page.title || page.url; }
-  const loc = u.origin === cur.origin ? u.pathname + u.search : u.host + u.pathname + u.search;
+  let loc: string;
+  try { loc = pageLoc(page.url, href); } catch { return page.title || page.url; }
   return page.title ? `${page.title} · ${loc}` : loc;
+}
+
+// R171: session.pendingDone 중 현재 페이지가 아닌 첫 항목 — 폴백 "보기" 링크에 쓰인다
+export function pendingElsewhere(session: Session | null, href: string): { url: string; path: string } | null {
+  const item = (session?.pendingDone ?? []).find((p) => !samePage(p.url, href));
+  return item ? { url: item.url, path: pageLoc(item.url, href) } : null;
 }
 
 export interface CartItem {

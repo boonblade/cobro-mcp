@@ -9,7 +9,7 @@ import { samePage } from '../core/page.js';
 type IconName = Parameters<typeof svg>[0];
 
 // R166·R169: current = 현재 페이지 초안, queue = sent·working·라운드 done(전 페이지), busy = sent·working 묶음 존재
-export interface ViewModel { selecting: boolean; connected: boolean; agent: { status: AgentStatus; text: string }; strategy: RefreshStrategy | null; drafts: Batch[]; current: Batch | null; queue: Batch[]; busy: boolean; prefs: UiPrefs; expanded: string | null; href: string }
+export interface ViewModel { selecting: boolean; connected: boolean; agent: { status: AgentStatus; text: string }; strategy: RefreshStrategy | null; drafts: Batch[]; current: Batch | null; queue: Batch[]; busy: boolean; pendingElsewhere: { url: string; path: string } | null; prefs: UiPrefs; expanded: string | null; href: string }
 export interface UIHandlers { onToggleSelect(): void; onNoteInput(id: string, note: string): void; onRemoveElement(id: string, index: number): void; onRemoveRegion(id: string, index: number): void; onSend(): void; onSettings(patch: { theme?: Theme }): void; onToggleGroup(ref: string): void }
 
 const CSS = `
@@ -65,6 +65,7 @@ const CSS = `
 .status-in{display:inline-block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;transition:transform .2s ease-out}
 .status-in.scroll{max-width:none;overflow:visible;text-overflow:clip}
 .status-in.enter{animation:cobroin .15s ease-out}
+.status-in a.goto{color:inherit;text-decoration:underline;cursor:pointer}
 @keyframes cobroin{from{opacity:.4;transform:translateX(-6px)}to{opacity:1;transform:translateX(0)}}
 @media (prefers-reduced-motion: reduce){.status-in{transition:none}.status-in.enter{animation:none}}
 .wbox{position:fixed;border:1.5px solid var(--info);border-radius:2px;pointer-events:none;box-sizing:border-box;animation:cobrobreathe 2.4s ease-in-out infinite}
@@ -184,6 +185,7 @@ const T = {
     tipRemove: '이 요소 빼기',
     cartCount: (n: number) => `${n}개 항목`, cartNoNote: '메모 없음',
     tipOtherPage: '다른 페이지의 초안 — 그 페이지에서 편집',
+    doneElsewhere: (path: string) => `✓ 완료 · ${path} 보기`,
     progress: (d: number, n: number) => `${d}/${n}`,
     tipSettings: '설정', theme: '테마', themeAuto: '자동', themeDark: '어둡게', themeLight: '밝게', themeFrost: '유리',
     themeLocked: 'COBRO_THEME 환경 변수로 고정됨',
@@ -213,6 +215,7 @@ const T = {
     tipRemove: 'Remove this element',
     cartCount: (n: number) => `${n} item${n === 1 ? '' : 's'}`, cartNoNote: 'No note',
     tipOtherPage: 'Draft on another page — edit it there',
+    doneElsewhere: (path: string) => `✓ Done · view ${path}`,
     progress: (d: number, n: number) => `${d}/${n}`,
     tipSettings: 'Settings', theme: 'Theme', themeAuto: 'Auto', themeDark: 'Dark', themeLight: 'Light', themeFrost: 'Frost',
     themeLocked: 'Pinned by COBRO_THEME',
@@ -370,7 +373,9 @@ export function createUI(h: UIHandlers) {
     const cur = vm.current;
     const hasElements = !!cur && (cur.elements.length + (cur.regions?.length ?? 0)) > 0;
     let hint: string;
+    let gotoUrl: string | null = null; // R171: 다른 페이지에서 끝난 완료의 폴백 "보기" 링크
     if (!vm.connected) hint = T.disconnected;
+    else if (!vm.busy && vm.pendingElsewhere) { hint = T.doneElsewhere(vm.pendingElsewhere.path); gotoUrl = vm.pendingElsewhere.url; }
     else {
       let text: string;
       if (vm.agent.status === 'sent' || vm.agent.status === 'working' || vm.agent.status === 'done') text = AGENT_TEXT[vm.agent.status](vm.agent.text);
@@ -391,7 +396,13 @@ export function createUI(h: UIHandlers) {
         statusIn.classList.add('enter');
       }
     }
-    statusIn.textContent = displayHint;
+    if (gotoUrl) {
+      statusIn.textContent = '';
+      const a = document.createElement('a'); a.className = 'goto'; a.href = gotoUrl; a.textContent = displayHint;
+      statusIn.append(a);
+    } else {
+      statusIn.textContent = displayHint;
+    }
     statusIn.title = hint;
     if (hovering) { applyHoverScroll(); if (statusIn.classList.contains('scroll')) statusIn.classList.remove('enter'); }
     status.classList.toggle('off', !vm.connected);
