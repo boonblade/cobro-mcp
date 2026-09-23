@@ -9,6 +9,8 @@ import { detectStrategy, applyDone } from './refresh.js';
 import { resolveTheme } from './theme.js';
 import { isChildRef } from './refs.js';
 import { setProjectRoot } from './frameworks/index.js';
+import { currentDraft, roundBatches } from './cart.js';
+import { samePage } from '../core/page.js';
 
 declare const __COBRO_PORT__: number;
 declare const __COBRO_TOKEN__: string;
@@ -26,7 +28,6 @@ declare const __COBRO_ROOT__: string;
 
     let session: Session | null = null;
     let drafts: Batch[] | null = null; // null = 서버 상태를 아직 못 받음
-    let current: string | null = null;
     let connected = false;
     let stateSeen = false; // 첫 state 수신 전에는 ensureCurrent를 미룬다 — 서버 복구 초안을 가리지 않도록(I1)
     let openPending = false;
@@ -36,17 +37,24 @@ declare const __COBRO_ROOT__: string;
     const mq = matchMedia('(prefers-color-scheme: dark)');
 
     const pageInfo = (): PageInfo => ({ url: location.href, title: document.title, viewport: { w: innerWidth, h: innerHeight } });
-    const newBatch = (): Batch => ({ id: crypto.randomUUID(), note: '', elements: [], status: 'draft', createdAt: new Date().toISOString() });
-    const ensureCurrent = (): Batch => { drafts ??= []; let b = drafts.find((d) => d.id === current); if (!b) { b = newBatch(); drafts.push(b); current = b.id; } return b; };
+    // R166: 새 초안은 항상 지금 페이지 것으로 찍는다(오버레이 표시용 — 서버가 실제 값을 다시 찍는다)
+    const newBatch = (): Batch => ({ id: crypto.randomUUID(), note: '', elements: [], status: 'draft', createdAt: new Date().toISOString(), page: { url: location.href, title: document.title } });
+    // R166: 현재 페이지 초안 = drafts 중 지금 페이지와 같은 것. 없으면 새로 만든다
+    const ensureCurrent = (): Batch => { drafts ??= []; let b = currentDraft(drafts, location.href); if (!b) { b = newBatch(); drafts.push(b); } return b; };
     const flushDraft = () => { if (draftTimer) { clearTimeout(draftTimer); draftTimer = null; } chan.send({ type: 'draft', batches: drafts ?? [] }); };
     const pushDraft = () => { if (draftTimer) clearTimeout(draftTimer); draftTimer = setTimeout(flushDraft, 300); };
-    const vm = () => ({
-      selecting: picker.isActive(), connected, agent: session?.agent ?? { status: 'idle' as const, text: '' },
-      strategy: session ? session.strategy ?? session.detected : null, drafts: drafts ?? [],
-      sent: session?.batches.filter((b) => b.status === 'sent' || b.status === 'working') ?? [],
-      locked: session?.agent.status === 'sent' || session?.agent.status === 'working',
-      prefs, expanded: expandedGroup,
-    });
+    // R165: busy = sent·working 묶음이 하나라도 있다(에이전트가 처리 중) — Send를 막지 않는다, wbox·진행 요약에만 쓴다
+    const vm = () => {
+      const href = location.href;
+      return {
+        selecting: picker.isActive(), connected, agent: session?.agent ?? { status: 'idle' as const, text: '' },
+        strategy: session ? session.strategy ?? session.detected : null, drafts: drafts ?? [],
+        current: currentDraft(drafts ?? [], href),
+        queue: roundBatches(session?.batches ?? []), // R166·R169: sent·working·라운드 done(현재+다른 페이지 전부)
+        busy: (session?.batches ?? []).some((b) => b.status === 'sent' || b.status === 'working'),
+        prefs, expanded: expandedGroup, href,
+      };
+    };
     const render = () => ui.render(vm());
     const setSelecting = (on: boolean) => {
       picker.setActive(on);
@@ -124,7 +132,7 @@ declare const __COBRO_ROOT__: string;
         if (!ready.length) { ui.focusNote(); return; }
         flushDraft();
         chan.send({ type: 'send', batchIds: ready.map((b) => b.id), page: pageInfo() });
-        drafts = (drafts ?? []).filter((b) => !ready.includes(b)); current = null;
+        drafts = (drafts ?? []).filter((b) => !ready.includes(b));
         picker.setActive(false); expandedGroup = null; render(); // M2: 다음 초안은 접힘부터
       },
       onSettings: (patch) => chan.send({ type: 'settings', patch }),
@@ -199,8 +207,15 @@ declare const __COBRO_ROOT__: string;
         // 없으면 send 직후 도착하는 첫 state('draft'로 커밋된 상태)가 방금 보낸 배치를 좀비 draft로 되살린다.
         const nonDraft = new Set(m.session.batches.filter((b) => b.status !== 'draft').map((b) => b.id));
         const serverDrafts = m.session.batches.filter((b) => b.status === 'draft');
-        if (drafts === null) { drafts = serverDrafts.map(resolveDraft); current = drafts[drafts.length - 1]?.id ?? null; }
-        else {
+        if (drafts === null) {
+          // R166: resolveDraft(missing 판정·ensureRefs)는 현재 페이지 초안에만. 다른 페이지 초안은 받은 그대로 보관·되돌려 보낸다
+          // — page 없는 옛 초안은 첫 state 수신 때 지금 페이지로 채운다
+          const href = location.href;
+          drafts = serverDrafts.map((b) => {
+            const withPage: Batch = b.page ? b : { ...b, page: { url: href, title: document.title } };
+            return samePage(withPage.page!.url, href) ? resolveDraft(withPage) : withPage;
+          });
+        } else {
           drafts = drafts.filter((d) => !nonDraft.has(d.id));
         }
         render();

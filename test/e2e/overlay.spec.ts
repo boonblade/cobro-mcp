@@ -298,7 +298,7 @@ test('panel has no batch tabs, Add batch, or history (R64)', async ({ cobroPage:
   await expect(page.locator(`${HOST} .panel`)).not.toBeVisible();
 });
 
-test('handshake: Send disabled while agent works, enabled after done, no Unlock', async ({ cobroPage: page, bridge }) => {
+test('Send stays enabled while the agent works; a second batch queues behind the first (R165)', async ({ cobroPage: page, bridge }) => {
   bridge.core.setStrategy('none');
   await page.goto('http://127.0.0.1:4173/basic.html');
   await selectAt(page, '#target');
@@ -312,11 +312,8 @@ test('handshake: Send disabled while agent works, enabled after done, no Unlock'
   const buttonTexts = await page.locator(`${HOST} .panel button`).allTextContents();
   expect(buttonTexts).not.toContain('Unlock');
   await selectAt(page, '#card');
-  await expect(page.locator(`${HOST} button.send`)).toBeDisabled();
-  await expect(page.locator(`${HOST} button.send`)).toHaveAttribute('title', /작업 중/);
-
-  bridge.done({ summary: 'ok', selectors: [], changedFiles: [] });
   await expect(page.locator(`${HOST} button.send`)).toBeEnabled();
+  await expect(page.locator(`${HOST} button.send`)).toHaveAttribute('title', '선택한 요소와 메모를 에이전트에 전송');
 
   await page.locator(`${HOST} textarea`).fill('b');
   const waiting2 = bridge.core.wait(10_000);
@@ -325,6 +322,7 @@ test('handshake: Send disabled while agent works, enabled after done, no Unlock'
   expect(r2.status).toBe('sent');
   if (r2.status === 'sent') expect(r2.payload.batches[0]?.note).toBe('b');
 
+  expect(bridge.core.session.batches.filter((b) => b.status === 'sent')).toHaveLength(2);
   expect(bridge.core.session.batches.filter((b) => b.status === 'unanswered')).toHaveLength(0);
 });
 
@@ -1084,6 +1082,65 @@ test('working effect is static under prefers-reduced-motion (R131)', async ({ co
   const lineAnim = await page.locator(`${HOST} .toolbar .line`).evaluate((el) => getComputedStyle(el).animationName);
   expect(lineAnim).toBe('none');
   await expect(page.locator(`${HOST} .wbox`)).toHaveCount(1);
+});
+
+test('cart: drafts from two pages send together, each with its own page (R166·R167)', async ({ cobroPage: page, bridge }) => {
+  await page.goto('http://127.0.0.1:4173/region.html');
+  await selectAt(page, '#a');
+  await page.locator(`${HOST} textarea`).fill('r');
+  await expect.poll(() => bridge.core.session.batches.length).toBe(1); // 디바운스된 draft가 서버에 반영될 때까지
+
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await startSelect(page);
+  await expect(page.locator(`${HOST} .cart .item.other`)).toHaveCount(1);
+  await expect(page.locator(`${HOST} .cart .item.other .page`)).toContainText('/region.html');
+
+  await pickAt(page, '#target');
+  await page.locator(`${HOST} textarea`).fill('b');
+  await expect(page.locator(`${HOST} .marker`)).toHaveCount(1); // basic 페이지 마커만 — region 초안은 마커에 안 나온다
+
+  const waiting = bridge.core.wait(10_000);
+  await page.screenshot({ path: 'screenshots/cart-two-pages.png' });
+  await page.locator(`${HOST} button.send`).click();
+  const r = await waiting;
+  expect(r.status).toBe('sent');
+  if (r.status !== 'sent') return;
+  expect(r.payload.batches).toHaveLength(2);
+  expect(r.payload.batches[0]?.page?.url).toContain('/region.html');
+  expect(r.payload.batches[1]?.page?.url).toContain('/basic.html');
+});
+
+test('cart: progress chip counts the round and done items leave when the round ends (R169)', async ({ cobroPage: page, bridge }) => {
+  bridge.core.setStrategy('none');
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await selectAt(page, '#target');
+  await page.locator(`${HOST} textarea`).fill('a');
+  const waiting1 = bridge.core.wait(10_000);
+  await page.locator(`${HOST} button.send`).click();
+  const r1 = await waiting1;
+  expect(r1.status).toBe('sent');
+  if (r1.status !== 'sent') return;
+  const firstId = r1.payload.batches[0]!.id;
+
+  await selectAt(page, '#card');
+  await page.locator(`${HOST} textarea`).fill('b');
+  const waiting2 = bridge.core.wait(10_000);
+  await page.locator(`${HOST} button.send`).click();
+  const r2 = await waiting2;
+  expect(r2.status).toBe('sent');
+
+  // 툴바 칩만(장바구니 진행 항목도 .chip을 쓰므로 .toolbar로 범위를 좁힌다)
+  await expect(page.locator(`${HOST} .toolbar .chip:not(.strategy)`)).toContainText('0/2');
+
+  bridge.done({ summary: 'ok', selectors: [], changedFiles: [] }, firstId);
+  await expect(page.locator(`${HOST} .toolbar .chip:not(.strategy)`)).toContainText('1/2');
+  await startSelect(page); // 패널을 다시 열어 .cart를 확인
+  await expect(page.locator(`${HOST} .cart .item.done`)).toHaveCount(1);
+  await page.screenshot({ path: 'screenshots/cart-progress.png' });
+
+  bridge.done({ summary: 'ok', selectors: [], changedFiles: [] });
+  await expect(page.locator(`${HOST} .toolbar .chip:not(.strategy)`)).not.toContainText('/');
+  await expect(page.locator(`${HOST} .cart`)).toHaveCount(0);
 });
 
 async function focusedTag(page: Page): Promise<string | undefined> {
