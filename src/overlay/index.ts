@@ -44,7 +44,13 @@ declare const __COBRO_ROOT__: string;
     const newBatch = (): Batch => ({ id: crypto.randomUUID(), note: '', elements: [], status: 'draft', createdAt: new Date().toISOString(), page: { url: location.href, title: document.title } });
     // R166: 현재 페이지 초안 = drafts 중 지금 페이지와 같은 것. 없으면 새로 만든다 — 새로 만들면 R172: 「이 페이지」 탭으로
     const ensureCurrent = (): Batch => { drafts ??= []; let b = currentDraft(drafts, location.href); if (!b) { b = newBatch(); drafts.push(b); tab = 'here'; } return b; };
-    const flushDraft = () => { if (draftTimer) { clearTimeout(draftTimer); draftTimer = null; } chan.send({ type: 'draft', batches: drafts ?? [] }); };
+    // R177: 다른 탭이 만든 서버 초안을 지우지 않도록 현재 페이지 초안만 싣고, 서버가 페이지 단위로 교체하도록 page를 함께 보낸다
+    const flushDraft = () => {
+      if (draftTimer) { clearTimeout(draftTimer); draftTimer = null; }
+      const href = location.href;
+      const here = (drafts ?? []).filter((d) => !d.page || samePage(d.page.url, href));
+      chan.send({ type: 'draft', batches: here, page: href });
+    };
     const pushDraft = () => { if (draftTimer) clearTimeout(draftTimer); draftTimer = setTimeout(flushDraft, 300); };
     // R175(R165 개정): locked = 에이전트가 sent·working(처리 중) — Select·Ctrl+Shift+F·textarea를 잠근다
     const isLocked = () => session?.agent.status === 'sent' || session?.agent.status === 'working';
@@ -228,17 +234,21 @@ declare const __COBRO_ROOT__: string;
         // 없으면 send 직후 도착하는 첫 state('draft'로 커밋된 상태)가 방금 보낸 배치를 좀비 draft로 되살린다.
         const nonDraft = new Set(m.session.batches.filter((b) => b.status !== 'draft').map((b) => b.id));
         const serverDrafts = m.session.batches.filter((b) => b.status === 'draft');
-        if (drafts === null) {
-          // R166: resolveDraft(missing 판정·ensureRefs)는 현재 페이지 초안에만. 다른 페이지 초안은 받은 그대로 보관·되돌려 보낸다
-          // — page 없는 옛 초안은 첫 state 수신 때 지금 페이지로 채운다
-          const href = location.href;
-          drafts = serverDrafts.map((b) => {
-            const withPage: Batch = b.page ? b : { ...b, page: { url: href, title: document.title } };
-            return samePage(withPage.page!.url, href) ? resolveDraft(withPage) : withPage;
-          });
-        } else {
-          drafts = drafts.filter((d) => !nonDraft.has(d.id));
+        // R177: 서버 batches 순서를 따라 병합 — 다른 페이지 초안은 받은 그대로, 현재 페이지 초안은 로컬 사본 우선(타자 유실 방지).
+        // 처음 보는 현재 페이지 초안은 첫 state(drafts===null)에서만 resolveDraft(missing 판정·ensureRefs) 적용 — 이후 state는 로컬이 이미 처리한 값
+        const href = location.href;
+        const localById = new Map((drafts ?? []).map((d) => [d.id, d]));
+        const merged: Batch[] = [];
+        for (const raw of serverDrafts) {
+          const b: Batch = raw.page ? raw : { ...raw, page: { url: href, title: document.title } };
+          if (!samePage(b.page!.url, href)) { merged.push(b); continue; }
+          const local = localById.get(b.id);
+          merged.push(local ?? (drafts === null ? resolveDraft(b) : b));
         }
+        // 서버에 아직 없는 로컬 초안(미flush)은 뒤에 — nonDraft로 넘어간 것은 뺀다
+        const seen = new Set(serverDrafts.map((b) => b.id));
+        for (const d of drafts ?? []) if (!seen.has(d.id) && !nonDraft.has(d.id)) merged.push(d);
+        drafts = merged;
         render();
         stateSeen = true;
         if (openPending) { openPending = false; ensureCurrent(); render(); ui.focusNote(); }

@@ -1270,3 +1270,43 @@ async function focusedTag(page: Page): Promise<string | undefined> {
     return (h as (Element & { shadowRoot: ShadowRoot }) | null)?.shadowRoot?.activeElement?.tagName;
   }, HOST);
 }
+
+test('two tabs on different pages keep each other\'s drafts; Send from either delivers both (R177)', async ({ cobroPage: page, bridge, ctx }) => {
+  await page.goto('http://127.0.0.1:4173/region.html');
+  await selectAt(page, '#a');
+  await page.locator(`${HOST} textarea`).fill('r');
+  await page.keyboard.press('Escape');
+  await expect.poll(() => bridge.core.session.batches.length).toBe(1); // Task 66 T1 관례: 다음 탭을 열기 전 서버 반영을 기다린다
+
+  const p2 = await ctx.newPage();
+  await p2.goto('http://127.0.0.1:4173/basic.html');
+  await selectAt(p2, '#target');
+  await p2.locator(`${HOST} textarea`).fill('b');
+  await expect.poll(() => bridge.core.session.batches.length).toBe(2);
+
+  // 첫 탭에서 패널을 열어 메모를 고쳐도 다른 페이지(region) 초안은 서버에 그대로 남는다
+  await startSelect(page);
+  await page.locator(`${HOST} textarea`).fill('r2');
+  await page.waitForTimeout(800);
+  expect(bridge.core.session.batches.length).toBe(2);
+
+  // 두 번째 탭에서 메모를 고쳐도 마찬가지
+  await p2.locator(`${HOST} textarea`).fill('b2');
+  await p2.waitForTimeout(800);
+  expect(bridge.core.session.batches.length).toBe(2);
+
+  await p2.locator(`${HOST} .tab.queue`).click();
+  await expect(p2.locator(`${HOST} .queue .card`)).toHaveCount(2);
+  await expect(p2.locator(`${HOST} .queue .card`).nth(0).locator('.path')).toContainText('/region.html');
+
+  const waiting = bridge.core.wait(10_000);
+  await p2.locator(`${HOST} button.send`).click();
+  const r = await waiting;
+  expect(r.status).toBe('sent');
+  if (r.status !== 'sent') return;
+  expect(r.payload.batches).toHaveLength(2);
+  expect(r.payload.batches[0]?.page?.url).toContain('/region.html');
+  expect(r.payload.batches[1]?.page?.url).toContain('/basic.html');
+
+  await expect(page.locator(`${HOST} .toolbar .chip:not(.strategy)`)).toContainText('0/2');
+});
