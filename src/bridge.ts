@@ -26,6 +26,7 @@ export async function createBridge(opts: { store: Store; token: string; screensh
       switch (msg.type) {
         case 'page':
           if (!msg.page || typeof msg.page.url !== 'string') return bad('page.url이 없다');
+          core.noteArrival(msg.page.url); // R176: 따라가기 중지 판정 — setPage 전에(옮기기 전 페이지와 비교)
           core.setPage(msg.page, msg.detected);
           // R163: 이 페이지로 재접속했으니 그 페이지 몫으로 미뤄둔 done을 이 소켓에만 재생한다(리로드 재발 방지로 strategy는 none)
           for (const p of core.takePendingDone(msg.page.url)) reply({ type: 'done', info: p.info, strategy: 'none', batchIds: p.batchIds });
