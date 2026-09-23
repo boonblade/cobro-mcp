@@ -50,12 +50,13 @@ describe('SessionCore', () => {
     expect(drafts.map((b) => b.id)).toEqual(['2', 'noteOnly', 'regionOnly']);
     expect(core.session.batches.find((b) => b.id === '1')?.status).toBe('sent');
   });
-  it('markSent moves earlier sent to unanswered and sets agent sent (R79)', () => {
+  it('markSent no longer downgrades earlier sent batches to unanswered (R160, R79 폐기)', () => {
     core.setDrafts([draft('1'), draft('2')]);
     core.markSent(['1'], page);
     core.markSent(['2'], page);
     const st = Object.fromEntries(core.session.batches.map((b) => [b.id, b.status]));
-    expect(st).toEqual({ '1': 'unanswered', '2': 'sent' });
+    expect(st).toEqual({ '1': 'sent', '2': 'sent' });
+    expect(core.session.batches.filter((b) => b.status === 'unanswered')).toHaveLength(0);
     expect(core.session.agent.status).toBe('sent');
   });
   it('wait() unlocks: agent goes waiting even right after sent', async () => {
@@ -105,6 +106,69 @@ describe('SessionCore', () => {
     expect(doneBatches.map((b) => b.id)).toEqual(['1']);
     expect(core.session.batches[0]).toMatchObject({ status: 'done', summary: 'ok' });
     expect(core.session.agent.status).toBe('done');
+  });
+  it('setDrafts stamps s.page onto a new draft; a later setDrafts with an overlay-sent page keeps the first value; no s.page → no page (R161)', () => {
+    core.setDrafts([draft('1')]);
+    expect(core.session.batches[0]!.page).toBeUndefined();
+
+    core.setPage(page, 'none');
+    core.setDrafts([draft('2')]);
+    expect(core.session.batches.find((b) => b.id === '2')!.page).toEqual({ url: page.url, title: page.title });
+
+    const other = { url: 'http://y/', title: 'Y' };
+    core.setDrafts([{ ...draft('2'), page: other } as Batch]);
+    expect(core.session.batches.find((b) => b.id === '2')!.page).toEqual({ url: page.url, title: page.title });
+  });
+  it('setAgentText(text, batchId) marks a sent/working batch as working; an unknown id only sets agent text (R162)', () => {
+    core.setDrafts([draft('1'), draft('2')]);
+    core.markSent(['1', '2'], page);
+    core.setAgentText('x', '1');
+    expect(core.session.batches.find((b) => b.id === '1')!.status).toBe('working');
+    expect(core.session.batches.find((b) => b.id === '2')!.status).toBe('sent');
+    expect(core.session.agent).toEqual({ status: 'working', text: 'x' });
+
+    core.setAgentText('y', 'nope');
+    expect(core.session.batches.find((b) => b.id === '1')!.status).toBe('working');
+    expect(core.session.agent).toEqual({ status: 'working', text: 'y' });
+  });
+  it('done(info, batchId) closes only that batch; agent stays sent while another sent/working batch remains, then done once all close (R162)', () => {
+    core.setDrafts([draft('1'), draft('2')]);
+    core.markSent(['1', '2'], page);
+    const out1 = core.done({ summary: 's1', selectors: [], changedFiles: [] }, '1');
+    expect(out1.map((b) => b.id)).toEqual(['1']);
+    expect(core.session.batches.find((b) => b.id === '1')!.status).toBe('done');
+    expect(core.session.batches.find((b) => b.id === '2')!.status).toBe('sent');
+    expect(core.session.agent).toEqual({ status: 'sent', text: 's1' });
+
+    const out2 = core.done({ summary: 's2', selectors: [], changedFiles: [] }, '2');
+    expect(out2.map((b) => b.id)).toEqual(['2']);
+    expect(core.session.agent).toEqual({ status: 'done', text: 's2' });
+  });
+  it('restart normalizes a working batch back to sent (R160)', () => {
+    core.setDrafts([draft('1')]);
+    core.markSent(['1'], page);
+    core.setAgentText('x', '1');
+    expect(core.session.batches[0]!.status).toBe('working');
+    const restarted = new SessionCore(store);
+    expect(restarted.session.batches[0]!.status).toBe('sent');
+  });
+  it('pushPendingDone replaces an entry for the same url and keeps at most 20; takePendingDone matches by samePage (hash ignored) and drains; closeSession clears it (R163)', () => {
+    core.pushPendingDone({ url: 'http://x/a', batchIds: ['1'], info: { summary: 'first', selectors: [], changedFiles: [] } });
+    core.pushPendingDone({ url: 'http://x/a', batchIds: ['2'], info: { summary: 'second', selectors: [], changedFiles: [] } });
+    expect(core.session.pendingDone).toEqual([{ url: 'http://x/a', batchIds: ['2'], info: { summary: 'second', selectors: [], changedFiles: [] } }]);
+
+    for (let i = 0; i < 25; i++) core.pushPendingDone({ url: `http://x/${i}`, batchIds: [], info: { summary: 's', selectors: [], changedFiles: [] } });
+    expect(core.session.pendingDone).toHaveLength(20);
+
+    core.pushPendingDone({ url: 'http://z/', batchIds: ['z'], info: { summary: 'zed', selectors: [], changedFiles: [] } });
+    const taken = core.takePendingDone('http://z/#foo');
+    expect(taken.map((p) => p.batchIds)).toEqual([['z']]);
+    expect(core.session.pendingDone!.some((p) => p.url === 'http://z/')).toBe(false);
+    expect(core.takePendingDone('http://z/')).toEqual([]);
+
+    core.pushPendingDone({ url: 'http://q/', batchIds: ['q'], info: { summary: 'q', selectors: [], changedFiles: [] } });
+    core.closeSession();
+    expect(core.session.pendingDone).toEqual([]);
   });
   it('setScreenshot persists the path so a fresh core sees it', () => {
     core.setDrafts([draft('1')]);

@@ -18,7 +18,7 @@ export function buildPayload(input: { page: PageInfo; batches: Batch[]; console:
     origin: 'human',
     sentAt: (input.now ?? new Date()).toISOString(),
     page: input.page,
-    batches: input.batches.map((b) => ({ id: b.id, note: b.note, elements: b.elements.map(stripFrame), ...(b.screenshot ? { screenshot: b.screenshot } : {}), ...(b.regions?.length ? { regions: b.regions } : {}) })),
+    batches: input.batches.map((b) => ({ id: b.id, note: b.note, elements: b.elements.map(stripFrame), ...(b.screenshot ? { screenshot: b.screenshot } : {}), ...(b.regions?.length ? { regions: b.regions } : {}), ...(b.page ? { page: b.page } : {}) })),
     console: input.console,
     refreshStrategy: input.refreshStrategy,
   };
