@@ -39,9 +39,11 @@ export function pageLabel(page: { url: string; title: string } | undefined, href
 }
 
 // R171: session.pendingDone 중 현재 페이지가 아닌 첫 항목 — 폴백 "보기" 링크에 쓰인다
+// M2: 깨진 URL이면 pageLabel과 같은 방식으로 던지지 않고 null(링크를 안 보이는 쪽으로 안전하게)
 export function pendingElsewhere(session: Session | null, href: string): { url: string; path: string } | null {
   const item = (session?.pendingDone ?? []).find((p) => !samePage(p.url, href));
-  return item ? { url: item.url, path: pageLoc(item.url, href) } : null;
+  if (!item) return null;
+  try { return { url: item.url, path: pageLoc(item.url, href) }; } catch { return null; }
 }
 
 export interface CartItem {

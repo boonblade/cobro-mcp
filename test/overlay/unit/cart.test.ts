@@ -86,6 +86,11 @@ describe('pendingElsewhere', () => {
     expect(pendingElsewhere(session(), 'http://x/here')).toBeNull();
     expect(pendingElsewhere(null, 'http://x/here')).toBeNull();
   });
+  it('returns null instead of throwing when the entry url is malformed (M2)', () => {
+    const s = session({ pendingDone: [{ url: 'not a url', batchIds: ['b'], info: { summary: 'ok', selectors: [], changedFiles: [] } }] });
+    expect(() => pendingElsewhere(s, 'http://x/here')).not.toThrow();
+    expect(pendingElsewhere(s, 'http://x/here')).toBeNull();
+  });
 });
 
 describe('cartItems', () => {
