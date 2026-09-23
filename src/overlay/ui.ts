@@ -53,6 +53,7 @@ const CSS = `
 .toolbar button:focus-visible,.panel button:focus-visible{outline:2px solid var(--info);outline-offset:1px}
 .toolbar button.on{color:var(--fg-on-accent);background:var(--accent);border-color:var(--accent)}
 .toolbar button:disabled,.panel button:disabled{opacity:.4;cursor:not-allowed}
+.toolbar button.locked{opacity:.6}
 textarea:disabled{opacity:.6;cursor:not-allowed}
 .els button{background:transparent;border-color:transparent;color:var(--fg-5);padding:0 6px}
 .els button:hover{background:var(--hover);color:var(--fg-hover)}
@@ -94,10 +95,10 @@ textarea:disabled{opacity:.6;cursor:not-allowed}
 .panel h4 .grip svg{width:14px;height:16px;fill:currentColor;display:block}
 .panel h4 .close{margin-left:auto;background:transparent;border-color:transparent;color:var(--fg-5);padding:0 6px}
 .panel h4 .close:hover{background:var(--hover);color:var(--fg-hover)}
-.tabs{display:flex;flex:1;border-bottom:1px solid var(--border)}
-.tab{flex:1;min-height:40px;background:none;border:0;border-bottom:2px solid transparent;color:var(--fg-4);font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:5px;border-radius:0}
-.tab.on{color:var(--fg);border-bottom-color:var(--accent)}
-.tab .badge{display:inline-flex;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:var(--chip);font-size:10px;line-height:16px;text-align:center}
+.panel .tabs{display:flex;flex:1;border-bottom:1px solid var(--border)}
+.panel .tabs button.tab{flex:1;min-height:40px;background:none;border:0;border-bottom:2px solid transparent;color:var(--fg-4);font-weight:600;font-family:inherit;letter-spacing:0;display:inline-flex;align-items:center;justify-content:center;gap:5px;border-radius:0;padding:4px 6px}
+.panel .tabs button.tab.on{color:var(--fg);border-bottom-color:var(--accent)}
+.panel .tabs .badge{display:inline-flex;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:var(--chip);font-size:10px;line-height:16px;text-align:center}
 .sub{display:flex;align-items:center;gap:6px;margin:12px 0;color:var(--fg);font-size:12px;font-weight:700}
 .sub .mark{color:var(--accent)}
 .els{max-height:min(45vh,260px);overflow:auto;margin-bottom:8px;color:var(--fg-3);font-size:11px}
@@ -116,7 +117,7 @@ textarea:disabled{opacity:.6;cursor:not-allowed}
 .marker.child{border-style:dotted}
 .marker.child .n{background:#fff;color:var(--accent);border:1.5px solid var(--accent)}
 textarea{width:100%;min-height:80px;resize:none;font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--border-2);border-radius:8px;padding:10px;margin-bottom:0;display:block}
-.queue{display:flex;flex-direction:column;gap:8px;max-height:min(45vh,320px);overflow:auto;margin:12px 0}
+div.queue{display:flex;flex-direction:column;gap:8px;max-height:min(45vh,320px);overflow:auto;margin:12px 0}
 .queue .card{display:flex;gap:8px;padding:8px;border:1px solid var(--border);border-radius:10px;text-decoration:none;color:inherit;align-items:center}
 .card.working{border-color:var(--accent)}
 .card.here{background:var(--chip)}
@@ -131,7 +132,7 @@ textarea{width:100%;min-height:80px;resize:none;font:inherit;color:var(--fg);bac
 .thumb{flex:none;width:44px;height:32px;background:#fff;border-radius:6px;display:flex;align-items:center;justify-content:center;gap:3px;padding:4px}
 .thumb .rect{display:block;width:10px;height:14px;border:1.5px solid var(--border-2);border-radius:2px}
 .thumb .rect.sent{border-color:var(--warn)}
-.thumb .rect.working{border-color:var(--info)}
+.thumb .rect.working{border-color:var(--accent)}
 .thumb .rect.done{border-color:var(--ok)}
 .done-row{display:block;width:100%;text-align:left;background:transparent;border:1px dashed var(--border);color:var(--fg-4);padding:8px 10px;border-radius:8px}
 .done-item{display:flex;gap:8px;padding:6px 10px;font-size:11px;color:var(--fg-4)}
@@ -219,7 +220,7 @@ const T = {
     footPaused: (d: number, n: number) => `처리 중 ${d}/${n} — 이 페이지를 떠나 따라가기를 멈췄어요`,
     footAllDone: (n: number) => `✓ ${n}페이지 완료 — 요소를 고르면 새 요청이 시작됩니다`,
     footHint: '메모를 적으면 보낼 수 있어요',
-    tipSelectLocked: '에이전트가 수정 중 — 완료 후 담을 수 있어요',
+    tipSelectLocked: '에이전트가 수정 중 — 큐를 볼 수 있어요, 담기는 완료 후',
     followPaused: '따라가기 중지 — 완료되면 「보기」 링크로 확인',
     doneRow: (n: number) => `✓ 완료 ${n}페이지 · 새로 담으면 정리됩니다`,
     sendPages: (n: number) => `Send · ${n}페이지 →`,
@@ -259,7 +260,7 @@ const T = {
     footPaused: (d: number, n: number) => `Working ${d}/${n} — you left this page, so following paused`,
     footAllDone: (n: number) => `✓ ${n} page${n === 1 ? '' : 's'} done — pick an element to start a new request`,
     footHint: 'Write a note to send',
-    tipSelectLocked: 'The agent is editing — you can add more once it\'s done',
+    tipSelectLocked: 'Agent is working — view the queue; picking resumes after done',
     followPaused: 'Following paused — check the "view" link when it\'s done',
     doneRow: (n: number) => `✓ ${n} done · cleared when you pick again`,
     sendPages: (n: number) => `Send · ${n} pages →`,
@@ -416,7 +417,7 @@ export function createUI(h: UIHandlers) {
     const wasTa = active instanceof HTMLTextAreaElement ? active : null;
     const sel: [number, number] | null = wasTa ? [wasTa.selectionStart, wasTa.selectionEnd] : null;
     selectBtn.classList.toggle('on', vm.selecting);
-    selectBtn.disabled = vm.locked; // R175
+    selectBtn.classList.toggle('locked', vm.locked); // B2: 잠겨도 클릭은 된다 — 패널(큐 탭) 열기/닫기로 동작, 흐린 스타일만
     selectBtn.title = vm.locked ? T.tipSelectLocked : T.tipSelect;
     for (const btn of segButtons) { btn.classList.toggle('on', btn.dataset.theme === vm.prefs.theme); btn.disabled = vm.prefs.themeLocked; }
     popNote.hidden = !vm.prefs.themeLocked;

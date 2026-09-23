@@ -300,7 +300,7 @@ test('panel has no batch tabs, Add batch, or history (R64)', async ({ cobroPage:
   await expect(page.locator(`${HOST} .panel`)).toBeVisible(); // Task 68 R172: Send 뒤에는 패널이 큐 탭으로 열린 채 남는다(R64가 막던 batch 탭/이력과는 무관)
 });
 
-test('Select is disabled while the agent works and unlocks on the next wait() (R175)', async ({ cobroPage: page, bridge }) => {
+test('Select stays clickable while the agent works — it opens the queue instead of picking, and unlocks picking on the next wait() (R175, Task 68 교정 B2)', async ({ cobroPage: page, bridge }) => {
   bridge.core.setStrategy('none');
   await page.goto('http://127.0.0.1:4173/basic.html');
   await selectAt(page, '#target');
@@ -310,15 +310,27 @@ test('Select is disabled while the agent works and unlocks on the next wait() (R
   const r1 = await waiting1;
   expect(r1.status).toBe('sent');
 
-  await expect(page.locator(`${HOST} .ib.select`)).toBeDisabled();
+  await page.keyboard.press('Escape'); // 잠겨도 닫기는 언제나 된다
+  await expect(page.locator(`${HOST} .panel`)).not.toHaveClass(/show/);
+
+  await expect(page.locator(`${HOST} .ib.select`)).toBeEnabled(); // B2: 잠겨도 클릭은 된다 — 흐린 스타일만
+  await expect(page.locator(`${HOST} .ib.select`)).toHaveClass(/locked/);
   await expect(page.locator(`${HOST} .ib.select`)).toHaveAttribute('title', /수정 중/);
   await page.locator(`${HOST} .ib.select`).hover();
   await page.screenshot({ path: 'screenshots/queue-locked.png' });
-  await page.keyboard.press('Control+Shift+F'); // 잠긴 동안은 무시된다
+
+  await page.locator(`${HOST} .ib.select`).click(); // 패널을 열되 큐 탭으로 — 선택 모드는 켜지 않는다
+  await expect(page.locator(`${HOST} .tab.queue`)).toHaveClass(/on/);
   await expect(page.locator(`${HOST} .ib.select`)).not.toHaveClass(/on/);
+  await expect(page.locator(`${HOST} .marker`)).toHaveCount(0); // 새 마커가 추가되지 않는다(선택 모드가 아니다)
+
+  await page.keyboard.press('Control+Shift+F'); // 잠긴 동안은 Ctrl+Shift+F도 같은 동작 — 이번엔 닫는다
+  await expect(page.locator(`${HOST} .panel`)).not.toHaveClass(/show/);
 
   bridge.core.wait(1000); // R74: 에이전트가 done 없이 wait를 다시 부르면 agent가 waiting으로 풀린다
-  await expect(page.locator(`${HOST} .ib.select`)).toBeEnabled();
+  await expect(page.locator(`${HOST} .ib.select`)).not.toHaveClass(/locked/);
+  await page.keyboard.press('Control+Shift+F'); // 잠금이 풀리면 선택 모드를 켠다
+  await expect(page.locator(`${HOST} .ib.select`)).toHaveClass(/on/);
 
   bridge.done({ summary: 'ok', selectors: [], changedFiles: [] });
 });
@@ -1097,6 +1109,13 @@ test('queue: drafts from two pages show as cards; Send delivers both in order (R
   await startSelect(page);
   await pickAt(page, '#target');
   await page.locator(`${HOST} textarea`).fill('b');
+  // B3(Task 68 교정, 검토 M2 원 단언 복원): 마커가 vm.current(basic 초안)의 것인지 좌표·ref로 확인 — 다른 페이지(region) 초안이 renderMarkers로 새지 않는다
+  await expect(page.locator(`${HOST} .marker`)).toHaveCount(1); // basic 페이지 마커만 — region 초안은 마커에 안 나온다
+  await expect(page.locator(`${HOST} .marker .n`)).toHaveText('1');
+  const markerBox = (await page.locator(`${HOST} .marker`).boundingBox())!;
+  const targetBox = (await page.locator('#target').boundingBox())!;
+  expect(Math.abs(markerBox.x - targetBox.x)).toBeLessThanOrEqual(3);
+  expect(Math.abs(markerBox.y - targetBox.y)).toBeLessThanOrEqual(3);
 
   await page.locator(`${HOST} .tab.queue`).click();
   await expect(page.locator(`${HOST} .queue .card`)).toHaveCount(2);
@@ -1147,7 +1166,12 @@ test('queue: Send hides when nothing to send; the round ends with a collapsed do
   await expect(page.locator(`${HOST} .done-row`)).toHaveCount(1);
   await expect(page.locator(`${HOST} .done-row`)).toContainText('완료 2');
   await expect(page.locator(`${HOST} .row .foot`)).toHaveClass(/ok/);
-  await page.screenshot({ path: 'screenshots/queue-done-row.png' });
+  await page.screenshot({ path: 'screenshots/queue-done-row.png' }); // 접힘 상태
+
+  await page.locator(`${HOST} .done-row`).click(); // M1(Task 68 교정): 펼침 분기
+  await expect(page.locator(`${HOST} .done-item`)).toHaveCount(2);
+  await expect(page.locator(`${HOST} .done-item`).nth(0)).toContainText('✓ ');
+  await expect(page.locator(`${HOST} .done-item`).nth(1)).toContainText('✓ ');
 
   bridge.core.wait(1000); // 잠금 해제
   await expect(page.locator(`${HOST} .ib.select`)).toBeEnabled(); // 클라이언트가 해제를 받을 때까지

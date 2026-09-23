@@ -67,7 +67,11 @@ export class SessionCore extends EventEmitter {
   expectedNavigation(): string | null { return this.expectedUrl; }
   /** bridge가 'page' 메시지를 받으면 setPage 전에 호출한다 — this.s.page는 아직 도착 전(옮기기 전) 페이지다(R176) */
   noteArrival(url: string): void {
-    if (this.expectedUrl !== null && samePage(url, this.expectedUrl)) { this.expectedUrl = null; return; } // 따라간 도착
+    if (this.expectedUrl !== null) {
+      const followed = samePage(url, this.expectedUrl);
+      this.expectedUrl = null; // M6(Task 68 교정): 예상 밖 도착도 지운다 — 나중에 원래 목적지에 와도 '따라간 도착'으로 오판하지 않는다
+      if (followed) return;
+    }
     const active = this.s.batches.some((b) => b.status === 'sent' || b.status === 'working');
     if (active && this.s.page && !samePage(url, this.s.page.url)) { this.s.followPaused = true; this.commit(); }
   }

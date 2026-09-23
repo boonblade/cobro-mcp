@@ -73,6 +73,11 @@ declare const __COBRO_ROOT__: string;
       if (!stateSeen) { openPending = true; render(); return; }
       ensureCurrent(); render(); ui.focusNote();
     };
+    // B2(Task 68 교정): 잠긴 동안 Select는 선택 모드가 아니라 패널(큐 탭) 열기/닫기로 동작한다
+    const togglePanelLocked = () => {
+      if (panelOpen) { panelOpen = false; } else { panelOpen = true; tab = 'queue'; }
+      render();
+    };
     const GROUP_LETTERS = 'abcdefghijkl';
     // R127: ref는 안정 번호 — 발급 뒤 다른 항목이 지워져도 바뀌지 않는다. refSeq는 발급 전용 카운터.
     const nextRef = (b: Batch): string => { b.refSeq = (b.refSeq ?? 0) + 1; return String(b.refSeq); };
@@ -125,7 +130,7 @@ declare const __COBRO_ROOT__: string;
     };
 
     const ui = createUI({
-      onToggleSelect: () => setSelecting(!picker.isActive()),
+      onToggleSelect: () => { if (isLocked()) { togglePanelLocked(); return; } setSelecting(!picker.isActive()); },
       onClose: () => setSelecting(false), // R175: 패널 헤더 ✕ — 잠겨서 선택이 이미 꺼져 있어도 패널을 닫는다
       onNoteInput: (id, note) => { const b = drafts?.find((d) => d.id === id); if (b) { b.note = note; pushDraft(); } },
       onRemoveElement: (id, i) => {
@@ -204,7 +209,7 @@ declare const __COBRO_ROOT__: string;
       },
     });
     window.addEventListener('keydown', (e) => {
-      if (e.ctrlKey && e.shiftKey && e.code === 'KeyF') { e.preventDefault(); ui.closePop(); setSelecting(!picker.isActive()); }
+      if (e.ctrlKey && e.shiftKey && e.code === 'KeyF') { e.preventDefault(); ui.closePop(); if (isLocked()) { togglePanelLocked(); return; } setSelecting(!picker.isActive()); }
       else if (e.key === 'Escape' && (picker.isActive() || panelOpen)) { setSelecting(false); } // R175: 잠금으로 선택만 꺼진 채 패널이 열려 있어도 Esc로 닫는다
     }, true);
     const onViewport = () => ui.renderMarkers(vm());

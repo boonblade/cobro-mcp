@@ -335,4 +335,15 @@ describe('SessionCore', () => {
     const restarted = new SessionCore(store);
     expect(restarted.session.followPaused).toBe(false);
   });
+  it('an unexpected arrival while a navigation is expected clears expectedUrl too, so a later arrival at the original target is not mistaken for having followed (M6, Task 68 교정)', () => {
+    core.setDrafts([draft('1')]);
+    core.markSent(['1'], page); // busy — page는 core의 기본 page('http://x/')
+    core.expectNavigation('http://x/a');
+    core.noteArrival('http://x/c'); // 사용자가 예상 밖 페이지로 이동
+    expect(core.session.followPaused).toBe(true);
+    expect(core.expectedNavigation()).toBeNull();
+
+    core.noteArrival('http://x/a'); // 원래 목적지에 뒤늦게 도착해도 '따라간 도착'으로 오판하지 않는다
+    expect(core.session.followPaused).toBe(true); // 해제는 markSent/done만
+  });
 });
