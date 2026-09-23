@@ -15,6 +15,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Fixed
 - Under the reload strategy the done highlight now appears after the page reloads.
+- Drafts made in one tab are no longer wiped when you edit a draft in another tab of the same session (draft updates are now per page).
 
 ## [0.9.4] — 2026-09-22
 ### Fixed

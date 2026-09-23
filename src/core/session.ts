@@ -31,21 +31,31 @@ export class SessionCore extends EventEmitter {
   setStrategy(strategy: RefreshStrategy | null): void { this.s.strategy = strategy; this.commit(); }
   effectiveStrategy(): RefreshStrategy { return this.s.strategy ?? this.s.detected ?? 'reload'; }
 
-  setDrafts(batches: Batch[]): void {
-    const others = this.s.batches.filter((b) => b.status !== 'draft');
+  // R177: page가 있으면 같은 페이지 초안만 교체 대상 — page 없는 옛 초안도 같은 페이지로 취급한다.
+  // page가 없으면(호환) 드래프트 전체를 교체한다(기존 동작)
+  setDrafts(batches: Batch[], page?: { url: string; title: string }): void {
     const prevById = new Map(this.s.batches.map((b) => [b.id, b]));
     // R129: 빈 초안은 저장하지 않는다(부채 #9)
     const kept = batches.filter((b) => b.elements.length || b.regions?.length || b.note.trim());
+    const keptIds = new Set(kept.map((b) => b.id));
+    const others = this.s.batches.filter((b) => {
+      // Task 69 B1: 이번에 받은(=교체 대상) id는 page 라벨이 어긋나도 유지 목록에 무조건 안 남긴다 — 중복 증식 방지
+      if (keptIds.has(b.id)) return false;
+      if (b.status !== 'draft') return true;
+      if (!page) return false;
+      return !!b.page && !samePage(b.page.url, page.url);
+    });
     // R174: 내용 있는 초안이 새로(이전엔 저장돼 있지 않던 id) 생기고 처리 중인 묶음이 없으면, 지난 라운드의 done 묶음을 치운다(샷은 그대로 — R81)
     const hasNewContent = kept.some((b) => !prevById.has(b.id));
     const activeExists = others.some((b) => b.status === 'sent' || b.status === 'working');
     const survivors = hasNewContent && !activeExists ? others.filter((b) => b.status !== 'done') : others;
     this.s.batches = [...survivors, ...kept.map((b): Batch => {
       const draft: Batch = { ...b, status: 'draft' };
-      // R161: page는 서버가 찍는다 — 처음 보는 초안만 현재 s.page를 찍고, 이미 있던 초안은 기존 page를 유지(오버레이가 보낸 값은 무시)
+      // R161: page는 서버가 찍는다 — 처음 보는 초안만 찍고, 이미 있던 초안은 기존 page를 유지(오버레이가 보낸 값은 무시).
+      // Task 69 B1: 처음 보는 초안은 이 메시지의 page(보낸 탭의 현재 페이지)로 찍는다 — 전역 s.page(마지막에 연결한 탭)를 쓰면 다른 탭이 나중에 열렸을 때 라벨이 어긋난다
       const prev = prevById.get(b.id);
-      const page = prev ? prev.page : (this.s.page ? { url: this.s.page.url, title: this.s.page.title } : undefined);
-      if (page) draft.page = page; else delete draft.page;
+      const stamped = prev ? prev.page : (page ?? (this.s.page ? { url: this.s.page.url, title: this.s.page.title } : undefined));
+      if (stamped) draft.page = stamped; else delete draft.page;
       return draft;
     })];
     this.commit();

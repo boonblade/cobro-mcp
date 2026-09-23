@@ -1270,3 +1270,52 @@ async function focusedTag(page: Page): Promise<string | undefined> {
     return (h as (Element & { shadowRoot: ShadowRoot }) | null)?.shadowRoot?.activeElement?.tagName;
   }, HOST);
 }
+
+test('two tabs on different pages keep each other\'s drafts; Send from either delivers both (R177)', async ({ cobroPage: page, bridge, ctx }) => {
+  // Task 69 B1 조건: 첫 탭(region)이 먼저 연결해 놓고 재접속 없이 기다리다가, 둘째 탭(basic)이 열려 서버 전역 page를
+  // 바꾼 뒤에야 첫 탭에서 처음으로 요소를 담아 "새" 초안을 만든다(review B1의 순차 탭 전환 재현)
+  await page.goto('http://127.0.0.1:4173/region.html');
+  await expect.poll(() => bridge.core.session.page?.url).toContain('/region.html');
+
+  const p2 = await ctx.newPage();
+  await p2.goto('http://127.0.0.1:4173/basic.html');
+  await expect.poll(() => bridge.core.session.page?.url).toContain('/basic.html'); // 전역 page가 basic으로 바뀐다
+
+  await selectAt(page, '#a'); // 첫 탭은 재접속 없이 — 전역 page는 여전히 basic
+  await page.locator(`${HOST} textarea`).fill('r');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(500); // 디바운스(300ms) 여유
+  expect(bridge.core.session.batches.length).toBeLessThanOrEqual(1); // Task 69 B1: 중복 증식하지 않는다
+  await expect.poll(() => bridge.core.session.batches.length).toBe(1);
+  expect(bridge.core.session.batches[0]?.page?.url).toContain('/region.html'); // 전역 page(basic)가 아니라 보낸 탭의 page로 찍힌다
+
+  await selectAt(p2, '#target');
+  await p2.locator(`${HOST} textarea`).fill('b');
+  await expect.poll(() => bridge.core.session.batches.length).toBe(2);
+
+  // 첫 탭에서 패널을 열어 메모를 고쳐도 다른 페이지(region) 초안은 서버에 그대로 남는다
+  await startSelect(page);
+  await page.locator(`${HOST} textarea`).fill('r2');
+  await page.waitForTimeout(800);
+  expect(bridge.core.session.batches.length).toBe(2);
+
+  // 두 번째 탭에서 메모를 고쳐도 마찬가지
+  await p2.locator(`${HOST} textarea`).fill('b2');
+  await p2.waitForTimeout(800);
+  expect(bridge.core.session.batches.length).toBe(2);
+
+  await p2.locator(`${HOST} .tab.queue`).click();
+  await expect(p2.locator(`${HOST} .queue .card`)).toHaveCount(2);
+  await expect(p2.locator(`${HOST} .queue .card`).nth(0).locator('.path')).toContainText('/region.html');
+
+  const waiting = bridge.core.wait(10_000);
+  await p2.locator(`${HOST} button.send`).click();
+  const r = await waiting;
+  expect(r.status).toBe('sent');
+  if (r.status !== 'sent') return;
+  expect(r.payload.batches).toHaveLength(2);
+  expect(r.payload.batches[0]?.page?.url).toContain('/region.html');
+  expect(r.payload.batches[1]?.page?.url).toContain('/basic.html');
+
+  await expect(page.locator(`${HOST} .toolbar .chip:not(.strategy)`)).toContainText('0/2');
+});

@@ -49,7 +49,7 @@ export interface UiPrefs { theme: Theme; themeLocked: boolean }
 export type OverlayMsg =
   | { type: 'hello'; token: string }
   | { type: 'page'; page: PageInfo; detected: RefreshStrategy }
-  | { type: 'draft'; batches: Batch[] }            // status 'draft'인 것 전체 교체
+  | { type: 'draft'; batches: Batch[]; page?: { url: string; title: string } } // status 'draft'인 것 전체 교체. page(보낸 오버레이의 현재 페이지)가 있으면 같은 페이지 초안만 교체하고, 새 초안은 이 page로 찍는다(R177, Task 69 B1)
   | { type: 'send'; batchIds: string[]; page: PageInfo }
   | { type: 'resolved'; batchId: string; index: number; missing: boolean }
   | { type: 'settings'; patch: { theme?: Theme } };
