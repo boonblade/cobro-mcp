@@ -6,7 +6,7 @@ import { readUserSettings, writeUserSettings, isTheme } from './core/settings.js
 import type { Store } from './core/store.js';
 import type { Batch, ConsoleEntry, DoneInfo, PageInfo, ServerMsg, Theme, UiPrefs } from './core/types.js';
 
-export interface Bridge { core: SessionCore; channel: ChannelServer; port: number; token: string; done(info: DoneInfo): Batch[]; close(): Promise<void>; ui(): UiPrefs }
+export interface Bridge { core: SessionCore; channel: ChannelServer; port: number; token: string; done(info: DoneInfo, batchId?: string): Batch[]; close(): Promise<void>; ui(): UiPrefs }
 
 export async function createBridge(opts: { store: Store; token: string; screenshot?: (b: Batch, page: PageInfo) => Promise<string | undefined>; consoleEntries?: () => ConsoleEntry[]; settingsFile?: string; envTheme?: Theme; resolveSource?: (b: Batch, page: PageInfo) => Promise<void> }): Promise<Bridge> {
   const core = new SessionCore(opts.store);
@@ -74,7 +74,27 @@ export async function createBridge(opts: { store: Store; token: string; screensh
   return {
     core, channel, port, token: opts.token,
     ui: uiPrefs,
-    done(info) { const out = core.done(info); channel.broadcast({ type: 'done', info, strategy: core.effectiveStrategy() }); return out; },
+    done(info, batchId) {
+      // R163: 대상 묶음의 page별로 나눠 현재 페이지에는 즉시 방송하고, 다른 페이지는 그 페이지가 재접속할 때 재생하도록 들고 있는다
+      const out = core.done(info, batchId);
+      const cur = core.session.page?.url;
+      const strategy = core.effectiveStrategy();
+      if (cur === undefined) {
+        channel.broadcast({ type: 'done', info, strategy, batchIds: out.map((b) => b.id) });
+        return out;
+      }
+      const urls = out.length === 0 ? [cur] : [...new Set(out.map((b) => b.page?.url ?? cur))];
+      for (const url of urls) {
+        const batchIds = out.filter((b) => (b.page?.url ?? cur) === url).map((b) => b.id);
+        if (url === cur) {
+          channel.broadcast({ type: 'done', info, strategy, batchIds });
+          if (strategy === 'reload') core.pushPendingDone({ url, batchIds, info });
+        } else {
+          core.pushPendingDone({ url, batchIds, info });
+        }
+      }
+      return out;
+    },
     close: () => channel.close(),
   };
 }
