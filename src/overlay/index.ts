@@ -9,7 +9,7 @@ import { detectStrategy, applyDone } from './refresh.js';
 import { resolveTheme } from './theme.js';
 import { isChildRef } from './refs.js';
 import { setProjectRoot } from './frameworks/index.js';
-import { currentDraft, roundBatches } from './cart.js';
+import { currentDraft, roundBatches, pendingElsewhere } from './cart.js';
 import { samePage } from '../core/page.js';
 
 declare const __COBRO_PORT__: number;
@@ -52,6 +52,7 @@ declare const __COBRO_ROOT__: string;
         current: currentDraft(drafts ?? [], href),
         queue: roundBatches(session?.batches ?? []), // R166·R169: sent·working·라운드 done(현재+다른 페이지 전부)
         busy: (session?.batches ?? []).some((b) => b.status === 'sent' || b.status === 'working'),
+        pendingElsewhere: pendingElsewhere(session, href), // R171: 다른 페이지에서 끝난 완료의 폴백 "보기" 링크
         prefs, expanded: expandedGroup, href,
       };
     };

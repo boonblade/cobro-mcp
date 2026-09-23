@@ -12,15 +12,16 @@ import type { Rect } from '../../src/core/types.js';
 const HANGUL = /[가-힣]/;
 const page = { url: 'http://x/', title: 'X', viewport: { w: 1, h: 1 } };
 type Shot = { rect?: Rect; selector?: string; outPath: string };
+type FakeBrowser = { open: (u: string) => Promise<{ title: string; restarted: boolean }>; screenshot: (o: Shot) => Promise<string>; close: () => Promise<void>; isAlive: () => boolean; wasLaunched: () => boolean };
 let core: SessionCore; let client: Client; let calls: string[]; let closeAll: () => Promise<void>;
-let state: { alive: boolean; launched: boolean }; let shots: Shot[];
+let state: { alive: boolean; launched: boolean }; let shots: Shot[]; let browser: FakeBrowser;
 
 beforeEach(async () => {
   const store = new Store(mkdtempSync(join(tmpdir(), 'cobro-')));
   core = new SessionCore(store); calls = []; shots = [];
   state = { alive: false, launched: false };
   let openCount = 0;
-  const browser = {
+  browser = {
     open: async (u: string) => { calls.push('open:' + u); openCount++; state.alive = true; state.launched = true; return { title: 'T', restarted: openCount > 1 }; },
     screenshot: async (o: Shot) => { calls.push('shot'); shots.push(o); return o.outPath; },
     close: async () => { calls.push('close'); state.alive = false; },
@@ -149,6 +150,53 @@ describe('mcp tools', () => {
     core.markSent(['b'], page);
     expect(await call('done', { summary: 'x', batchId: 'nope' })).toEqual({ ok: true, doneBatches: 0 });
     expect(core.session.batches[0]!.status).toBe('sent');
+  });
+  it('status(text, batchId) moves the browser to that batch\'s page when it differs (R170)', async () => {
+    core.setPage({ url: 'http://x/other', title: 'O', viewport: { w: 1, h: 1 } }, 'reload');
+    core.setDrafts([{ id: 'b', note: 'n', elements: [], status: 'draft', createdAt: 't' }]);
+    core.setPage(page, 'reload');
+    core.markSent(['b'], page);
+    await call('open', { url: 'http://x/' });
+    calls.length = 0;
+    expect(await call('status', { text: 'editing', batchId: 'b' })).toEqual({ ok: true, navigated: true });
+    expect(calls).toEqual(['open:http://x/other']);
+  });
+  it('status(text, batchId) does not navigate when the batch is already on the current page (R170)', async () => {
+    core.setPage(page, 'reload');
+    core.setDrafts([{ id: 'b', note: 'n', elements: [], status: 'draft', createdAt: 't' }]);
+    core.markSent(['b'], page);
+    await call('open', { url: 'http://x/' });
+    calls.length = 0;
+    expect(await call('status', { text: 'editing', batchId: 'b' })).toEqual({ ok: true });
+    expect(calls).toEqual([]);
+  });
+  it('status(text, batchId) does not navigate when the browser is not alive (R170)', async () => {
+    core.setPage({ url: 'http://x/other', title: 'O', viewport: { w: 1, h: 1 } }, 'reload');
+    core.setDrafts([{ id: 'b', note: 'n', elements: [], status: 'draft', createdAt: 't' }]);
+    core.setPage(page, 'reload');
+    core.markSent(['b'], page);
+    expect(await call('status', { text: 'editing', batchId: 'b' })).toEqual({ ok: true });
+    expect(calls).toEqual([]);
+  });
+  it('done(summary, batchId) moves the browser to the completed batch\'s page after marking it done (R170)', async () => {
+    core.setPage({ url: 'http://x/other', title: 'O', viewport: { w: 1, h: 1 } }, 'reload');
+    core.setDrafts([{ id: 'b', note: 'n', elements: [], status: 'draft', createdAt: 't' }]);
+    core.setPage(page, 'reload');
+    core.markSent(['b'], page);
+    await call('open', { url: 'http://x/' });
+    calls.length = 0;
+    expect(await call('done', { summary: 'ok', batchId: 'b' })).toEqual({ ok: true, doneBatches: 1, navigated: true });
+    expect(calls).toEqual(['open:http://x/other']);
+  });
+  it('done navigation failure is swallowed and reported as navigated:false (R170)', async () => {
+    core.setPage({ url: 'http://x/other', title: 'O', viewport: { w: 1, h: 1 } }, 'reload');
+    core.setDrafts([{ id: 'b', note: 'n', elements: [], status: 'draft', createdAt: 't' }]);
+    core.setPage(page, 'reload');
+    core.markSent(['b'], page);
+    await call('open', { url: 'http://x/' });
+    calls.length = 0;
+    browser.open = async () => { throw new Error('boom'); };
+    expect(await call('done', { summary: 'ok', batchId: 'b' })).toEqual({ ok: true, doneBatches: 1, navigated: false });
   });
   it('screenshot returns path and passes selector through; close closes browser', async () => {
     const r = await call('screenshot');

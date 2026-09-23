@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { currentDraft, roundOf, pageLabel, cartItems } from '../../../src/overlay/cart.js';
-import type { Batch } from '../../../src/core/types.js';
+import { currentDraft, roundOf, pageLabel, cartItems, pageLoc, pendingElsewhere } from '../../../src/overlay/cart.js';
+import type { Batch, Session } from '../../../src/core/types.js';
 
 const el = { selector: '#a', tag: 'div', classes: [], text: '', rect: { x: 0, y: 0, w: 1, h: 1 }, styles: {} };
 const b = (id: string, patch: Partial<Batch> = {}): Batch => ({
@@ -58,6 +58,38 @@ describe('pageLabel', () => {
   });
   it('different origin includes the host', () => {
     expect(pageLabel({ url: 'http://other.example/path', title: 'Ext' }, 'http://x/here')).toBe('Ext · other.example/path');
+  });
+});
+
+describe('pageLoc', () => {
+  it('same origin: pathname + search only', () => {
+    expect(pageLoc('http://x/path?x=1', 'http://x/here')).toBe('/path?x=1');
+  });
+  it('different origin: host + pathname + search', () => {
+    expect(pageLoc('http://other.example/path', 'http://x/here')).toBe('other.example/path');
+  });
+});
+
+describe('pendingElsewhere', () => {
+  const session = (patch: Partial<Session> = {}): Session => ({
+    version: 1, page: null, batches: [], agent: { status: 'idle', text: '' }, strategy: null, detected: null, ...patch,
+  });
+  it('returns the first other-page pendingDone entry as {url, path}', () => {
+    const s = session({ pendingDone: [{ url: 'http://x/region.html', batchIds: ['b'], info: { summary: 'ok', selectors: [], changedFiles: [] } }] });
+    expect(pendingElsewhere(s, 'http://x/here')).toEqual({ url: 'http://x/region.html', path: '/region.html' });
+  });
+  it('returns null when the only entry is the current page (hash only differs)', () => {
+    const s = session({ pendingDone: [{ url: 'http://x/here#foo', batchIds: ['b'], info: { summary: 'ok', selectors: [], changedFiles: [] } }] });
+    expect(pendingElsewhere(s, 'http://x/here#bar')).toBeNull();
+  });
+  it('returns null when there is no entry, or the session is null', () => {
+    expect(pendingElsewhere(session(), 'http://x/here')).toBeNull();
+    expect(pendingElsewhere(null, 'http://x/here')).toBeNull();
+  });
+  it('returns null instead of throwing when the entry url is malformed (M2)', () => {
+    const s = session({ pendingDone: [{ url: 'not a url', batchIds: ['b'], info: { summary: 'ok', selectors: [], changedFiles: [] } }] });
+    expect(() => pendingElsewhere(s, 'http://x/here')).not.toThrow();
+    expect(pendingElsewhere(s, 'http://x/here')).toBeNull();
   });
 });
 

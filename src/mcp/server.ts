@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { samePage } from '../core/page.js';
 import type { SessionCore } from '../core/session.js';
 import type { Batch, DoneInfo, Rect } from '../core/types.js';
 
@@ -30,6 +31,11 @@ export function createMcpServer(deps: { core: SessionCore; browser: BrowserLike;
   let restartedPending = false;
   // 한 번 띄운 뒤 사라졌다 = 사용자가 창을 닫았다. 그 상태로 기다리면 영영 오지 않는다(룰링 R34a).
   const browserGone = () => browser.wasLaunched() && !browser.isAlive();
+  // R170: 작업 시작·완료 시 그 묶음의 페이지로 브라우저를 옮긴다. 옮길 필요가 없으면 undefined(응답에서 생략).
+  const navigateTo = async (url?: string): Promise<boolean | undefined> => {
+    if (!url || samePage(url, core.session.page?.url ?? '') || !browser.isAlive()) return undefined;
+    try { await browser.open(url); return true; } catch (e) { console.error('[cobro] navigate failed', (e as Error).message); return false; }
+  };
 
   server.registerTool('open', {
     description: 'Open a URL in Cobro\'s dedicated browser with the feedback overlay. Launches the browser if needed and restores saved drafts. When a fresh browser is launched, drafts without a note are discarded.',
@@ -66,7 +72,13 @@ export function createMcpServer(deps: { core: SessionCore; browser: BrowserLike;
     description: 'Show one line of agent status in the overlay (e.g. "Editing: Button.tsx"). Pass batchId to mark that batch as being worked on.',
     inputSchema: { text: z.string().max(200), batchId: z.string().optional() },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  }, async ({ text: t, batchId }) => { core.setAgentText(t, batchId); return text(browserGone() ? { ok: true, browserGone: true } : { ok: true }); });
+  }, async ({ text: t, batchId }) => {
+    core.setAgentText(t, batchId);
+    const target = batchId ? core.session.batches.find((b) => b.id === batchId) : undefined;
+    const navigated = await navigateTo(target?.page?.url);
+    const base = browserGone() ? { ok: true, browserGone: true } : { ok: true };
+    return text(navigated === undefined ? base : { ...base, navigated });
+  });
 
   server.registerTool('done', {
     description: 'Signal that the edit is complete. The overlay runs the refresh strategy, shows the summary and highlights elements matched by selectors. Marks the sent batch as handled. Call after every edit. Pass batchId to complete only that batch; omit it to complete every sent batch.',
@@ -74,7 +86,10 @@ export function createMcpServer(deps: { core: SessionCore; browser: BrowserLike;
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   }, async ({ summary, selectors, changedFiles, batchId }) => {
     const out = deps.done({ summary, selectors: selectors ?? [], changedFiles: changedFiles ?? [] }, batchId);
-    return text(browserGone() ? { ok: true, doneBatches: out.length, browserGone: true } : { ok: true, doneBatches: out.length });
+    const cur = core.session.page?.url ?? '';
+    const navigated = await navigateTo(out.find((b) => b.page && !samePage(b.page.url, cur))?.page?.url);
+    const base = browserGone() ? { ok: true, doneBatches: out.length, browserGone: true } : { ok: true, doneBatches: out.length };
+    return text(navigated === undefined ? base : { ...base, navigated });
   });
 
   server.registerTool('screenshot', {

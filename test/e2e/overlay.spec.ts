@@ -1169,6 +1169,31 @@ test('working boxes are drawn only for batches of the current page (R168)', asyn
   await expect(page.locator(`${HOST} .wbox`)).toHaveCount(1); // 원래 페이지로 돌아오면 다시 보인다
 });
 
+test('done for another page shows a view link; clicking it lands there and replays the highlight (R171)', async ({ cobroPage: page, bridge }) => {
+  await page.goto('http://127.0.0.1:4173/region.html');
+  await selectAt(page, '#a');
+  await page.locator(`${HOST} textarea`).fill('메모');
+  const waiting = bridge.core.wait(10_000);
+  await page.locator(`${HOST} button.send`).click();
+  const r = await waiting;
+  expect(r.status).toBe('sent');
+  if (r.status !== 'sent') return;
+  const batchId = r.payload.batches[0]!.id;
+
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await expect.poll(() => bridge.core.session.page?.url).toContain('basic.html'); // Task 66 T1 관례: 서버 반영을 기다린다
+  bridge.done({ summary: 'ok', selectors: ['#a'], changedFiles: [] }, batchId);
+
+  await expect(page.locator(`${HOST} .status`)).toContainText('/region.html');
+  await expect(page.locator(`${HOST} .status-in a.goto`)).toHaveCount(1);
+  await page.screenshot({ path: 'screenshots/cart-view-link.png' });
+
+  await page.locator(`${HOST} .status-in a.goto`).click();
+  await expect(page).toHaveURL(/region\.html/);
+  await expect(page.locator(`${HOST} .flash`)).toHaveCount(1); // pendingDone 재생
+  await expect(page.locator(`${HOST} .status-in a.goto`)).toHaveCount(0);
+});
+
 async function focusedTag(page: Page): Promise<string | undefined> {
   return page.evaluate((host) => {
     const h = document.querySelector(host);
