@@ -12,6 +12,7 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Changed
 - Sending a new batch no longer marks an earlier unanswered batch as abandoned; sent batches stay until done.
 - While the agent works, Select is disabled (unlocks on the agent's next wait); the Send button appears only when there is something to send.
+- The refresh-strategy chip moved from the toolbar into the settings popover (gear); the toolbar now shows only Select, the agent status and the hint.
 
 ### Fixed
 - Under the reload strategy the done highlight now appears after the page reloads.

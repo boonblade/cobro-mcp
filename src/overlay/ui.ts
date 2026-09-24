@@ -60,7 +60,6 @@ textarea:disabled{opacity:.6;cursor:not-allowed}
 .chip{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;background:var(--chip);border:1px solid transparent;color:var(--fg-3);white-space:nowrap;cursor:default;user-select:none}
 .chip[hidden]{display:none}
 .chip .ico{display:inline-flex;line-height:0}
-.chip.strategy .ico svg{width:12px;height:12px}
 .chip.off{color:var(--warn);border-color:var(--chip-off-border)}
 .dot{font-size:9px;line-height:1;color:var(--fg-5)}
 .dot.waiting{color:var(--ok)}
@@ -168,13 +167,17 @@ div.queue{display:flex;flex-direction:column;gap:8px;max-height:min(45vh,320px);
 .seg button.on{background:var(--bg-3);color:var(--fg)}
 .seg button:disabled{opacity:.5;cursor:not-allowed}
 .pop-note{margin-top:6px;color:var(--warn);font-size:11px}
+.pop-row.strategy{align-items:center;flex-wrap:wrap}
+.pop-row.strategy[hidden]{display:none}
+.strategy-val{display:inline-flex;align-items:center;gap:4px;font-family:ui-monospace,Menlo,Consolas,monospace;padding:2px 8px;border-radius:999px;background:var(--chip);color:var(--fg-3)}
+.strategy-val .ico svg{width:12px;height:12px}
+.pop-sub{font-size:11px;color:var(--fg-4);margin-left:8px}
 .ib{display:inline-flex;align-items:center;padding:4px 7px}
 .ib .ico{display:inline-flex;line-height:0}
 .ib .lbl{max-width:0;opacity:0;overflow:hidden;white-space:nowrap;margin-left:0;transition:max-width .1s ease-in,opacity .1s ease-in,margin-left .1s ease-in}
 .ib:hover .lbl,.ib:focus-visible .lbl{max-width:9ch;opacity:1;margin-left:5px;transition-duration:.15s;transition-timing-function:ease-out}
 @media (prefers-reduced-motion: reduce){.ib .lbl{transition:none}}
 @media (max-width:760px){
-  .chip.strategy{display:none}
   .status{width:180px}
   .ib .lbl,.ib:hover .lbl,.ib:focus-visible .lbl{max-width:0;opacity:0;margin-left:0}
 }
@@ -199,7 +202,7 @@ const T = {
     hintSend: 'Send로 전송하세요', hintClick: '페이지에서 요소를 클릭하세요 · Esc로 해제',
     hintMore: (n: number) => `${n}개 선택 · 더 고르거나 메모를 적으세요`,
     hintNote: '메모를 적고 Send를 누르세요', hintPick: 'Ctrl+Shift+F 또는 Select로 요소를 고르세요',
-    tipStrategy: (s: RefreshStrategy) => `갱신 전략: ${s} — ${{ none: 'HMR이 있어 done 뒤 새로고침 없음', reload: 'done 뒤 페이지 새로고침', event: '앱이 cobro:done 이벤트로 직접 갱신' }[s]}`,
+    strategyDesc: (s: RefreshStrategy) => ({ none: 'HMR이 있어 done 뒤 새로고침 없음', reload: 'done 뒤 페이지 새로고침', event: '앱이 cobro:done 이벤트로 직접 갱신' }[s]),
     selCount: (n: number) => `요소 ${n}개 선택됨`,
     selCountMixed: (n: number, m: number) => `요소 ${n}개 + 영역 ${m}개 선택됨`,
     regionRow: (w: number, h: number) => `▭ ${w}×${h}`,
@@ -227,7 +230,7 @@ const T = {
     chipDraft: '초안',
     progress: (d: number, n: number) => `${d}/${n}`,
     tipSettings: '설정', theme: '테마', themeAuto: '자동', themeDark: '어둡게', themeLight: '밝게', themeFrost: '유리',
-    themeLocked: 'COBRO_THEME 환경 변수로 고정됨',
+    themeLocked: 'COBRO_THEME 환경 변수로 고정됨', strategyLabel: '갱신 전략',
   },
   en: {
     agentIdle: 'Agent not connected', agentWaiting: 'Waiting for your feedback', agentSent: 'Sent — waiting for the agent',
@@ -239,7 +242,7 @@ const T = {
     hintSend: 'Press Send to deliver', hintClick: 'Click an element on the page · Esc to exit',
     hintMore: (n: number) => `${n} selected · pick more or write a note`,
     hintNote: 'Write a note, then press Send', hintPick: 'Press Ctrl+Shift+F or Select to pick an element',
-    tipStrategy: (s: RefreshStrategy) => `Refresh strategy: ${s} — ${{ none: 'HMR present — no reload after done', reload: 'page reloads after done', event: 'the app refreshes itself on cobro:done' }[s]}`,
+    strategyDesc: (s: RefreshStrategy) => ({ none: 'HMR present — no reload after done', reload: 'page reloads after done', event: 'the app refreshes itself on cobro:done' }[s]),
     selCount: (n: number) => `${n} element(s) selected`,
     selCountMixed: (n: number, m: number) => `${n} element(s) + ${m} region(s) selected`,
     regionRow: (w: number, h: number) => `▭ ${w}×${h}`,
@@ -267,7 +270,7 @@ const T = {
     chipDraft: 'Draft',
     progress: (d: number, n: number) => `${d}/${n}`,
     tipSettings: 'Settings', theme: 'Theme', themeAuto: 'Auto', themeDark: 'Dark', themeLight: 'Light', themeFrost: 'Frost',
-    themeLocked: 'Pinned by COBRO_THEME',
+    themeLocked: 'Pinned by COBRO_THEME', strategyLabel: 'Refresh',
   },
 }[LANG];
 const THEME_LABEL: Record<Theme, string> = { auto: T.themeAuto, dark: T.themeDark, light: T.themeLight, frost: T.themeFrost };
@@ -318,17 +321,13 @@ export function createUI(h: UIHandlers) {
   const dot = document.createElement('span'); dot.className = 'dot'; dot.textContent = '●';
   const chipLabel = document.createElement('span'); chipLabel.className = 'chip-label';
   chip.append(dot, chipLabel);
-  const chip2 = document.createElement('span'); chip2.className = 'chip strategy';
-  const chip2Ico = document.createElement('span'); chip2Ico.className = 'ico'; chip2Ico.innerHTML = svg('sync');
-  const chip2Label = document.createElement('span'); chip2Label.className = 'chip-label';
-  chip2.append(chip2Ico, chip2Label);
   const status = document.createElement('span'); status.className = 'status';
   const statusIn = document.createElement('span'); statusIn.className = 'status-in';
   status.append(statusIn);
   const gearParts = iconBtn('settings', T.tipSettings, T.tipSettings, 'gear', false);
   const gearBtn = gearParts.btn;
   const gripParts = iconBtn('drag', 'Move', T.tipDrag, 'grip', false); const grip = gripParts.btn; grip.setAttribute('aria-label', 'Move toolbar');
-  toolbar.append(grip, selectBtn, chip, chip2, status, gearBtn);
+  toolbar.append(grip, selectBtn, chip, status, gearBtn);
   // R131: 작업 중 흐름선 — el()이 아직 선언 전(TDZ)이라 여기서는 직접 createElement한다
   const line = document.createElement('span'); line.className = 'line'; line.hidden = true;
   toolbar.append(line);
@@ -344,8 +343,16 @@ export function createUI(h: UIHandlers) {
   });
   seg.append(...segButtons);
   popRow.append(popLabel, seg);
+  const stratRow = document.createElement('div'); stratRow.className = 'pop-row strategy';
+  const stratLabel = document.createElement('span'); stratLabel.className = 'pop-label'; stratLabel.textContent = T.strategyLabel;
+  const stratVal = document.createElement('span'); stratVal.className = 'strategy-val';
+  const stratIco = document.createElement('span'); stratIco.className = 'ico'; stratIco.innerHTML = svg('sync');
+  const stratValText = document.createElement('span');
+  stratVal.append(stratIco, stratValText);
+  const stratSub = document.createElement('span'); stratSub.className = 'pop-sub';
+  stratRow.append(stratLabel, stratVal, stratSub);
   const popNote = document.createElement('div'); popNote.className = 'pop-note'; popNote.textContent = T.themeLocked;
-  pop.append(popRow, popNote);
+  pop.append(popRow, stratRow, popNote);
   let popOpen = false;
   let popCloseListeners: { doc: (e: Event) => void; key: (e: KeyboardEvent) => void } | null = null;
   const closePop = () => {
@@ -465,8 +472,8 @@ export function createUI(h: UIHandlers) {
     const roundSuffix = vm.busy ? ' ' + T.progress(round.done, round.total) : '';
     chipLabel.textContent = vm.connected ? CHIP_LABEL[vm.agent.status] + roundSuffix : T.chipOff;
     chip.title = vm.connected ? DOT_TITLE[vm.agent.status] + roundSuffix : T.disconnected;
-    chip2.hidden = !vm.strategy;
-    if (vm.strategy) { chip2Label.textContent = vm.strategy; chip2.title = T.tipStrategy(vm.strategy); }
+    stratRow.hidden = !vm.strategy;
+    if (vm.strategy) { stratValText.textContent = vm.strategy; stratSub.textContent = T.strategyDesc(vm.strategy); stratRow.title = T.strategyDesc(vm.strategy); }
     panel.classList.toggle('show', vm.panelOpen); // R175: 선택 모드와 분리 — 잠겨서 선택이 꺼져도 패널은 열어 둘 수 있다
     if (!vm.panelOpen) { panel.textContent = ''; textareas.clear(); return; }
     panel.textContent = '';

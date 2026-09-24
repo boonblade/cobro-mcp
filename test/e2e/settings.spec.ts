@@ -110,3 +110,18 @@ test.describe('light theme hover badge (부채 #5)', () => {
     expect(color).toBe('rgb(23, 27, 40)');
   });
 });
+
+test('settings popover shows the refresh strategy line (R178)', async ({ cobroPage: page, bridge }) => {
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await expect.poll(() => bridge.core.session.detected).toBe('reload');
+  const gear = page.locator(`${HOST} .ib.gear`);
+  const pop = page.locator(`${HOST} .pop`);
+  await gear.click();
+  await expect(pop).toHaveClass(/show/);
+  await expect(page.locator(`${HOST} .pop-row.strategy`)).toBeVisible();
+  await expect(page.locator(`${HOST} .strategy-val`)).toHaveText('reload');
+  await expect(page.locator(`${HOST} .pop-sub`)).toContainText('새로고침');
+  bridge.core.setStrategy('none');
+  await expect(page.locator(`${HOST} .strategy-val`)).toHaveText('none');
+  await expect(page.locator(`${HOST} .toolbar .chip.strategy`)).toHaveCount(0);
+});

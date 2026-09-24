@@ -14,7 +14,6 @@ test.describe('390px viewport', () => {
     const statusBox = (await page.locator(`${HOST} .status`).boundingBox())!;
     const selectBox = (await page.locator(`${HOST} button.select`).boundingBox())!;
     expect(statusBox.y).toBeGreaterThan(selectBox.y + selectBox.height);
-    await expect(page.locator(`${HOST} .chip.strategy`)).toBeHidden();
   });
 
   test('T2 390px: panel fills the width and stays above the toolbar', async ({ cobroPage: page }) => {
@@ -44,10 +43,9 @@ test.describe('390px viewport', () => {
 test.describe('700px viewport', () => {
   test.use({ viewport: { width: 700, height: 600 } });
 
-  test('T4 700px: strategy chip hidden, status 180px, desktop layout otherwise', async ({ cobroPage: page, bridge }) => {
+  test('T4 700px: status 180px, desktop layout otherwise', async ({ cobroPage: page, bridge }) => {
     await page.goto('http://127.0.0.1:4173/basic.html');
     await expect.poll(() => bridge.core.session.detected).toBe('reload');
-    await expect(page.locator(`${HOST} .chip.strategy`)).toBeHidden();
     const statusBox = (await page.locator(`${HOST} .status`).boundingBox())!;
     expect(statusBox.width).toBeGreaterThanOrEqual(179);
     expect(statusBox.width).toBeLessThanOrEqual(181);
