@@ -942,6 +942,7 @@ test('T7: clicking a group child on the page toggles just that child (R126)', as
 test('T8: an old draft without refs gets them assigned in order on reload (elements first, then regions)', async ({ cobroPage: page, bridge }) => {
   bridge.core.setStrategy('none');
   await page.goto('http://127.0.0.1:4173/region.html');
+  await expect.poll(() => bridge.core.session.page?.url ?? '', { timeout: 10_000 }).toContain('/region.html'); // about:blank 첫 오버레이 접속과 경합(부채 #20)
   bridge.core.setDrafts([{
     id: 'legacy', note: '', status: 'draft', createdAt: new Date().toISOString(),
     elements: [
@@ -985,6 +986,7 @@ test('T8: an old draft without refs gets them assigned in order on reload (eleme
 test('T9: a group child ref like "1a" is never confused with a lone element ref like "10" (R127 I1)', async ({ cobroPage: page, bridge }) => {
   bridge.core.setStrategy('none');
   await page.goto('http://127.0.0.1:4173/region.html');
+  await expect.poll(() => bridge.core.session.page?.url ?? '', { timeout: 10_000 }).toContain('/region.html'); // about:blank 첫 오버레이 접속과 경합(부채 #20)
   bridge.core.setDrafts([{
     id: 'many', note: '', status: 'draft', createdAt: new Date().toISOString(), refSeq: 10,
     regions: [{ ref: '1', rect: { x: 0, y: 0, w: 10, h: 10 } }],
@@ -994,7 +996,8 @@ test('T9: a group child ref like "1a" is never confused with a lone element ref 
     ],
   }]);
   await page.reload();
-  await page.keyboard.press('Control+Shift+F');
+  await expect(page.locator(`${HOST} .toolbar .chip`)).not.toContainText(/Disconnected|연결 끊김/);
+  await startSelect(page);
   const group = page.locator(`${HOST} .els > div.group`);
   await expect(group).toHaveCount(1);
   await expect(group.locator('.cnt')).toContainText('1'); // "10"은 "1"의 자식이 아니다
