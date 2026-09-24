@@ -74,13 +74,12 @@ describe('createBridge', () => {
 
     msgs.length = 0;
     ws.send(JSON.stringify({ type: 'page', page: { ...page, url: page.url + '#x' }, detected: 'reload' }));
-    await new Promise((r) => setTimeout(r, 50));
-    expect(msgs.filter((m) => m.type === 'done')).toHaveLength(1);
+    await expect.poll(() => msgs.filter((m) => m.type === 'done').length).toBe(1);
     expect(msgs.find((m) => m.type === 'done')).toMatchObject({ strategy: 'none' });
 
     msgs.length = 0;
     ws.send(JSON.stringify({ type: 'page', page: { ...page, url: page.url + '#y' }, detected: 'reload' }));
-    await new Promise((r) => setTimeout(r, 50));
+    await expect.poll(() => msgs.some((m) => m.type === 'state'));
     expect(msgs.filter((m) => m.type === 'done')).toHaveLength(0);
     ws.close();
   });
