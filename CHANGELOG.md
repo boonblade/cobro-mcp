@@ -3,6 +3,8 @@
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
+### Changed
+- The Send button is always visible; it is disabled until a draft has a note (it was hidden before).
 
 ## [0.10.0] — 2026-09-24
 ### Added

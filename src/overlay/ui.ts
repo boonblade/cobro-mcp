@@ -142,7 +142,7 @@ div.queue{display:flex;flex-direction:column;gap:8px;max-height:min(45vh,320px);
 .row .sends{color:var(--fg-5);font-size:11px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .row .send{color:var(--fg-on-accent);background:var(--accent);border-color:var(--accent);font-weight:700;flex:none;white-space:nowrap}
 .row .send:disabled{opacity:.4;cursor:not-allowed}
-.row .foot{font-size:11px;color:var(--fg-4)}
+.row .foot{font-size:11px;color:var(--fg-4);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .row .foot.ok{color:var(--ok)}
 .marker{position:fixed;border:2px solid var(--accent);border-radius:2px;pointer-events:none;box-sizing:border-box}
 .marker.region{border-style:dashed;background:color-mix(in srgb, var(--accent) 6%, transparent)}
@@ -214,6 +214,8 @@ const T = {
     tipSelect: '요소 선택 모드 (Ctrl+Shift+F)', tipClose: '닫기 (Esc)', tipDrag: '툴바 이동',
     sends: '선택자 · 스타일 · 스크린샷 · 콘솔',
     tipSend: '선택한 요소와 메모를 에이전트에 전송',
+    tipSendLocked: '에이전트가 수정 중 — 완료 후 보낼 수 있어요',
+    tipSendNote: '메모를 적으면 보낼 수 있어요',
     tipRemove: '이 요소 빼기',
     cartNoNote: '메모 없음',
     doneElsewhere: (path: string) => `✓ 완료 · ${path} 보기`,
@@ -254,6 +256,8 @@ const T = {
     tipSelect: 'Pick mode (Ctrl+Shift+F)', tipClose: 'Close (Esc)', tipDrag: 'Move toolbar',
     sends: 'Sends selector · styles · shot · console',
     tipSend: 'Send the selected elements and note to the agent',
+    tipSendLocked: 'Agent is working — you can send after done',
+    tipSendNote: 'Write a note to send',
     tipRemove: 'Remove this element',
     cartNoNote: 'No note',
     doneElsewhere: (path: string) => `✓ Done · view ${path}`,
@@ -588,20 +592,22 @@ export function createUI(h: UIHandlers) {
       }
       panel.append(queue);
     }
-    // R173: 메모 있는 초안이 하나도 없으면 Send 대신 상태 문장
+    // R179: Send는 항상 렌더 — 메모 있는 초안이 없으면 비활성 + 안내 title(R173 개정)
     const readyDrafts = vm.drafts.filter((b) => b.note.trim());
     const row = el('div', 'row');
+    const send = el('button', 'send', readyDrafts.length >= 2 ? T.sendPages(readyDrafts.length) : 'Send →') as HTMLButtonElement;
     if (readyDrafts.length > 0) {
-      const send = el('button', 'send', readyDrafts.length >= 2 ? T.sendPages(readyDrafts.length) : 'Send →') as HTMLButtonElement;
       send.title = T.tipSend;
       send.onclick = () => { closePop(); h.onSend(); };
       row.append(el('span', 'sends', T.sends), send);
     } else {
+      send.disabled = true;
+      send.title = vm.locked ? T.tipSendLocked : T.tipSendNote;
       let footText: string; let footOk = false;
       if (vm.busy) footText = vm.followPaused ? T.footPaused(round.done, round.total) : T.footBusy(round.done, round.total);
       else if (doneList.length > 0) { footText = T.footAllDone(doneList.length); footOk = true; }
       else footText = T.footHint;
-      row.append(el('span', `foot${footOk ? ' ok' : ''}`, footText));
+      row.append(el('span', `foot${footOk ? ' ok' : ''}`, footText), send);
     }
     panel.append(row);
     for (const id of [...textareas.keys()]) if (!vm.drafts.some((b) => b.id === id)) textareas.delete(id);
