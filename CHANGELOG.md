@@ -5,6 +5,7 @@ All notable changes to this project are documented here. The format follows [Kee
 ## [Unreleased]
 ### Changed
 - The Send button is always visible; it is disabled until a draft has a note (it was hidden before).
+- The toolbar's "view /path" link no longer repeats "Done" next to the Done chip.
 
 ## [0.10.0] — 2026-09-24
 ### Added

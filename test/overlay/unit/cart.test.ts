@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { currentDraft, roundOf, pageLabel, queueCards, lastRoundDone, pageLoc, pendingElsewhere } from '../../../src/overlay/cart.js';
+import { currentDraft, roundOf, queueCards, lastRoundDone, pageLoc, pendingElsewhere } from '../../../src/overlay/cart.js';
 import type { Batch, Session } from '../../../src/core/types.js';
 
 const el = { selector: '#a', tag: 'div', classes: [], text: '', rect: { x: 0, y: 0, w: 1, h: 1 }, styles: {} };
@@ -46,18 +46,6 @@ describe('roundOf', () => {
       b('old', { status: 'done', sentAt: '2025-01-01T00:00:00.000Z', doneAt: '2025-01-01T00:00:01.000Z' }),
     ];
     expect(roundOf(batches)).toEqual({ queue: 1, done: 0, total: 1 });
-  });
-});
-
-describe('pageLabel', () => {
-  it('same origin with a title: "title · /path?search"', () => {
-    expect(pageLabel({ url: 'http://x/path?x=1', title: 'My Page' }, 'http://x/here')).toBe('My Page · /path?x=1');
-  });
-  it('same origin without a title: just the path, not duplicated', () => {
-    expect(pageLabel({ url: 'http://x/path', title: '' }, 'http://x/here')).toBe('/path');
-  });
-  it('different origin includes the host', () => {
-    expect(pageLabel({ url: 'http://other.example/path', title: 'Ext' }, 'http://x/here')).toBe('Ext · other.example/path');
   });
 });
 
