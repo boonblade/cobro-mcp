@@ -24,22 +24,14 @@ export function roundOf(batches: Batch[]): { queue: number; done: number; total:
   return { queue: round.length - done, done, total: round.length };
 }
 
-// R171: 위치 부분만(제목 제외) — 같은 origin이면 pathname(+search)만, 다른 origin이면 host를 붙인다. pageLabel이 재사용
+// R171: 위치 부분만(제목 제외) — 같은 origin이면 pathname(+search)만, 다른 origin이면 host를 붙인다.
 export function pageLoc(url: string, href: string): string {
   const u = new URL(url); const cur = new URL(href);
   return u.origin === cur.origin ? u.pathname + u.search : u.host + u.pathname + u.search;
 }
 
-// R167: title이 있으면 앞에 " · "로 붙이고, 없으면 위치만(중복 방지 — "path · path"를 만들지 않는다)
-export function pageLabel(page: { url: string; title: string } | undefined, href: string): string {
-  if (!page) return '';
-  let loc: string;
-  try { loc = pageLoc(page.url, href); } catch { return page.title || page.url; }
-  return page.title ? `${page.title} · ${loc}` : loc;
-}
-
 // R171: session.pendingDone 중 현재 페이지가 아닌 첫 항목 — 폴백 "보기" 링크에 쓰인다
-// M2: 깨진 URL이면 pageLabel과 같은 방식으로 던지지 않고 null(링크를 안 보이는 쪽으로 안전하게)
+// M2: 깨진 URL이면 던지지 않고 null(링크를 안 보이는 쪽으로 안전하게)
 export function pendingElsewhere(session: Session | null, href: string): { url: string; path: string } | null {
   const item = (session?.pendingDone ?? []).find((p) => !samePage(p.url, href));
   if (!item) return null;
