@@ -165,7 +165,8 @@ window.addEventListener('cobro:done', (e) => { const { summary, changedFiles, se
 
 - React 컴포넌트 이름은 dev 빌드에서만 온다. `source`(파일:행)는 dev 서버의 소스맵(React 19) 또는 `_debugSource`(React 18까지)로 복원한다 — 소스맵 없는 프로덕션 빌드는 컴포넌트 이름만 온다. 컴포넌트 라이브러리 안 요소는 라이브러리 내부가 아니라 사용자가 쓴 JSX 위치가 온다.
 - iframe 미지원(최상위 문서만). 네이티브 modal `<dialog>`가 열려 있는 동안은 오버레이가 가려진다(라이브러리 모달은 무관).
-- `done`의 요소 강조는 best-effort이고, `reload` 전략에서는 새로 로드되느라 보이지 않는다.
+- `done`의 요소 강조는 best-effort다(리로드 뒤 재생된다).
+- 비활성화된 컨트롤(예: disabled 버튼)은 클릭을 받지 않아 클릭 픽이 부모 요소로 잡힌다 — 대신 드래그로 밴드를 씌운다.
 - 선택 모드 단축키 `Ctrl+Shift+F`는 바꿀 수 없다. WebKit 빌드는 실제 Safari와 폰트·스크롤바가 다르다.
 - 브라우저 프로필은 한 번에 한 세션만 쓴다 — 다른 세션이 쓰는 중이면 `open`이 "프로필 사용 중"으로 실패한다(`COBRO_PROFILE_DIR`로 따로 지정 가능).
 

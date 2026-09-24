@@ -165,7 +165,8 @@ window.addEventListener('cobro:done', (e) => { const { summary, changedFiles, se
 
 - React component name comes from dev builds. `source` (file:line) is recovered from the dev server's source maps (React 19) or from `_debugSource` (React ≤ 18); production builds without maps report the component only. For component libraries: the location is the JSX call site in your code, not the library's internals.
 - No iframe support (top-level document only). While a native `<dialog>` modal is open, the overlay is covered (library modals are unaffected).
-- Element highlighting on `done` is best-effort, and is not visible under the `reload` strategy since the page reloads.
+- Element highlighting on `done` is best-effort (it replays after a reload).
+- A disabled control (e.g. a disabled button) does not receive clicks, so click-picking lands on its parent; drag a band over it instead.
 - The pick-mode shortcut `Ctrl+Shift+F` cannot be changed. The WebKit build differs from real Safari in fonts and scrollbars.
 - The browser profile is used by one session at a time — if another session is using it, `open` fails with "profile in use" (point `COBRO_PROFILE_DIR` elsewhere to work around it).
 
