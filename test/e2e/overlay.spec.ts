@@ -200,8 +200,8 @@ test.describe('en locale', () => {
     await expect(page.locator(`${HOST} .status`)).toContainText('selected');
     await expect(page.locator(`${HOST} .panel .sub`)).toContainText('element');
     await expect(page.locator(`${HOST} textarea`)).toHaveAttribute('placeholder', /Describe the change/);
-    await page.locator(`${HOST} textarea`).fill('note'); // R173: Send는 메모가 있어야 뜬다
-    await expect(page.locator(`${HOST} button.send`)).toBeVisible();
+    await page.locator(`${HOST} textarea`).fill('note'); // R179: Send는 항상 보이고 메모가 있어야 활성
+    await expect(page.locator(`${HOST} button.send`)).toBeEnabled();
   });
 });
 
@@ -1135,7 +1135,7 @@ test('queue: drafts from two pages show as cards; Send delivers both in order (R
   await expect(page.locator(`${HOST} .tab.queue`)).toHaveClass(/on/); // R172: Send 직후 자동으로 큐 탭
 });
 
-test('queue: Send hides when nothing to send; the round ends with a collapsed done row that clears on the next pick (R173·R174)', async ({ cobroPage: page, bridge }) => {
+test('queue: Send is disabled when nothing to send; the round ends with a collapsed done row that clears on the next pick (R173·R174·R179)', async ({ cobroPage: page, bridge }) => {
   bridge.core.setStrategy('none');
   await page.goto('http://127.0.0.1:4173/basic.html');
   await selectAt(page, '#target');
