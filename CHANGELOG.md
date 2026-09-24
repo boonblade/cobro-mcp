@@ -3,6 +3,8 @@
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
+
+## [0.10.0] — 2026-09-24
 ### Added
 - Batches carry the page they were picked on (batches[].page), and status/done accept an optional batchId so an agent can work through several batches in order.
 - Queue: the panel has two tabs — This page and Queue (N). Drafts from several pages appear as cards (one draft per page); Send delivers them in order, the toolbar shows progress like "Working 1/3", and finished pages collapse into a done row that clears when you pick again.
@@ -11,7 +13,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Changed
 - Sending a new batch no longer marks an earlier unanswered batch as abandoned; sent batches stay until done.
-- While the agent works, Select is disabled (unlocks on the agent's next wait); the Send button appears only when there is something to send.
+- While the agent works, Select only opens the queue (picking resumes after done, or on the agent's next wait); the Send button appears only when there is something to send.
 - The refresh-strategy chip moved from the toolbar into the settings popover (gear); the toolbar now shows only Select, the agent status and the hint.
 
 ### Fixed
