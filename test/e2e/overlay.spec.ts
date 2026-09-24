@@ -1156,7 +1156,8 @@ test('queue: Send hides when nothing to send; the round ends with a collapsed do
   const r2 = await waiting2;
   expect(r2.status).toBe('sent');
 
-  await expect(page.locator(`${HOST} .row button.send`)).toHaveCount(0);
+  await expect(page.locator(`${HOST} .row button.send`)).toBeDisabled();
+  await expect(page.locator(`${HOST} .row button.send`)).toHaveAttribute('title', /수정 중/);
   await expect(page.locator(`${HOST} .row .foot`)).toContainText('처리 중 0/2');
 
   bridge.done({ summary: 'ok', selectors: [], changedFiles: [] }, firstId);
@@ -1166,6 +1167,7 @@ test('queue: Send hides when nothing to send; the round ends with a collapsed do
   await expect(page.locator(`${HOST} .done-row`)).toHaveCount(1);
   await expect(page.locator(`${HOST} .done-row`)).toContainText('완료 2');
   await expect(page.locator(`${HOST} .row .foot`)).toHaveClass(/ok/);
+  await expect(page.locator(`${HOST} .row button.send`)).toBeDisabled();
   await page.screenshot({ path: 'screenshots/queue-done-row.png' }); // 접힘 상태
 
   await page.locator(`${HOST} .done-row`).click(); // M1(Task 68 교정): 펼침 분기
@@ -1176,6 +1178,8 @@ test('queue: Send hides when nothing to send; the round ends with a collapsed do
   bridge.core.wait(1000); // 잠금 해제
   await expect(page.locator(`${HOST} .ib.select`)).toBeEnabled(); // 클라이언트가 해제를 받을 때까지
   await selectAt(page, '#title');
+  await page.locator(`${HOST} textarea`).fill('new note');
+  await expect(page.locator(`${HOST} .row button.send`)).toBeEnabled();
   await page.locator(`${HOST} .tab.queue`).click(); // ensureCurrent가 새 초안을 만들며 「이 페이지」 탭으로 돌아간다 — 큐 탭에서 정리를 확인
   await expect(page.locator(`${HOST} .done-row`)).toHaveCount(0);
   await expect.poll(() => bridge.core.session.batches.filter((b) => b.status === 'done').length).toBe(0);
@@ -1318,4 +1322,19 @@ test('two tabs on different pages keep each other\'s drafts; Send from either de
   expect(r.payload.batches[1]?.page?.url).toContain('/basic.html');
 
   await expect(page.locator(`${HOST} .toolbar .chip:not(.strategy)`)).toContainText('0/2');
+});
+
+test('Send is visible but disabled until a draft has a note (R179)', async ({ cobroPage: page }) => {
+  await page.goto('http://127.0.0.1:4173/basic.html');
+  await selectAt(page, '#target');
+  const send = page.locator(`${HOST} .row button.send`);
+  await expect(send).toBeVisible();
+  await expect(send).toBeDisabled();
+  await expect(send).toHaveAttribute('title', /메모/);
+
+  await page.locator(`${HOST} textarea`).fill('note');
+  await expect(send).toBeEnabled();
+
+  await page.locator(`${HOST} textarea`).fill('');
+  await expect(send).toBeDisabled();
 });
