@@ -41,34 +41,34 @@ test('detects none on Vite dev and reload on static', async ({ cobroPage: page, 
   await page.goto('http://127.0.0.1:4174/');
   await expect(page.locator('#h')).toHaveAttribute('data-ready', '1');
   await expect.poll(() => bridge.core.session.detected).toBe('none');
-  await expect(page.locator('[data-cobro-host] .chip.strategy')).toHaveText('none');
+  await page.locator('[data-cobro-host] .ib.gear').click();
+  await expect(page.locator('[data-cobro-host] .strategy-val')).toHaveText('none');
+  await page.keyboard.press('Escape');
   await expect(page.locator('[data-cobro-host] .status')).not.toContainText('갱신');
   await page.goto('http://127.0.0.1:4173/basic.html');
   await expect.poll(() => bridge.core.session.detected).toBe('reload');
 });
 
-test('refresh strategy is a chip, not hint text', async ({ cobroPage: page, bridge }) => {
+test('refresh strategy shows in the settings popover, not in the hint text', async ({ cobroPage: page, bridge }) => {
   await page.goto('http://127.0.0.1:4174/');
   await expect(page.locator('#h')).toHaveAttribute('data-ready', '1');
-  const chip2 = page.locator('[data-cobro-host] .chip.strategy');
-  await expect(chip2).toBeVisible();
-  await expect(chip2).toHaveText(/^(none|reload|event)$/);
-  await expect(chip2).toHaveAttribute('title', /(none|reload|event)/);
+  await page.locator('[data-cobro-host] .ib.gear').click();
+  const stratRow = page.locator('[data-cobro-host] .pop-row.strategy');
+  const stratVal = page.locator('[data-cobro-host] .strategy-val');
+  await expect(stratRow).toBeVisible();
+  await expect(stratVal).toHaveText(/^(none|reload|event)$/);
   bridge.core.setStrategy('event');
-  await expect(chip2).toHaveText('event');
-  await expect(chip2).toHaveAttribute('title', /event/);
+  await expect(stratVal).toHaveText('event');
   await expect(page.locator('[data-cobro-host] .status')).not.toContainText('갱신');
   await expect(page.locator('[data-cobro-host] .status')).not.toContainText('refresh');
 });
 
-test('hidden strategy chip stays display:none (B1)', async ({ cobroPage: page }) => {
+test('hint text never carries the refresh strategy value (B1)', async ({ cobroPage: page, bridge }) => {
   await page.goto('http://127.0.0.1:4174/');
-  const chip2 = page.locator('[data-cobro-host] .chip.strategy');
-  await expect(chip2).toBeVisible();
-  await chip2.evaluate((el) => { (el as HTMLElement).hidden = true; });
-  await expect(chip2).toBeHidden();
-  await chip2.evaluate((el) => { (el as HTMLElement).hidden = false; });
-  await expect(chip2).toBeVisible();
+  await expect(page.locator('#h')).toHaveAttribute('data-ready', '1');
+  await expect.poll(() => bridge.core.session.detected).toBe('none');
+  await expect(page.locator('[data-cobro-host] .status-in')).not.toContainText('none');
+  await expect(page.locator('[data-cobro-host] .status-in')).not.toContainText('reload');
 });
 
 test("React 19 element gets source from the dev server's source maps (R149)", async ({ cobroPage: page, bridge }) => {

@@ -209,7 +209,7 @@ test('toolbar width does not change between hints', async ({ cobroPage: page }) 
   await page.goto('http://127.0.0.1:4173/basic.html');
   const toolbar = page.locator(`${HOST} .toolbar`);
   await expect(page.locator(`${HOST} .status`)).toContainText('Ctrl+Shift+F'); // 연결 완료 후 폭이 안정된 뒤 측정
-  await expect(page.locator(`${HOST} .chip.strategy`)).toBeVisible(); // 전략 칩도 뜬 뒤라야 폭이 안정된다
+  await expect(page.locator(`${HOST} .toolbar .chip`)).toBeVisible(); // 상태 칩도 뜬 뒤라야 폭이 안정된다
   await expect(page.locator(`${HOST} .status-in`)).not.toHaveClass(/marquee/); // 짧은 힌트는 marquee 없음
   const before = (await toolbar.boundingBox())!;
   await selectAt(page, '#target');
@@ -406,7 +406,7 @@ test('done clears the note, leaving no leftover draft across reload (T3, R125)',
 test('toolbar drags by the handle', async ({ cobroPage: page }) => {
   await page.goto('http://127.0.0.1:4173/basic.html');
   await expect(page.locator(`${HOST} .status`)).toContainText('Ctrl+Shift+F'); // 연결 완료 후 폭이 안정된 뒤 측정(칩 텍스트가 붙기 전 측정하면 -50% 중심 정렬이 흔들린다)
-  await expect(page.locator(`${HOST} .chip.strategy`)).toBeVisible(); // 전략 칩도 뜬 뒤라야 폭이 안정된다
+  await expect(page.locator(`${HOST} .toolbar .chip`)).toBeVisible(); // 상태 칩도 뜬 뒤라야 폭이 안정된다
   const before = (await page.locator(`${HOST} .toolbar`).boundingBox())!;
   const grip = (await page.locator(`${HOST} button.grip`).boundingBox())!;
   const gx = grip.x + grip.width / 2;
@@ -423,7 +423,7 @@ test('toolbar drags by the handle', async ({ cobroPage: page }) => {
 test('drag is clamped to the viewport', async ({ cobroPage: page }) => {
   await page.goto('http://127.0.0.1:4173/basic.html');
   await expect(page.locator(`${HOST} .status`)).toContainText('Ctrl+Shift+F');
-  await expect(page.locator(`${HOST} .chip.strategy`)).toBeVisible();
+  await expect(page.locator(`${HOST} .toolbar .chip`)).toBeVisible();
   const grip = (await page.locator(`${HOST} button.grip`).boundingBox())!;
   const gx = grip.x + grip.width / 2;
   const gy = grip.y + grip.height / 2;
@@ -441,7 +441,7 @@ test('drag is clamped to the viewport', async ({ cobroPage: page }) => {
 test('position resets on reload', async ({ cobroPage: page }) => {
   await page.goto('http://127.0.0.1:4173/basic.html');
   await expect(page.locator(`${HOST} .status`)).toContainText('Ctrl+Shift+F');
-  await expect(page.locator(`${HOST} .chip.strategy`)).toBeVisible();
+  await expect(page.locator(`${HOST} .toolbar .chip`)).toBeVisible();
   const before = (await page.locator(`${HOST} .toolbar`).boundingBox())!;
   const grip = (await page.locator(`${HOST} button.grip`).boundingBox())!;
   const gx = grip.x + grip.width / 2;
@@ -452,7 +452,7 @@ test('position resets on reload', async ({ cobroPage: page }) => {
   await page.mouse.up();
   await page.reload();
   await expect(page.locator(`${HOST} .status`)).toContainText('Ctrl+Shift+F');
-  await expect(page.locator(`${HOST} .chip.strategy`)).toBeVisible();
+  await expect(page.locator(`${HOST} .toolbar .chip`)).toBeVisible();
   const after = (await page.locator(`${HOST} .toolbar`).boundingBox())!;
   expect(Math.abs(after.x - before.x)).toBeLessThanOrEqual(1);
   expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(1);
