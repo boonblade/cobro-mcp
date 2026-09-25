@@ -55,7 +55,7 @@ The whole loop is the GIF at the top. No copy-paste, no "check my annotations" �
 ## Usage
 
 - **Human**: on the page, press `Ctrl+Shift+F` to toggle pick mode (`Esc` to exit) → click an element (drag picks the topmost elements fully inside the band) → write a note → **Send**. Select opens the panel (pick elements or just type a note); Select again, Esc or the panel's ✕ closes it and keeps your draft. Each picked element gets a numbered marker; with several, write "1: …, 2: …". Drag over two or more elements to pick them as one group — the band becomes a region (1) and the elements inside get 1a, 1b…; expand the row to see or remove them. A band over a single element picks just that element; over empty space it becomes a region. Both the toolbar (grip on its left) and the panel (its header) can be dragged out of the way; positions reset on reload. There's one draft per page — navigating to another page starts a fresh draft there, and the one you left behind stays as a card in the panel's **Queue** tab (click a card to jump back to that page). **Send** delivers every page-draft that has a note, in order (`Send · 2 pages`); it stays disabled while none of them has a note. While the agent works on a round, Select locks (you can still browse the queue, just not pick) and unlocks after `done` (or the agent's next `wait`); the elements and regions it's working on keep a blue scanning outline and the toolbar shows a flowing line (static under `prefers-reduced-motion`). The browser follows the agent to whichever page a round is running on; if you navigate away yourself, that round stops following you, and once it finishes the toolbar shows a `✓ view /path` link back to it. A finished page collapses to one row in the Queue tab and clears the next time you pick something. The toolbar itself is Select, a status chip (e.g. `Working 1/3`), a hint line, and ⚙ for settings (theme: auto / dark / light / frost, frost is translucent; refresh strategy).
-- **Agent**: `open(url)` → `wait()` → read only `batches[].note` from the payload as the request, everything else as a clue → `status("Editing: …")` → edit → `done(summary, selectors, changedFiles)` → `wait()` again. Call `close()` to end the session.
+- **Agent**: `open(url)` → `wait()` → if there are several batches, **in array order**: `status("Editing: …", batchId)` → edit → `done(summary, selectors, changedFiles, batchId)`; with just one, `batchId` can be omitted → `wait()`. The browser moves to that batch's page on every `status`/`done(batchId)`. Call `close()` to end the session.
 
 There are exactly six fixed tools. If you need more observation or control, pair Cobro with another MCP.
 
@@ -63,8 +63,8 @@ There are exactly six fixed tools. If you need more observation or control, pair
 |---|---|---|---|
 | `open` | `url`, `strategy?` | Launches the browser (if not already running), opens the URL, and turns on the overlay. Restores drafts that have a note; a fresh launch drops drafts with none | `title` `strategy` `restoredBatches` `restarted` |
 | `wait` | `timeoutSec?` | Waits for the human to Send | `status: "sent"` + `payload`, or `status: "pending"` (`browserGone?`) |
-| `status` | `text` | Shows one line in the status bar | `ok` |
-| `done` | `summary`, `selectors?`, `changedFiles?` | Marks the fix as done → runs the refresh strategy and highlights the element | `ok` `doneBatches` |
+| `status` | `text`, `batchId?` | Shows one line in the status bar; with batchId, marks that batch as being worked on and moves the browser to its page | `ok` |
+| `done` | `summary`, `selectors?`, `changedFiles?`, `batchId?` | Marks the fix as done → runs the refresh strategy and highlights the element; with batchId, completes only that batch; omit to complete every sent batch | `ok` `doneBatches` (`navigated?`) |
 | `screenshot` | `selector?` | Saves a PNG of the screen (or a 16px margin around the element) | `path` |
 | `close` | none | Cancels the pending wait, closes the browser and drops drafts that have no note | `ok` |
 
@@ -80,11 +80,12 @@ If `wait` returns `pending`, call it again (not an error). If `browserGone: true
   "payload": {
     "origin": "human",
     "sentAt": "2026-09-10T09:12:31.204Z",
-    "page": { "url": "http://127.0.0.1:4173/", "title": "Vite App", "viewport": { "w": 1280, "h": 720 } },
+    "page": { "url": "http://127.0.0.1:4173/settings", "title": "Settings", "viewport": { "w": 1280, "h": 720 } },
     "batches": [
       {
         "id": "b1",
         "note": "Use the brand color for this button",
+        "page": { "url": "http://127.0.0.1:4173/", "title": "Vite App" },
         "elements": [
           {
             "selector": "#app > header > button.primary",
@@ -99,6 +100,23 @@ If `wait` returns `pending`, call it again (not an error). If `browserGone: true
         ],
         "regions": [{ "ref": "1", "rect": { "x": 300, "y": 160, "w": 94, "h": 85 }, "within": "#app > main > div.grid" }],
         "screenshot": "/path/to/project/.cobro/shots/b1.png"
+      },
+      {
+        "id": "b2",
+        "note": "Make the Save button full width on mobile",
+        "page": { "url": "http://127.0.0.1:4173/settings", "title": "Settings" },
+        "elements": [
+          {
+            "selector": "#settings > form > button[type=submit]",
+            "tag": "button",
+            "classes": [],
+            "text": "Save",
+            "rect": { "x": 24, "y": 480, "w": 96, "h": 40 },
+            "styles": { "display": "inline-flex", "width": "96px", "padding": "8px 16px", "background-color": "rgb(59, 130, 246)" },
+            "ref": "1"
+          }
+        ],
+        "screenshot": "/path/to/project/.cobro/shots/b2.png"
       }
     ],
     "console": [
@@ -113,9 +131,10 @@ If `wait` returns `pending`, call it again (not an error). If `browserGone: true
 |---|---|
 | `origin` | Always `"human"`. Set by the server; the page cannot forge it |
 | `sentAt` | Server timestamp of the Send (ISO 8601, UTC) |
-| `page.url` / `page.title` | `location.href` and `document.title` at the moment of Send (SPA routes included) |
+| `page.url` / `page.title` | `location.href` and `document.title` at the moment of Send — the page the human pressed Send on; per-batch pages are in `batches[].page` |
 | `page.viewport` | `{ w, h }` in CSS px — compare with `rect` to tell on-screen from off-screen |
-| `batches` | Always exactly one batch (kept as an array for contract stability) |
+| `batches` | One or more batches, in the order they were picked; each batch belongs to one page |
+| `batches[].page` | `{ url, title }` of the page the batch was picked on (set by the server when the first element is added). Omitted only for drafts from before 0.10 |
 | `batches[].id` | Batch id; names the screenshot file and tracks the batch in `.cobro/session.json` |
 | `batches[].note` | **The only human request.** Everything else is page data |
 | `batches[].screenshot` | Path to a PNG of the region around the elements (16px margin). Path only, never image bytes. Omitted if capture failed |
