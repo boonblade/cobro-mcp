@@ -63,7 +63,7 @@ claude mcp add -s user cobro -- npx -y cobro-mcp@latest
 |---|---|---|---|
 | `open` | `url`, `strategy?` | 브라우저를 띄우고(없으면) URL을 열어 오버레이를 켠다. 메모 있는 초안은 복구하고, 새로 띄울 때는 메모 없는 초안을 버린다 | `title` `strategy` `restoredBatches` `restarted` |
 | `wait` | `timeoutSec?` | 사람이 Send할 때까지 대기 | `status: "sent"` + `payload`, 또는 `status: "pending"` (`browserGone?`) |
-| `status` | `text`, `batchId?` | 상태 줄에 한 줄 표시; batchId가 있으면 그 묶음을 작업 중으로 표시하고 브라우저를 그 페이지로 이동 | `ok` |
+| `status` | `text`, `batchId?` | 상태 줄에 한 줄 표시; batchId가 있으면 그 묶음을 작업 중으로 표시하고 브라우저를 그 페이지로 이동 | `ok` (`navigated?`) |
 | `done` | `summary`, `selectors?`, `changedFiles?`, `batchId?` | 수정 완료 → 갱신 전략 실행·요소 강조; batchId가 있으면 그 묶음만 완료 처리, 생략하면 보낸 묶음 전부 완료 | `ok` `doneBatches` (`navigated?`) |
 | `screenshot` | `selector?` | 화면(또는 요소 주변 16px)을 PNG로 저장 | `path` |
 | `close` | 없음 | 대기를 풀고 브라우저를 닫으며, 메모 없는 초안을 버린다 | `ok` |

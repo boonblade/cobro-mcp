@@ -63,7 +63,7 @@ There are exactly six fixed tools. If you need more observation or control, pair
 |---|---|---|---|
 | `open` | `url`, `strategy?` | Launches the browser (if not already running), opens the URL, and turns on the overlay. Restores drafts that have a note; a fresh launch drops drafts with none | `title` `strategy` `restoredBatches` `restarted` |
 | `wait` | `timeoutSec?` | Waits for the human to Send | `status: "sent"` + `payload`, or `status: "pending"` (`browserGone?`) |
-| `status` | `text`, `batchId?` | Shows one line in the status bar; with batchId, marks that batch as being worked on and moves the browser to its page | `ok` |
+| `status` | `text`, `batchId?` | Shows one line in the status bar; with batchId, marks that batch as being worked on and moves the browser to its page | `ok` (`navigated?`) |
 | `done` | `summary`, `selectors?`, `changedFiles?`, `batchId?` | Marks the fix as done → runs the refresh strategy and highlights the element; with batchId, completes only that batch; omit to complete every sent batch | `ok` `doneBatches` (`navigated?`) |
 | `screenshot` | `selector?` | Saves a PNG of the screen (or a 16px margin around the element) | `path` |
 | `close` | none | Cancels the pending wait, closes the browser and drops drafts that have no note | `ok` |
