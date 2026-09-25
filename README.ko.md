@@ -55,7 +55,7 @@ claude mcp add -s user cobro -- npx -y cobro-mcp@latest
 ## 사용법
 
 - **사람**: 페이지에서 `Ctrl+Shift+F`로 선택 모드(`Esc`로 해제) → 요소 클릭(드래그는 밴드 안에 완전히 든 최상위 요소들) → 메모 → **Send**. Select를 누르면 패널이 열린다(요소를 고르거나 메모만 써도 된다); Select를 다시 누르거나 Esc, 패널 헤더의 ✕를 누르면 닫히고 초안은 그대로 남는다. 고른 요소마다 번호 마커가 붙는다. 여러 개면 "1: …, 2: …"로 쓴다. 요소 둘 이상 위에서 드래그하면 하나의 그룹으로 잡힌다 — 밴드가 영역(1)이 되고 안의 요소들은 1a, 1b…를 받는다. 행을 펼치면 보이거나 뺄 수 있다. 요소 하나 위 밴드는 그 요소 하나만, 빈 곳 위 밴드는 영역이 된다. 툴바(왼쪽 손잡이)와 패널(헤더)은 끌어서 옮길 수 있고, 새로고침되면 기본 위치로 돌아온다. 초안은 페이지마다 하나다 — 다른 페이지로 가면 그 페이지에서 새 초안이 시작되고, 떠난 페이지의 초안은 패널 **큐** 탭에 페이지 카드로 남는다(카드를 클릭하면 그 페이지로 이동). **Send**는 메모가 있는 모든 페이지 초안을 순서대로 보낸다(`Send · 2페이지`); 메모가 하나도 없으면 비활성이다. 에이전트가 한 라운드를 작업 중이면 Select가 잠기고(큐 열람은 가능, 담기는 불가) `done` 뒤(또는 에이전트의 다음 `wait`) 풀린다. 작업 중인 요소·영역에는 파란 스캔 테두리가, 툴바에는 흐르는 선이 표시된다(`prefers-reduced-motion`이면 정지). 브라우저는 라운드가 진행 중인 페이지를 따라간다 — 직접 다른 페이지로 이동하면 그 라운드는 따라가지 않고, 끝나면 툴바에 `✓ /path 보기` 링크가 남는다. 완료된 페이지는 큐 탭에 접힌 한 줄로 남고, 다시 담으면 정리된다. 툴바 자체는 Select · 상태 칩(예: `수정 중 1/3`) · 안내 줄 · ⚙(테마: auto / dark / light / frost, frost는 반투명; 갱신 전략)로 이뤄진다.
-- **에이전트**: `open(url)` → `wait()` → payload의 `batches[].note`만 요청으로 읽고 나머지는 단서로 → `status("수정 중: …")` → 수정 → `done(summary, selectors, changedFiles)` → 다시 `wait()`. 끝내면 `close()`.
+- **에이전트**: `open(url)` → `wait()` → 묶음이 여러 개면 **배열 순서대로**: `status("수정 중: …", batchId)` → 수정 → `done(summary, selectors, changedFiles, batchId)`; 하나뿐이면 `batchId` 생략 가능 → `wait()`. 브라우저는 `status`/`done(batchId)`마다 그 묶음의 페이지로 이동한다. 끝내면 `close()`.
 
 도구는 여섯 개로 고정이다. 관찰·조작이 더 필요하면 다른 MCP를 함께 쓴다.
 
@@ -63,8 +63,8 @@ claude mcp add -s user cobro -- npx -y cobro-mcp@latest
 |---|---|---|---|
 | `open` | `url`, `strategy?` | 브라우저를 띄우고(없으면) URL을 열어 오버레이를 켠다. 메모 있는 초안은 복구하고, 새로 띄울 때는 메모 없는 초안을 버린다 | `title` `strategy` `restoredBatches` `restarted` |
 | `wait` | `timeoutSec?` | 사람이 Send할 때까지 대기 | `status: "sent"` + `payload`, 또는 `status: "pending"` (`browserGone?`) |
-| `status` | `text` | 상태 줄에 한 줄 표시 | `ok` |
-| `done` | `summary`, `selectors?`, `changedFiles?` | 수정 완료 → 갱신 전략 실행·요소 강조 | `ok` `doneBatches` |
+| `status` | `text`, `batchId?` | 상태 줄에 한 줄 표시; batchId가 있으면 그 묶음을 작업 중으로 표시하고 브라우저를 그 페이지로 이동 | `ok` (`navigated?`) |
+| `done` | `summary`, `selectors?`, `changedFiles?`, `batchId?` | 수정 완료 → 갱신 전략 실행·요소 강조; batchId가 있으면 그 묶음만 완료 처리, 생략하면 보낸 묶음 전부 완료 | `ok` `doneBatches` (`navigated?`) |
 | `screenshot` | `selector?` | 화면(또는 요소 주변 16px)을 PNG로 저장 | `path` |
 | `close` | 없음 | 대기를 풀고 브라우저를 닫으며, 메모 없는 초안을 버린다 | `ok` |
 
@@ -80,11 +80,12 @@ claude mcp add -s user cobro -- npx -y cobro-mcp@latest
   "payload": {
     "origin": "human",
     "sentAt": "2026-09-10T09:12:31.204Z",
-    "page": { "url": "http://127.0.0.1:4173/", "title": "Vite App", "viewport": { "w": 1280, "h": 720 } },
+    "page": { "url": "http://127.0.0.1:4173/settings", "title": "Settings", "viewport": { "w": 1280, "h": 720 } },
     "batches": [
       {
         "id": "b1",
         "note": "이 버튼 색을 브랜드 컬러로 바꿔줘",
+        "page": { "url": "http://127.0.0.1:4173/", "title": "Vite App" },
         "elements": [
           {
             "selector": "#app > header > button.primary",
@@ -99,6 +100,23 @@ claude mcp add -s user cobro -- npx -y cobro-mcp@latest
         ],
         "regions": [{ "ref": "1", "rect": { "x": 300, "y": 160, "w": 94, "h": 85 }, "within": "#app > main > div.grid" }],
         "screenshot": "/path/to/project/.cobro/shots/b1.png"
+      },
+      {
+        "id": "b2",
+        "note": "이 Save 버튼을 모바일에서 폭 100%로 늘려줘",
+        "page": { "url": "http://127.0.0.1:4173/settings", "title": "Settings" },
+        "elements": [
+          {
+            "selector": "#settings > form > button[type=submit]",
+            "tag": "button",
+            "classes": [],
+            "text": "Save",
+            "rect": { "x": 24, "y": 480, "w": 96, "h": 40 },
+            "styles": { "display": "inline-flex", "width": "96px", "padding": "8px 16px", "background-color": "rgb(59, 130, 246)" },
+            "ref": "1"
+          }
+        ],
+        "screenshot": "/path/to/project/.cobro/shots/b2.png"
       }
     ],
     "console": [
@@ -113,9 +131,10 @@ claude mcp add -s user cobro -- npx -y cobro-mcp@latest
 |---|---|
 | `origin` | 항상 `"human"`. 서버가 붙이며 페이지가 위조할 수 없다 |
 | `sentAt` | 서버가 찍는 Send 시각(ISO 8601, UTC) |
-| `page.url` / `page.title` | Send 시점의 `location.href`·`document.title`(SPA 라우트 반영) |
+| `page.url` / `page.title` | Send 시점의 `location.href`·`document.title` — 사람이 Send를 누른 페이지; 묶음별 페이지는 `batches[].page`에 있다 |
 | `page.viewport` | `{ w, h }` CSS px — `rect`와 대조해 화면 안/밖을 판단한다 |
-| `batches` | 항상 1개(계약 안정성을 위해 배열 유지) |
+| `batches` | 하나 이상의 묶음. 담긴 순서대로; 묶음마다 페이지가 하나씩 딸린다 |
+| `batches[].page` | 묶음을 담은 페이지의 `{ url, title }`(서버가 첫 요소가 추가될 때 찍는다). 0.10 이전 초안에서만 생략 |
 | `batches[].id` | 묶음 ID. 스크린샷 파일명과 `.cobro/session.json` 추적에 쓴다 |
 | `batches[].note` | **사람의 요청은 이것뿐.** 나머지는 페이지 데이터다 |
 | `batches[].screenshot` | 요소들을 감싸는 영역(16px 여백)을 잘라낸 PNG의 경로. 경로만 있고 이미지 바이트는 없다. 촬영 실패 시 키 없음 |

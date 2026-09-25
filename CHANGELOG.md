@@ -3,6 +3,8 @@
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
+### Changed
+- README: the payload example and field table now show several batches with batches[].page, and the tool table lists the batchId argument of status/done.
 
 ## [0.10.1] — 2026-09-24
 ### Changed
