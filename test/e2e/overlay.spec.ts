@@ -360,7 +360,7 @@ test('toolbar chip and detail are separate — no duplicated label', async ({ co
   const waiting = bridge.core.wait(10_000);
   await expect(page.locator(`${HOST} .toolbar .chip:not(.strategy)`)).toContainText('대기 중');
   await expect(page.locator(`${HOST} .status`)).toContainText('Send로 전송하세요'); // 디바운스된 draft가 반영된 뒤(M1)
-  await expect(page.locator(`${HOST} .status-in`)).not.toHaveClass(/enter/); // 슬라이드인 애니메이션이 끝난 뒤 촬영(M2)
+  await expect(page.locator(`${HOST} .status-in`)).not.toHaveClass(/enter/); // 갱신(페이드) 애니메이션이 끝난 뒤 촬영(M2)
   const waitingBox = (await page.locator(`${HOST} .toolbar`).boundingBox())!;
   await page.screenshot({ path: 'screenshots/toolbar-waiting.png', clip: { x: waitingBox.x - 8, y: waitingBox.y - 8, width: waitingBox.width + 16, height: waitingBox.height + 16 } });
   await page.locator(`${HOST} button.send`).click();
@@ -369,7 +369,7 @@ test('toolbar chip and detail are separate — no duplicated label', async ({ co
   await expect(page.locator(`${HOST} .toolbar .chip:not(.strategy)`)).toHaveText(/수정 중/);
   await expect(page.locator(`${HOST} .status`)).toContainText('collab.py + page.tsx');
   await expect(page.locator(`${HOST} .status`)).not.toContainText('수정 중');
-  await expect(page.locator(`${HOST} .status-in`)).not.toHaveClass(/enter/); // 슬라이드인 애니메이션이 끝난 뒤 촬영(M2)
+  await expect(page.locator(`${HOST} .status-in`)).not.toHaveClass(/enter/); // 갱신(페이드) 애니메이션이 끝난 뒤 촬영(M2)
   const workingBox = (await page.locator(`${HOST} .toolbar`).boundingBox())!;
   await page.screenshot({ path: 'screenshots/toolbar-working.png', clip: { x: workingBox.x - 8, y: workingBox.y - 8, width: workingBox.width + 16, height: workingBox.height + 16 } });
   bridge.core.setStrategy('none'); // done의 reload가 이후 단언을 끊지 않도록
@@ -390,7 +390,7 @@ test('done summary stays in the detail while waiting, until a new draft starts (
   bridge.core.wait(10_000);
   await expect(page.locator(`${HOST} .toolbar .chip:not(.strategy)`)).toContainText('대기 중');
   await expect(page.locator(`${HOST} .status`)).toContainText('✓ 완료: 색 변경');
-  await expect(page.locator(`${HOST} .status-in`)).not.toHaveClass(/enter/); // 슬라이드인 애니메이션이 끝난 뒤 촬영(M2)
+  await expect(page.locator(`${HOST} .status-in`)).not.toHaveClass(/enter/); // 갱신(페이드) 애니메이션이 끝난 뒤 촬영(M2)
   const box = (await page.locator(`${HOST} .toolbar`).boundingBox())!;
   await page.screenshot({ path: 'screenshots/toolbar-done-waiting.png', clip: { x: box.x - 8, y: box.y - 8, width: box.width + 16, height: box.height + 16 } });
   await selectAt(page, '#card');
@@ -1490,14 +1490,14 @@ for (const [name, locale, viewport] of [
             const s = status.getBoundingClientRect(); const c = chip.getBoundingClientRect();
             w.__st.push({ enter: sin.classList.contains('enter'), text: sin.textContent ?? '', charLeft: r.getBoundingClientRect().left, statusLeft: s.left, chipRight: c.right, sameRow: s.top < c.bottom });
           }
-          if (performance.now() - t0 < 800) requestAnimationFrame(tick);
+          if (performance.now() - t0 < 1500) requestAnimationFrame(tick);
         };
         requestAnimationFrame(tick);
       });
       const waiting = bridge.core.wait(10_000);
       await page.locator(`${HOST} button.send`).click();
       await waiting;
-      await page.waitForTimeout(900);
+      await page.waitForTimeout(1600);
       const samples = await page.evaluate(() => (window as unknown as { __st: Array<{ enter: boolean; text: string; charLeft: number; statusLeft: number; chipRight: number; sameRow: boolean }> }).__st);
       expect(samples.some((s) => s.enter)).toBe(true); // 애니메이션 구간을 실제로 샘플링했다
       for (const s of samples) {
