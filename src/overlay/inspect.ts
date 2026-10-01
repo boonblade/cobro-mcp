@@ -1,6 +1,7 @@
 import type { ElementInfo } from '../core/types.js';
 import { detectComponent } from './frameworks/index.js';
 import { uniqueSelector } from './selector.js';
+import { normalizeText } from './resolve.js';
 
 export const STYLE_KEYS = ['display', 'position', 'width', 'height', 'padding', 'margin', 'gap',
   'color', 'background-color', 'font-size', 'font-weight', 'border-radius'] as const;
@@ -13,7 +14,7 @@ export function inspectElement(el: Element): ElementInfo {
   for (const k of STYLE_KEYS) { const v = cs.getPropertyValue(k); if (v && (k === 'display' || (v !== 'none' && v !== 'normal'))) styles[k] = v; }
   const info: ElementInfo = {
     selector: uniqueSelector(el), tag: el.tagName.toLowerCase(), classes: [...el.classList],
-    text: (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40),
+    text: normalizeText(el.textContent),
     rect: { x: Math.round(r.left + window.scrollX), y: Math.round(r.top + window.scrollY), w: Math.round(r.width), h: Math.round(r.height) },
     styles,
   };
