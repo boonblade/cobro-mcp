@@ -116,6 +116,7 @@ describe('SessionCore', () => {
     c.deliver(payloadOf(['1']));
     await vi.advanceTimersByTimeAsync(5_000);
     await c.wait(1000);
+    expect(vi.getTimerCount()).toBe(0); // 타이머가 실제로 해제됐다 — queue 가드만으로는 통과하지 않게
     await vi.advanceTimersByTimeAsync(20_000);
     expect(c.session.unheard).toBeFalsy();
     vi.useRealTimers();
@@ -126,6 +127,7 @@ describe('SessionCore', () => {
     const p = c.wait(60_000);
     c.deliver(payloadOf(['1']));
     await expect(p).resolves.toMatchObject({ status: 'sent' });
+    expect(vi.getTimerCount()).toBe(0); // 대기자에게 직행 — 미수신 타이머를 걸지 않았다(wait 자체 타이머는 finish가 해제)
     await vi.advanceTimersByTimeAsync(20_000);
     expect(c.session.unheard).toBeFalsy();
     vi.useRealTimers();
@@ -194,6 +196,48 @@ describe('SessionCore', () => {
     expect(c.session.unheard).toBe(false);
     expect(vi.getTimerCount()).toBe(0);
     vi.useRealTimers();
+  });
+  it('R185: a restart re-queues a sent batch the agent never received; wait() returns it at once, stamps deliveredAt, and done() closes it', async () => {
+    core.setDrafts([draft('1'), draft('2')]);
+    core.setPage(page, 'none');
+    core.markSent(['1', '2'], page); // 큐 적재 중 서버가 죽었다고 보면 — deliver/wait 없이 저장본만 남는다
+    const restarted = new SessionCore(store);
+    expect(restarted.session.batches.every((b) => !b.deliveredAt)).toBe(true);
+    const r = await restarted.wait(1000);
+    expect(r).toMatchObject({ status: 'sent', payload: { origin: 'human', page, refreshStrategy: 'none', console: [], batches: [{ id: '1' }, { id: '2' }] } });
+    expect(restarted.session.batches.every((b) => !!b.deliveredAt)).toBe(true);
+    expect(restarted.done({ summary: 'ok', selectors: [], changedFiles: [] }).map((b) => b.id)).toEqual(['1', '2']);
+  });
+  it('R185: a re-queued batch turns unheard on after the delay when no agent waits for it', async () => {
+    core.setDrafts([draft('1')]);
+    core.markSent(['1'], page);
+    vi.useFakeTimers();
+    const restarted = new SessionCore(store, 10_000);
+    await vi.advanceTimersByTimeAsync(10_001);
+    expect(restarted.session.unheard).toBe(true);
+    vi.useRealTimers();
+  });
+  it('R185: a working batch saved before deliveredAt existed is stamped on restart, so done(info, batchId) closes it; it is not re-queued', async () => {
+    core.setDrafts([draft('1')]);
+    core.markSent(['1'], page);
+    receive(core, ['1']);
+    core.setAgentText('x', '1');
+    delete core.session.batches[0]!.deliveredAt; // 업그레이드 전 세션 파일 모사
+    store.save(core.session);
+    expect(new Store(store.dir).load()!.batches[0]!.deliveredAt).toBeUndefined();
+    const restarted = new SessionCore(store);
+    expect(restarted.session.batches[0]).toMatchObject({ status: 'sent' });
+    expect(restarted.session.batches[0]!.deliveredAt).toBeTruthy();
+    await expect(restarted.wait(20)).resolves.toEqual({ status: 'pending' }); // 큐에 다시 넣지 않았다
+    expect(restarted.done({ summary: 'ok', selectors: [], changedFiles: [] }, '1').map((b) => b.id)).toEqual(['1']);
+  });
+  it('R185: deliveredAt survives a restart, so a received batch is still closable and is not re-queued', async () => {
+    core.setDrafts([draft('1')]);
+    core.markSent(['1'], page);
+    receive(core, ['1']);
+    const restarted = new SessionCore(store);
+    await expect(restarted.wait(20)).resolves.toEqual({ status: 'pending' });
+    expect(restarted.done({ summary: 'ok', selectors: [], changedFiles: [] }, '1').map((b) => b.id)).toEqual(['1']);
   });
   it('wait aborts via signal as pending', async () => {
     const ac = new AbortController();

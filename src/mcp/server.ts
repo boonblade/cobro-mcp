@@ -84,7 +84,7 @@ export function createMcpServer(deps: { core: SessionCore; browser: BrowserLike;
   });
 
   server.registerTool('done', {
-    description: 'Signal that the edit is complete. The overlay runs the refresh strategy, shows the summary and highlights elements matched by selectors. Marks the sent batch as handled. Call after every edit. Pass batchId to complete only that batch; omit it to complete every sent batch.',
+    description: 'Signal that the edit is complete. The overlay runs the refresh strategy, shows the summary and highlights elements matched by selectors. Marks the batches you received as handled. Call after every edit. Pass batchId to complete only that batch; omit it to complete every batch you received.',
     inputSchema: { summary: z.string().max(500), selectors: z.array(z.string()).optional(), changedFiles: z.array(z.string()).optional(), batchId: z.string().optional() },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   }, async ({ summary, selectors, changedFiles, batchId }) => {

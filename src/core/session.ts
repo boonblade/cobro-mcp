@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { Store, emptySession } from './store.js';
 import { samePage } from './page.js';
+import { buildPayload } from './payload.js';
 import type { Batch, DoneInfo, PageInfo, Payload, RefreshStrategy, Session, WaitResult } from './types.js';
 
 type Waiter = { resolve: (r: WaitResult) => void };
@@ -19,12 +20,24 @@ export class SessionCore extends EventEmitter {
     // 상태의 주인이 서버이므로 재시작해도 남긴다(M1)
     if (this.s.agent.status === 'waiting') this.s.agent = { status: 'idle', text: this.s.agent.text };
     else if (this.s.agent.status === 'working') this.s.agent = { status: 'idle', text: '' };
+    // R185: deliveredAt 없는 working(업그레이드 전 세션)은 status를 받았다 = 전달된 것 — 되돌리기 전에 찍는다
+    const now = new Date().toISOString();
+    for (const b of this.s.batches) if (b.status === 'working' && !b.deliveredAt) b.deliveredAt = now;
     // R160: 재시작 시 처리 중이던 묶음은 '건드리는 중' 표시만 사라지고 sent로 되돌아간다(내용은 유지)
     for (const b of this.s.batches) if (b.status === 'working') b.status = 'sent';
     // R176: 재시작 시 따라가기 중지 상태는 의미가 없다 — 새 프로세스는 아직 아무 곳으로도 옮긴 적이 없다
     this.s.followPaused = false;
     // R182: 큐는 메모리라 재시작하면 없다 — 미수신 표시도 남기지 않는다
     this.s.unheard = false;
+    // R185: 큐는 메모리라 재시작하면 사라진다 — deliveredAt 없는 sent(에이전트가 받은 적 없음)는 저장본으로 payload를 다시 만들어 큐에 넣는다.
+    // 묶음마다 batches[].page가 있으므로 한 payload로 충분하다(payload.page는 마지막 Send의 페이지). 콘솔은 사라졌으니 [].
+    const undelivered = this.s.batches.filter((b) => b.status === 'sent' && !b.deliveredAt);
+    if (undelivered.length > 0) {
+      const first = undelivered[0]!;
+      const page: PageInfo = this.s.page ?? (first.page ? { ...first.page, viewport: { w: 0, h: 0 } } : { url: '', title: '', viewport: { w: 0, h: 0 } });
+      this.queue.push({ payload: buildPayload({ page, batches: undelivered, console: [], refreshStrategy: this.effectiveStrategy() }) });
+      this.armUnheard();
+    }
   }
   get session(): Session { return this.s; }
 
