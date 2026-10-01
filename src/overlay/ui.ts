@@ -73,7 +73,7 @@ textarea:disabled{opacity:.6;cursor:not-allowed}
 .status-in.scroll{max-width:none;overflow:visible;text-overflow:clip}
 .status-in.enter{animation:cobroin .15s ease-out}
 .status-in a.goto{color:inherit;text-decoration:underline;cursor:pointer}
-@keyframes cobroin{from{opacity:.4;transform:translateX(-6px)}to{opacity:1;transform:translateX(0)}}
+@keyframes cobroin{from{opacity:.4}to{opacity:1}}
 @media (prefers-reduced-motion: reduce){.status-in{transition:none}.status-in.enter{animation:none}}
 .wbox{position:fixed;border:1.5px solid var(--info);border-radius:2px;pointer-events:none;box-sizing:border-box;animation:cobrobreathe 2.4s ease-in-out infinite}
 .wbox.region{border-style:dashed;background:color-mix(in srgb, var(--info) 6%, transparent)}
