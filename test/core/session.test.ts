@@ -92,6 +92,41 @@ describe('SessionCore', () => {
     await expect(core.wait(1000)).resolves.toMatchObject({ status: 'sent', payload: { batches: [{ id: 'q' }] } });
     vi.useRealTimers();
   });
+  it('R182: Send queued with no waiter becomes unheard after the delay; wait() takes it and clears the flag', async () => {
+    vi.useFakeTimers();
+    const c = new SessionCore(store, 10_000);
+    c.setDrafts([draft('1')]);
+    c.markSent(['1'], page);
+    c.deliver(payloadOf(['1']));
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(c.session.unheard).toBeFalsy();
+    await vi.advanceTimersByTimeAsync(2);
+    expect(c.session.unheard).toBe(true);
+    expect(new SessionCore(store).session.unheard).toBe(false); // 재시작 정규화
+    await expect(c.wait(1000)).resolves.toMatchObject({ status: 'sent', payload: { batches: [{ id: '1' }] } });
+    expect(c.session.unheard).toBe(false);
+    vi.useRealTimers();
+  });
+  it('R182: wait() before the delay cancels the timer — unheard never turns on', async () => {
+    vi.useFakeTimers();
+    const c = new SessionCore(store, 10_000);
+    c.deliver(payloadOf(['1']));
+    await vi.advanceTimersByTimeAsync(5_000);
+    await c.wait(1000);
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(c.session.unheard).toBeFalsy();
+    vi.useRealTimers();
+  });
+  it('R182: deliver to a live waiter never turns unheard on', async () => {
+    vi.useFakeTimers();
+    const c = new SessionCore(store, 10_000);
+    const p = c.wait(60_000);
+    c.deliver(payloadOf(['1']));
+    await expect(p).resolves.toMatchObject({ status: 'sent' });
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(c.session.unheard).toBeFalsy();
+    vi.useRealTimers();
+  });
   it('wait aborts via signal as pending', async () => {
     const ac = new AbortController();
     const p = core.wait(60_000, undefined, { signal: ac.signal });

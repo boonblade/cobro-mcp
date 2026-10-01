@@ -12,6 +12,7 @@ export interface BrowserLike {
   wasLaunched(): boolean;
 }
 
+const DONE_NEXT = 'When every batch you received is done, call wait() — more feedback may already be queued.';
 const text = (v: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(v) }] });
 
 const INSTRUCTIONS = [
@@ -90,7 +91,8 @@ export function createMcpServer(deps: { core: SessionCore; browser: BrowserLike;
     const out = deps.done({ summary, selectors: selectors ?? [], changedFiles: changedFiles ?? [] }, batchId);
     const cur = core.session.page?.url ?? '';
     const navigated = await navigateTo(out.find((b) => b.page && !samePage(b.page.url, cur))?.page?.url);
-    const base = browserGone() ? { ok: true, doneBatches: out.length, browserGone: true } : { ok: true, doneBatches: out.length };
+    // R181: done 뒤 wait를 다시 안 부르고 턴을 끝내면 다음 Send가 방치된다 — 반환에 안내를 싣는다(browserGone이면 wait가 아니라 open이므로 제외)
+    const base = browserGone() ? { ok: true, doneBatches: out.length, browserGone: true } : { ok: true, doneBatches: out.length, next: DONE_NEXT };
     return text(navigated === undefined ? base : { ...base, navigated });
   });
 

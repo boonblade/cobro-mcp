@@ -3,6 +3,10 @@
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
+### Added
+- `done` now returns a `next` hint telling the agent to call wait() again once every received batch is done.
+- If no agent picks up a Send within 10 seconds, the overlay says the agent isn't listening and suggests asking it in chat.
+
 ### Changed
 - README: the payload example and field table now show several batches with batches[].page, and the tool table lists the batchId argument of status/done.
 
