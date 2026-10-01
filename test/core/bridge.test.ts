@@ -326,8 +326,8 @@ describe('createBridge', () => {
     b = await createBridge({ store: new Store(mkdtempSync(join(tmpdir(), 'cobro-'))), token: 't' });
     const wsA = new WebSocket(`ws://127.0.0.1:${b.port}`);
     const wsB = new WebSocket(`ws://127.0.0.1:${b.port}`);
-    await new Promise((r) => wsA.once('open', r));
-    await new Promise((r) => wsB.once('open', r));
+    // 두 open 리스너를 동시에 건다 — 순차 await이면 wsA를 기다리는 사이 wsB가 먼저 open돼 리스너가 영영 안 불린다(부채 #22)
+    await Promise.all([wsA, wsB].map((w) => new Promise((r) => w.once('open', r))));
     wsA.send(JSON.stringify({ type: 'hello', token: 't' }));
     wsB.send(JSON.stringify({ type: 'hello', token: 't' }));
     const pageA = { url: 'http://x/a', title: 'A', viewport: { w: 1, h: 1 } };

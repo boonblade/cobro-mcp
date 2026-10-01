@@ -360,7 +360,7 @@ test('toolbar chip and detail are separate — no duplicated label', async ({ co
   const waiting = bridge.core.wait(10_000);
   await expect(page.locator(`${HOST} .toolbar .chip:not(.strategy)`)).toContainText('대기 중');
   await expect(page.locator(`${HOST} .status`)).toContainText('Send로 전송하세요'); // 디바운스된 draft가 반영된 뒤(M1)
-  await expect(page.locator(`${HOST} .status-in`)).not.toHaveClass(/enter/); // 슬라이드인 애니메이션이 끝난 뒤 촬영(M2)
+  await expect(page.locator(`${HOST} .status-in`)).not.toHaveClass(/enter/); // 갱신(페이드) 애니메이션이 끝난 뒤 촬영(M2)
   const waitingBox = (await page.locator(`${HOST} .toolbar`).boundingBox())!;
   await page.screenshot({ path: 'screenshots/toolbar-waiting.png', clip: { x: waitingBox.x - 8, y: waitingBox.y - 8, width: waitingBox.width + 16, height: waitingBox.height + 16 } });
   await page.locator(`${HOST} button.send`).click();
@@ -369,7 +369,7 @@ test('toolbar chip and detail are separate — no duplicated label', async ({ co
   await expect(page.locator(`${HOST} .toolbar .chip:not(.strategy)`)).toHaveText(/수정 중/);
   await expect(page.locator(`${HOST} .status`)).toContainText('collab.py + page.tsx');
   await expect(page.locator(`${HOST} .status`)).not.toContainText('수정 중');
-  await expect(page.locator(`${HOST} .status-in`)).not.toHaveClass(/enter/); // 슬라이드인 애니메이션이 끝난 뒤 촬영(M2)
+  await expect(page.locator(`${HOST} .status-in`)).not.toHaveClass(/enter/); // 갱신(페이드) 애니메이션이 끝난 뒤 촬영(M2)
   const workingBox = (await page.locator(`${HOST} .toolbar`).boundingBox())!;
   await page.screenshot({ path: 'screenshots/toolbar-working.png', clip: { x: workingBox.x - 8, y: workingBox.y - 8, width: workingBox.width + 16, height: workingBox.height + 16 } });
   bridge.core.setStrategy('none'); // done의 reload가 이후 단언을 끊지 않도록
@@ -390,7 +390,7 @@ test('done summary stays in the detail while waiting, until a new draft starts (
   bridge.core.wait(10_000);
   await expect(page.locator(`${HOST} .toolbar .chip:not(.strategy)`)).toContainText('대기 중');
   await expect(page.locator(`${HOST} .status`)).toContainText('✓ 완료: 색 변경');
-  await expect(page.locator(`${HOST} .status-in`)).not.toHaveClass(/enter/); // 슬라이드인 애니메이션이 끝난 뒤 촬영(M2)
+  await expect(page.locator(`${HOST} .status-in`)).not.toHaveClass(/enter/); // 갱신(페이드) 애니메이션이 끝난 뒤 촬영(M2)
   const box = (await page.locator(`${HOST} .toolbar`).boundingBox())!;
   await page.screenshot({ path: 'screenshots/toolbar-done-waiting.png', clip: { x: box.x - 8, y: box.y - 8, width: box.width + 16, height: box.height + 16 } });
   await selectAt(page, '#card');
@@ -1462,3 +1462,48 @@ test.describe('R186 marker identity (column removal)', () => {
     await page.screenshot({ path: 'screenshots/overlay-col-removed.png' });
   });
 });
+
+// 부채 #23: 상태 줄 갱신 애니메이션(.enter)이 글자를 칩 쪽(-x)으로 밀면 .status의 overflow:hidden에 첫 글자가 잘린다.
+// 정지 상태가 아니라 Send 직후 전환 구간의 모든 프레임에서 첫 글자가 .status 안에 있어야 한다.
+for (const [name, locale, viewport] of [
+  ['ko', 'ko-KR', { width: 1280, height: 720 }],
+  ['en', 'en-US', { width: 1280, height: 720 }],
+  ['ko 390px', 'ko-KR', { width: 390, height: 844 }],
+] as const) {
+  test.describe(`status first letter (debt #23, ${name})`, () => {
+    test.use({ locale, viewport });
+    test('first character stays inside .status and right of the chip through the Send transition', async ({ cobroPage: page, bridge }) => {
+      await page.goto('http://127.0.0.1:4173/basic.html');
+      await selectAt(page, '#target');
+      await page.locator(`${HOST} textarea`).fill('x');
+      await page.evaluate(() => {
+        const root = document.querySelector('[data-cobro-host]')!.shadowRoot!;
+        const w = window as unknown as { __st: Array<{ enter: boolean; text: string; charLeft: number; statusLeft: number; chipRight: number; sameRow: boolean }> };
+        w.__st = [];
+        const t0 = performance.now();
+        const tick = () => {
+          const status = root.querySelector('.status')!; const sin = root.querySelector('.status-in')!;
+          const chip = root.querySelector('.toolbar .chip:not(.strategy)')!;
+          const tn = sin.firstChild;
+          if (tn) {
+            const r = document.createRange(); r.setStart(tn, 0); r.setEnd(tn, 1);
+            const s = status.getBoundingClientRect(); const c = chip.getBoundingClientRect();
+            w.__st.push({ enter: sin.classList.contains('enter'), text: sin.textContent ?? '', charLeft: r.getBoundingClientRect().left, statusLeft: s.left, chipRight: c.right, sameRow: s.top < c.bottom });
+          }
+          if (performance.now() - t0 < 1500) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      });
+      const waiting = bridge.core.wait(10_000);
+      await page.locator(`${HOST} button.send`).click();
+      await waiting;
+      await page.waitForTimeout(1600);
+      const samples = await page.evaluate(() => (window as unknown as { __st: Array<{ enter: boolean; text: string; charLeft: number; statusLeft: number; chipRight: number; sameRow: boolean }> }).__st);
+      expect(samples.some((s) => s.enter)).toBe(true); // 애니메이션 구간을 실제로 샘플링했다
+      for (const s of samples) {
+        expect(s.charLeft, `first char of "${s.text.slice(0, 8)}"`).toBeGreaterThanOrEqual(s.statusLeft);
+        if (s.sameRow) expect(s.chipRight).toBeLessThanOrEqual(s.statusLeft);
+      }
+    });
+  });
+}
