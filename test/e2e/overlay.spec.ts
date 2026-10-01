@@ -206,19 +206,19 @@ test.describe('en locale', () => {
 });
 
 test.describe('unheard Send (R182)', () => {
-  test.use({ locale: 'en-US', unheardMs: 400 });
+  test.use({ locale: 'en-US', unheardMs: 1500 }); // m5: 느린 머신에서도 sent 문구를 먼저 확인할 시간을 둔다
   test('a Send nobody picks up says the agent is not listening; wait() clears it', async ({ cobroPage: page, bridge }) => {
     await page.goto('http://127.0.0.1:4173/basic.html');
     await selectAt(page, '#target');
     await page.locator(`${HOST} textarea`).fill('note');
     await page.locator(`${HOST} button.send`).click();
     await expect(page.locator(`${HOST} .status`)).toContainText('Waiting for the agent');
-    await expect(page.locator(`${HOST} .status`)).toContainText("The agent isn't listening");
+    await expect(page.locator(`${HOST} .status`)).toContainText('Agent not listening');
     await expect(page.locator(`${HOST} .toolbar .chip:not(.strategy)`)).toContainText('Sent'); // 칩 라벨은 그대로
     await expect(page.locator(`${HOST} .toolbar .chip:not(.strategy)`)).toHaveAttribute('title', /isn't listening/);
     const r = await bridge.core.wait(1000);
     expect(r.status).toBe('sent');
-    await expect(page.locator(`${HOST} .status`)).not.toContainText("isn't listening");
+    await expect(page.locator(`${HOST} .status`)).not.toContainText('Agent not listening');
     await expect(page.locator(`${HOST} .status`)).toContainText('Waiting for the agent');
   });
 });

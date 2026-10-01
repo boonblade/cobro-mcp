@@ -22,8 +22,9 @@ export interface ElementInfo {
 export interface RegionInfo { ref?: string; rect: Rect; within?: string }
 export interface Batch {
   id: string; note: string; elements: ElementInfo[]; status: BatchStatus;
-  createdAt: string; sentAt?: string; doneAt?: string; screenshot?: string; summary?: string;
+  createdAt: string; sentAt?: string; deliveredAt?: string; doneAt?: string; screenshot?: string; summary?: string;
   regions?: RegionInfo[];
+  // deliveredAt(R183): 에이전트의 wait()가 이 묶음의 payload를 받은 시각 — 없으면 아직 큐에 있어 done/status가 닫지 않는다. 페이로드에는 안 나감(Pick이 거름)
   refSeq?: number; // R127: ref 발급용 내부 카운터. 페이로드에는 안 나감(buildPayload의 Pick이 걸러줌)
   page?: { url: string; title: string }; // R161: 묶음이 찍힌 페이지. 서버가 setDrafts에서 처음 보는 초안에만 찍는다
 }

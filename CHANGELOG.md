@@ -5,7 +5,11 @@ All notable changes to this project are documented here. The format follows [Kee
 ## [Unreleased]
 ### Added
 - `done` now returns a `next` hint telling the agent to call wait() again once every received batch is done.
-- If no agent picks up a Send within 10 seconds, the overlay says the agent isn't listening and suggests asking it in chat.
+- If a Send sits unclaimed for 10 seconds while the agent is not working on anything, the overlay says the agent isn't listening and suggests pinging it in chat.
+
+### Fixed
+- `done` no longer closes a batch the agent has not received yet; previously a done for unrelated work could mark a queued Send as finished.
+- A Send that was still queued when the server restarted is delivered again to the next wait() instead of being stuck as "Sent".
 
 ### Changed
 - README: the payload example and field table now show several batches with batches[].page, and the tool table lists the batchId argument of status/done.
