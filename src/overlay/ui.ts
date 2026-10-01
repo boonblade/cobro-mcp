@@ -4,6 +4,7 @@ import { stripStatusLabel } from './status-text.js';
 import type { ResolvedTheme } from './theme.js';
 import { svg } from './icons.js';
 import { isChildRef } from './refs.js';
+import { resolveEl, groupAlive } from './resolve.js';
 import { queueCards, lastRoundDone, roundOf, pageLoc } from './cart.js';
 import { samePage } from '../core/page.js';
 type IconName = Parameters<typeof svg>[0];
@@ -640,13 +641,13 @@ export function createUI(h: UIHandlers) {
           const isChild = /[a-z]$/.test(e.ref ?? '');
           const groupRef = isChild ? e.ref!.slice(0, -1) : null;
           if (isChild && vm.expanded !== groupRef) return; // R128: 자식 마커는 그 그룹이 펼쳐진 동안만
-          let target: Element | null = null;
-          try { target = document.querySelector(e.selector); } catch { /* 선택자 불량 */ }
+          const target = resolveEl(e); // R186: selector가 옆 요소를 가리키면 null
           if (!target) return;
           const r = target.getBoundingClientRect();
           place(el('div', isChild ? 'marker child' : 'marker'), r.left - 2, r.top - 2, r.width + 4, r.height + 4, e.ref ?? '');
         });
         cur.regions?.forEach((r) => {
+          if (!groupAlive(cur.elements.filter((e) => isChildRef(e.ref, r.ref ?? '')))) return; // R186: 자식이 전부 사라진 그룹 영역은 그리지 않는다
           place(el('div', 'marker region'), r.rect.x - scrollX, r.rect.y - scrollY, r.rect.w, r.rect.h, r.ref ?? '');
         });
       }
@@ -662,13 +663,13 @@ export function createUI(h: UIHandlers) {
           b.elements.forEach((e) => {
             if (e.missing) return;
             if (/[a-z]$/.test(e.ref ?? '')) return; // sent 배치에는 펼침 상태가 없다 — 접힌 상태와 동일, 자식은 그리지 않는다
-            let target: Element | null = null;
-            try { target = document.querySelector(e.selector); } catch { /* 선택자 불량 */ }
+            const target = resolveEl(e); // R186
             if (!target) return;
             const r = target.getBoundingClientRect();
             place(wbox('wbox'), r.left - 2, r.top - 2, r.width + 4, r.height + 4, e.ref ?? '');
           });
           b.regions?.forEach((r) => {
+            if (!groupAlive(b.elements.filter((e) => isChildRef(e.ref, r.ref ?? '')))) return; // R186
             place(wbox('wbox region'), r.rect.x - scrollX, r.rect.y - scrollY, r.rect.w, r.rect.h, r.ref ?? '');
           });
         }

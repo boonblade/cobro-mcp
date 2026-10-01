@@ -1,0 +1,13 @@
+<!-- test/fixtures/columns.html — 열 10개 표(열 삭제 후 표시가 옆 열로 옮겨 붙는 결함 재현, R186) -->
+<!doctype html><html><head><title>Columns</title></head><body>
+<table id="t" style="border-collapse:collapse;margin:40px">
+<thead><tr></tr></thead><tbody></tbody></table>
+<script>
+  const row = (fn) => Array.from({ length: 10 }, (_, i) => fn(i + 1)).join('');
+  document.querySelector('#t thead tr').innerHTML = row((c) => `<th style="width:60px;border:1px solid #999">H${c}</th>`);
+  document.querySelector('#t tbody').innerHTML = [0, 1, 2].map((r) =>
+    `<tr>${row((c) => `<td${r === 2 && c === 5 ? ' id="keep"' : ''} style="height:30px;border:1px solid #999">r${r}c${c}</td>`)}</tr>`).join('');
+  // 표 한 열을 지운다(1부터)
+  window.dropCol = (n) => document.querySelectorAll('#t tr').forEach((tr) => tr.children[n - 1]?.remove());
+</script>
+</body></html>

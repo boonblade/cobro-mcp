@@ -8,6 +8,7 @@ import { uniqueSelector } from './selector.js';
 import { detectStrategy, applyDone } from './refresh.js';
 import { resolveTheme } from './theme.js';
 import { isChildRef } from './refs.js';
+import { resolveEl } from './resolve.js';
 import { setProjectRoot } from './frameworks/index.js';
 import { currentDraft, roundBatches, pendingElsewhere } from './cart.js';
 import { samePage } from '../core/page.js';
@@ -129,8 +130,7 @@ declare const __COBRO_ROOT__: string;
     const resolveDraft = (b: Batch): Batch => {
       ensureRefs(b);
       return { ...b, status: 'draft', elements: b.elements.map((e, i) => {
-        let found: Element | null = null; try { found = document.querySelector(e.selector); } catch { /* 불량 선택자 */ }
-        const missing = !found;
+        const missing = !resolveEl(e);
         if (missing !== !!e.missing) chan.send({ type: 'resolved', batchId: b.id, index: i, missing });
         return { ...e, missing };
       }) };
@@ -154,6 +154,8 @@ declare const __COBRO_ROOT__: string;
       onSend: () => {
         const ready = (drafts ?? []).filter((b) => b.note.trim());
         if (!ready.length) { ui.focusNote(); return; }
+        // R186: 마지막 선택 이후 DOM이 바뀌었을 수 있다 — 보내기 직전에 missing을 다시 판정해 flushDraft가 서버에 싣는다
+        for (const b of ready) for (const e of b.elements) { const missing = !resolveEl(e); if (missing !== !!e.missing) e.missing = missing; }
         flushDraft();
         chan.send({ type: 'send', batchIds: ready.map((b) => b.id), page: pageInfo() });
         drafts = (drafts ?? []).filter((b) => !ready.includes(b));

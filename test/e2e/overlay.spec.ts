@@ -1359,3 +1359,88 @@ test('Send is visible but disabled until a draft has a note (R179)', async ({ co
   await page.locator(`${HOST} textarea`).fill('');
   await expect(send).toBeDisabled();
 });
+
+// R186: 선택한 요소가 DOM에서 사라지면 표시가 옆 요소에 붙지 않고 꺼져야 한다 — 단일 해석기(selector+tag+text)
+test.describe('R186 marker identity (column removal)', () => {
+  const URL = 'http://127.0.0.1:4173/columns.html';
+  const CELL9 = '#t tbody tr:nth-child(2) td:nth-child(9)';
+  const dropCol = (page: Page, n: number) => page.evaluate((c) => { (window as unknown as { dropCol(n: number): void }).dropCol(c); window.dispatchEvent(new Event('resize')); }, n); // resize = 마커 재그리기 트리거
+  // 9열(th + td 3개)을 밴드로 감싼다 — 이웃 열 셀은 완전히 들어가지 않는다(R130)
+  async function colBand(page: Page) {
+    const top = (await page.locator('#t thead th:nth-child(9)').boundingBox())!;
+    const bot = (await page.locator('#t tbody tr:nth-child(3) td:nth-child(9)').boundingBox())!;
+    await dragBand(page, { x: top.x - 3, y: top.y - 3, width: top.width + 6, height: bot.y + bot.height - top.y + 6 });
+  }
+
+  test('draft marker disappears when the picked cell\'s column is removed', async ({ cobroPage: page }) => {
+    await page.goto(URL);
+    await selectAt(page, CELL9);
+    await expect(page.locator(`${HOST} .marker`)).toHaveCount(1);
+    await dropCol(page, 9);
+    await expect(page.locator(`${HOST} .marker`)).toHaveCount(0);
+  });
+
+  test('working outline disappears when the picked cell\'s column is removed', async ({ cobroPage: page, bridge }) => {
+    await page.goto(URL);
+    await selectAt(page, CELL9);
+    await page.locator(`${HOST} textarea`).fill('열 삭제');
+    const waiting = bridge.core.wait(10_000);
+    await page.locator(`${HOST} button.send`).click();
+    expect((await waiting).status).toBe('sent');
+    await expect(page.locator(`${HOST} .wbox`)).toHaveCount(1);
+    await dropCol(page, 9);
+    await expect(page.locator(`${HOST} .wbox`)).toHaveCount(0);
+  });
+
+  test('group region (band over column 9) is drawn only while a child still resolves', async ({ cobroPage: page, bridge }) => {
+    await page.goto(URL);
+    await startSelect(page);
+    await colBand(page);
+    await expect(page.locator(`${HOST} .marker.region`)).toHaveCount(1);
+    await page.locator(`${HOST} textarea`).fill('열 삭제');
+    const waiting = bridge.core.wait(10_000);
+    await page.locator(`${HOST} button.send`).click();
+    expect((await waiting).status).toBe('sent');
+    await expect(page.locator(`${HOST} .wbox.region`)).toHaveCount(1);
+    await dropCol(page, 9); // 자식 4개가 모두 사라진다 — 영역 테두리만 빈 자리에 남지 않는다
+    await expect(page.locator(`${HOST} .wbox`)).toHaveCount(0);
+  });
+
+  test('draft group region disappears with its children, kept while one child remains', async ({ cobroPage: page }) => {
+    await page.goto(URL);
+    await startSelect(page);
+    await colBand(page);
+    await expect(page.locator(`${HOST} .marker.region`)).toHaveCount(1);
+    await page.evaluate(() => document.querySelectorAll('#t tr').forEach((tr, i) => { if (i > 0) tr.children[8]?.remove(); })); // th만 남긴다
+    await page.evaluate(() => window.dispatchEvent(new Event('resize')));
+    await expect(page.locator(`${HOST} .marker.region`)).toHaveCount(1);
+    await dropCol(page, 9);
+    await expect(page.locator(`${HOST} .marker.region`)).toHaveCount(0);
+  });
+
+  test('marker follows the cell to its new position when an unrelated column is removed', async ({ cobroPage: page }) => {
+    await page.goto(URL);
+    await selectAt(page, '#keep');
+    await expect(page.locator(`${HOST} .marker`)).toHaveCount(1);
+    const before = (await page.locator('#keep').boundingBox())!;
+    await dropCol(page, 3);
+    const after = (await page.locator('#keep').boundingBox())!;
+    expect(after.x).toBeLessThan(before.x - 20);
+    await expect(page.locator(`${HOST} .marker`)).toHaveCount(1);
+    await expect.poll(async () => Math.abs(((await page.locator(`${HOST} .marker`).boundingBox())!.x) - (after.x - 2))).toBeLessThanOrEqual(2);
+  });
+
+  test('Send re-evaluates missing: a picked cell removed before Send arrives as missing', async ({ cobroPage: page, bridge }) => {
+    await page.goto(URL);
+    await selectAt(page, CELL9);
+    await page.locator(`${HOST} textarea`).fill('열 삭제');
+    await dropCol(page, 9);
+    const waiting = bridge.core.wait(10_000);
+    await page.locator(`${HOST} button.send`).click();
+    const r = await waiting;
+    expect(r.status).toBe('sent');
+    if (r.status !== 'sent') return;
+    expect(r.payload.batches[0]!.elements[0]).toMatchObject({ missing: true });
+    await page.screenshot({ path: 'screenshots/overlay-col-removed.png' });
+  });
+});

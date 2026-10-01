@@ -3,6 +3,9 @@
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
+### Fixed
+- Markers and the working outline no longer jump to a neighbouring element when the picked element is removed (e.g. a deleted table column); the element is reported as missing on Send.
+- `open` on localhost now hints at trying 127.0.0.1 when the address resolves to another process.
 
 ## [0.10.2] — 2026-10-01
 ### Added

@@ -23,6 +23,13 @@ export function classifyLaunchFailure(tried: string[], lockExists: boolean): 'pr
 }
 
 export type Engine = 'chromium' | 'webkit' | 'firefox';
+// R186: localhost가 IPv6(::1)에서 다른 프로세스로 풀리면 빈 응답·연결 거부가 난다 — 127.0.0.1 힌트를 붙인다(자동 재시도는 하지 않는다)
+export function withLocalhostHint(url: string, message: string): string {
+  let host = '';
+  try { host = new URL(url).hostname; } catch { return message; }
+  if (host !== 'localhost' || !/ERR_EMPTY_RESPONSE|ERR_CONNECTION_REFUSED/.test(message)) return message;
+  return `${message} — localhost may resolve to another process (IPv6 ::1); try 127.0.0.1 instead.`;
+}
 export function parseEngine(v: string | undefined): Engine {
   return v === 'webkit' || v === 'firefox' || v === 'chromium' ? v : 'chromium';
 }
@@ -114,7 +121,8 @@ export class BrowserLauncher {
   async open(url: string): Promise<{ title: string; restarted: boolean }> {
     const restarted = !this.isAlive() && this.launchedOnce;
     if (!this.isAlive()) { await this.launch(); this.launchedOnce = true; }
-    await this.page!.goto(url, { waitUntil: 'load' });
+    try { await this.page!.goto(url, { waitUntil: 'load' }); }
+    catch (e) { throw new Error(withLocalhostHint(url, (e as Error).message), { cause: e }); }
     return { title: await this.page!.title(), restarted };
   }
   private async rectOfSelector(selector: string): Promise<Rect | undefined> {
