@@ -1406,6 +1406,24 @@ test.describe('R186 marker identity (column removal)', () => {
     await expect(page.locator(`${HOST} .wbox`)).toHaveCount(0);
   });
 
+  // R187: 원 보고(ai-portal)의 그룹 = col + th + td. text가 빈 col은 tag만 맞으면 옆 col로 해석되므로, 확인 가능한(text 있는) 자식으로만 생존을 판정한다
+  test('group with a text-less <col> child: region outline disappears when the column (col included) is removed', async ({ cobroPage: page, bridge }) => {
+    await page.goto(URL);
+    await startSelect(page);
+    await colBand(page);
+    await expect(page.locator(`${HOST} .marker.region`)).toHaveCount(1);
+    await page.locator(`${HOST} textarea`).fill('열 삭제');
+    const waiting = bridge.core.wait(10_000);
+    await page.locator(`${HOST} button.send`).click();
+    const r = await waiting;
+    expect(r.status).toBe('sent');
+    if (r.status !== 'sent') return;
+    expect(r.payload.batches[0]!.elements.map((e) => e.tag)).toContain('col'); // 밴드가 col을 자식으로 잡았다
+    await expect(page.locator(`${HOST} .wbox.region`)).toHaveCount(1);
+    await dropCol(page, 9);
+    await expect(page.locator(`${HOST} .wbox`)).toHaveCount(0);
+  });
+
   test('draft group region disappears with its children, kept while one child remains', async ({ cobroPage: page }) => {
     await page.goto(URL);
     await startSelect(page);

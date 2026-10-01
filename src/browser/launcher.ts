@@ -24,10 +24,12 @@ export function classifyLaunchFailure(tried: string[], lockExists: boolean): 'pr
 
 export type Engine = 'chromium' | 'webkit' | 'firefox';
 // R186: localhost가 IPv6(::1)에서 다른 프로세스로 풀리면 빈 응답·연결 거부가 난다 — 127.0.0.1 힌트를 붙인다(자동 재시도는 하지 않는다)
+// 엔진별 연결 거부·빈 응답 오류 문자열 — Chromium(net::ERR_*)·WebKit(실측: "Could not connect to server"·"Server returned nothing")·Firefox(Gecko nsresult 이름, 로컬 미설치로 실측 못 함)
+const LOCALHOST_FAILURE = /ERR_EMPTY_RESPONSE|ERR_CONNECTION_REFUSED|NS_ERROR_CONNECTION_REFUSED|Could not connect to server|Server returned nothing/;
 export function withLocalhostHint(url: string, message: string): string {
   let host = '';
   try { host = new URL(url).hostname; } catch { return message; }
-  if (host !== 'localhost' || !/ERR_EMPTY_RESPONSE|ERR_CONNECTION_REFUSED/.test(message)) return message;
+  if (host !== 'localhost' || !LOCALHOST_FAILURE.test(message)) return message;
   return `${message} — localhost may resolve to another process (IPv6 ::1); try 127.0.0.1 instead.`;
 }
 export function parseEngine(v: string | undefined): Engine {

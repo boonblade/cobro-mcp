@@ -14,5 +14,10 @@ export function resolveEl(e: ElementInfo): Element | null {
   return found;
 }
 
-// 그룹 영역: 자식이 있으면 하나 이상 찾아질 때만 그린다. 자식 없는 순수 영역은 항상 그린다
-export const groupAlive = (kids: ElementInfo[]): boolean => kids.length === 0 || kids.some((k) => resolveEl(k) !== null);
+// 그룹 영역: 자식이 없으면(순수 영역) 항상 그린다. 자식이 있으면 "확인 가능한 자식"(저장 text가 있는 것)이 있을 때 그 자식들로만 생존을 판정한다 —
+// text가 빈 자식(col·빈 셀·아이콘)은 tag만 맞으면 옆 요소로 해석되므로 판정에 쓰지 않는다. 확인 가능한 자식이 하나도 없을 때만 tag 비교 자식으로 판정한다(R187)
+export function groupAlive(kids: ElementInfo[]): boolean {
+  if (kids.length === 0) return true;
+  const verifiable = kids.filter((k) => k.text);
+  return (verifiable.length > 0 ? verifiable : kids).some((k) => resolveEl(k) !== null);
+}

@@ -11,6 +11,11 @@ describe('withLocalhostHint (R186)', () => {
   it('localhost + ERR_CONNECTION_REFUSED → 힌트', () => {
     expect(withLocalhostHint('http://localhost:3000/', 'net::ERR_CONNECTION_REFUSED')).toContain(HINT);
   });
+  it('WebKit·Firefox 오류 문자열에도 힌트(연결 거부·빈 응답)', () => {
+    for (const m of ['page.goto: Could not connect to server', 'page.goto: Server returned nothing (no headers, no data)', 'page.goto: NS_ERROR_CONNECTION_REFUSED']) {
+      expect(withLocalhostHint('http://localhost:3000/', m)).toContain(HINT);
+    }
+  });
   it('127.0.0.1은 그대로', () => {
     expect(withLocalhostHint('http://127.0.0.1:3000/', 'net::ERR_CONNECTION_REFUSED')).not.toContain(HINT);
   });
