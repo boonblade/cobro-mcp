@@ -3,6 +3,8 @@
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
+
+## [0.10.2] — 2026-10-01
 ### Added
 - `done` now returns a `next` hint telling the agent to call wait() again once every received batch is done.
 - If a Send sits unclaimed for 10 seconds while the agent is not working on anything, the overlay says the agent isn't listening and suggests pinging it in chat.
