@@ -144,7 +144,7 @@ claude mcp add -s user cobro -- npx -y cobro-mcp@latest
 | `elements[].rect` | `{ x, y, w, h }` 페이지 좌표(스크롤 포함), 정수 |
 | `elements[].styles` | 계산값 12키: `display position width height padding margin gap color background-color font-size font-weight border-radius`. `none`/`normal`은 생략하되 `display: none`은 "안 보임" 단서로 남긴다 |
 | `elements[].react` | React dev 빌드에서만 `{ component, source?, callers? }`. 아니면 키 자체가 없다. `source`는 소스맵이 있는 dev 서버(React 19) 또는 React 18까지에서만 온다. `source`는 찍은 요소 자신의 JSX 줄(사용자 코드일 때). 라이브러리가 그린 요소면 사용자 코드에서 가장 가까운 호출 지점. `callers`는 `source` 위의 사용자 코드 호출 지점(가까운 순, 최대 2). `source`가 한 줄 패스스루 래퍼면 보통 첫 caller가 진짜 고칠 자리. Vite·Next.js(Turbopack) dev 서버에서 동작 |
-| `elements[].vue` | Vue 3 dev 빌드에서 `{ component, source?, callers? }`. `source`는 SFC 경로만(행 없음). 컴포넌트 라이브러리(Element Plus·Vuetify 등) 컴포넌트 안의 요소는 그것을 쓴 사용자 SFC이며 `component`는 라이브러리 컴포넌트 이름 그대로. `callers`는 `source` 위의 SFC(가까운 순, 최대 2). 아니면 키 생략 |
+| `elements[].vue` | Vue 3 dev 빌드에서 `{ component, source?, callers? }`. `source`는 SFC 경로만(행 없음). `source`는 항상 사용자 코드의 SFC. 요소가 컴포넌트 라이브러리(Element Plus·Vuetify 등) 컴포넌트 안에서 그려지면 `component`는 그 SFC 템플릿에 직접 쓴 라이브러리 컴포넌트 이름(템플릿에서 검색 가능), 아니면 SFC 자신의 이름. `callers`는 `source` 위의 SFC(가까운 순, 최대 2). 아니면 키 생략 |
 | `elements[].missing` | 선택자로 다시 찾았을 때 같은 요소로 확인되지 않으면 `true`(삭제되었거나 tag·text가 바뀜) — 나머지 값은 찍은 시점 그대로 |
 | `elements[].ref` | 패널 행의 안정 번호(`"2"`, 영역 `"1"` 안의 요소면 `"1a"`). 메모가 이 번호를 가리킨다. 초안이 사는 동안 재번호 없음 |
 | `regions[].ref` | `elements[].ref`와 같은 체계를 공유하는 안정 번호 |

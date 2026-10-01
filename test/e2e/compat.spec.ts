@@ -192,6 +192,10 @@ test('Vue: user element in a library slot reports the SFC that wrote the slot co
   expect(await pickVue(page, bridge, '#vcard-in')).toEqual({ component: 'FCard', source: 'src/VueCard.vue', callers: ['src/VuePanel.vue', 'src/VueApp.vue'] });
 });
 
+test('Vue: library-internal layer (no __file) keeps the outermost library tag the user wrote as component (R190-b)', async ({ cobroPage: page, bridge }) => {
+  expect(await pickVue(page, bridge, '#vbtn .f-icon')).toEqual({ component: 'FButton', source: 'src/VuePanel.vue', callers: ['src/VueApp.vue'] });
+});
+
 test('Vue: Vue built-ins (Transition) are skipped on the way to the user SFC (R189)', async ({ cobroPage: page, bridge }) => {
   expect(await pickVue(page, bridge, '#vtag-in')).toEqual({ component: 'FTag', source: 'src/VueCard.vue', callers: ['src/VuePanel.vue', 'src/VueApp.vue'] });
 });

@@ -41,6 +41,7 @@ describe('vue adapter detect', () => {
 
   const user = (name: string) => ({ name, __file: `/proj/src/${name}.vue` });
   const lib = (name: string) => ({ name, __file: `/proj/node_modules/ui/${name}.vue` });
+  const bare = (name: string) => ({ name }); // 실제 Element Plus 배포본 모양: name만 있고 __file 없음(R190-a)
 
   it('user SFC at the start: itself as component and source, calling SFCs as callers (R189)', () => {
     const el = withParentComponent([user('Panel'), user('Page'), user('App')]);
@@ -52,11 +53,25 @@ describe('vue adapter detect', () => {
     expect(vue.detect(el)).toEqual({ component: 'ElButton', source: 'src/Panel.vue', callers: ['src/App.vue'] });
   });
 
-  it('Vue built-ins (no __file) are skipped and never become the component', () => {
-    const el = withParentComponent([{ name: 'BaseTransition' }, { name: 'Transition' }, lib('ElTag'), user('Card')]);
+  it('named instance without __file is a library, not a built-in (R190-a)', () => {
+    const el = withParentComponent([bare('ElButton'), user('Panel'), user('App')]);
+    expect(vue.detect(el)).toEqual({ component: 'ElButton', source: 'src/Panel.vue', callers: ['src/App.vue'] });
+  });
+
+  it('component = the outermost library instance right below the user SFC, not the innermost layer (R190-b)', () => {
+    const el = withParentComponent([bare('ElIcon'), bare('ElButton'), user('Panel'), user('App')]);
+    expect(vue.detect(el)).toEqual({ component: 'ElButton', source: 'src/Panel.vue', callers: ['src/App.vue'] });
+    const mixed = withParentComponent([lib('Inner'), bare('Outer'), user('Panel')]);
+    expect(vue.detect(mixed)).toEqual({ component: 'Outer', source: 'src/Panel.vue' });
+  });
+
+  it('Vue built-ins (BaseTransition·KeepAlive·TransitionGroup) are skipped and never become the component (R190-a)', () => {
+    const el = withParentComponent([bare('BaseTransition'), lib('ElTag'), user('Card')]);
     expect(vue.detect(el)).toEqual({ component: 'ElTag', source: 'src/Card.vue' });
-    const el2 = withParentComponent([{ name: 'KeepAlive' }, user('Card')]);
+    const el2 = withParentComponent([bare('KeepAlive'), user('Card')]);
     expect(vue.detect(el2)).toEqual({ component: 'Card', source: 'src/Card.vue' });
+    const el3 = withParentComponent([bare('TransitionGroup'), bare('ElTag'), bare('BaseTransition'), user('Card')]);
+    expect(vue.detect(el3)).toEqual({ component: 'ElTag', source: 'src/Card.vue' });
   });
 
   it('library components above the first user SFC are not callers; callers are deduped and capped at 2', () => {
@@ -69,8 +84,13 @@ describe('vue adapter detect', () => {
     expect(vue.detect(el)).toEqual({ component: 'Home', source: 'src/views/Home.vue' });
   });
 
-  it('no user SFC in the chain: first named instance, no source (as before)', () => {
-    const el = withParentComponent([{ name: 'BaseTransition' }, lib('VCard'), lib('VCol')]);
+  it('no user SFC in the chain: first named non-built-in instance, no source (M3)', () => {
+    const el = withParentComponent([bare('BaseTransition'), bare('VCard'), bare('VCol')]);
+    expect(vue.detect(el)).toEqual({ component: 'VCard' });
+  });
+
+  it('no user SFC and only built-ins: first named instance as before', () => {
+    const el = withParentComponent([bare('BaseTransition'), bare('KeepAlive')]);
     expect(vue.detect(el)).toEqual({ component: 'BaseTransition' });
   });
 });
