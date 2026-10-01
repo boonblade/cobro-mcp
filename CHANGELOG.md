@@ -7,6 +7,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - Markers and the working outline no longer jump to a neighbouring element with different text when the picked element is removed (e.g. a deleted table column); the element is reported as missing on Send. Elements without text (`col`, empty cells, icons) can still be matched to a neighbour.
 - `open` on a localhost URL that is refused or returns an empty response now suggests trying 127.0.0.1 (localhost may resolve to another process over IPv6).
 - The first letter of the toolbar status text is no longer clipped next to the status chip while the text fades in.
+- Vue: picking an element inside a component-library component (Element Plus, Vuetify, …) now reports the SFC in your code that uses it, plus up to two calling SFCs, instead of only the library component name.
 
 ## [0.10.2] — 2026-10-01
 ### Added

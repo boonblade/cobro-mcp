@@ -16,10 +16,11 @@ describe('normalizeVueSource', () => {
 });
 
 describe('vue adapter detect', () => {
-  function withParentComponent(chain: Array<{ name?: string; __name?: string }>) {
+  type VType = { name?: string; __name?: string; __file?: string };
+  function withParentComponent(chain: VType[]) {
     document.body.innerHTML = '<div></div>';
     const el = document.querySelector('div')!;
-    let head: { type: { name?: string; __name?: string }; parent: unknown } | null = null;
+    let head: { type: VType; parent: unknown } | null = null;
     for (let i = chain.length - 1; i >= 0; i--) {
       head = { type: chain[i]!, parent: head };
     }
@@ -32,9 +33,44 @@ describe('vue adapter detect', () => {
     expect(vue.detect(el)).toEqual({ component: 'Foo' });
   });
 
-  it('stops at 10 levels — a name only found at depth 11 is never seen', () => {
-    const chain = Array.from({ length: 10 }, () => ({})).concat([{ name: 'Deep' }]);
+  it('stops at 15 levels — a name only found at depth 16 is never seen', () => {
+    const chain = Array.from({ length: 15 }, () => ({})).concat([{ name: 'Deep' }]);
     const el = withParentComponent(chain);
     expect(vue.detect(el)).toBeUndefined();
+  });
+
+  const user = (name: string) => ({ name, __file: `/proj/src/${name}.vue` });
+  const lib = (name: string) => ({ name, __file: `/proj/node_modules/ui/${name}.vue` });
+
+  it('user SFC at the start: itself as component and source, calling SFCs as callers (R189)', () => {
+    const el = withParentComponent([user('Panel'), user('Page'), user('App')]);
+    expect(vue.detect(el)).toEqual({ component: 'Panel', source: 'src/Panel.vue', callers: ['src/Page.vue', 'src/App.vue'] });
+  });
+
+  it('library component below the first user SFC keeps its name as component, source is the user SFC (R189-3 = React R153)', () => {
+    const el = withParentComponent([lib('ElButton'), user('Panel'), user('App')]);
+    expect(vue.detect(el)).toEqual({ component: 'ElButton', source: 'src/Panel.vue', callers: ['src/App.vue'] });
+  });
+
+  it('Vue built-ins (no __file) are skipped and never become the component', () => {
+    const el = withParentComponent([{ name: 'BaseTransition' }, { name: 'Transition' }, lib('ElTag'), user('Card')]);
+    expect(vue.detect(el)).toEqual({ component: 'ElTag', source: 'src/Card.vue' });
+    const el2 = withParentComponent([{ name: 'KeepAlive' }, user('Card')]);
+    expect(vue.detect(el2)).toEqual({ component: 'Card', source: 'src/Card.vue' });
+  });
+
+  it('library components above the first user SFC are not callers; callers are deduped and capped at 2', () => {
+    const el = withParentComponent([user('A'), lib('L'), user('B'), user('A'), user('C'), user('D')]);
+    expect(vue.detect(el)).toEqual({ component: 'A', source: 'src/A.vue', callers: ['src/B.vue', 'src/C.vue'] });
+  });
+
+  it('unnamed user SFC falls back to the file basename', () => {
+    const el = withParentComponent([{ __file: '/proj/src/views/Home.vue' }]);
+    expect(vue.detect(el)).toEqual({ component: 'Home', source: 'src/views/Home.vue' });
+  });
+
+  it('no user SFC in the chain: first named instance, no source (as before)', () => {
+    const el = withParentComponent([{ name: 'BaseTransition' }, lib('VCard'), lib('VCol')]);
+    expect(vue.detect(el)).toEqual({ component: 'BaseTransition' });
   });
 });
