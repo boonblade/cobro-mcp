@@ -13,7 +13,7 @@ const QUEUE_ICON = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden=
 
 // R166·R169: current = 현재 페이지 초안, queue = sent·working·라운드 done(전 페이지), busy = sent·working 묶음 존재
 // R172·R174·R175·R176: batches = 전체 묶음(큐 카드·완료 정리용), locked = 에이전트 기준 잠금, tab·doneOpen = UI 전용 상태, panelOpen = 패널 표시 여부(선택 모드와 분리 — R175)
-export interface ViewModel { selecting: boolean; connected: boolean; agent: { status: AgentStatus; text: string }; strategy: RefreshStrategy | null; drafts: Batch[]; current: Batch | null; queue: Batch[]; batches: Batch[]; busy: boolean; locked: boolean; followPaused: boolean; pendingElsewhere: { url: string; path: string } | null; prefs: UiPrefs; expanded: string | null; href: string; tab: 'here' | 'queue'; doneOpen: boolean; panelOpen: boolean }
+export interface ViewModel { selecting: boolean; connected: boolean; agent: { status: AgentStatus; text: string }; strategy: RefreshStrategy | null; drafts: Batch[]; current: Batch | null; queue: Batch[]; batches: Batch[]; busy: boolean; locked: boolean; followPaused: boolean; unheard: boolean; pendingElsewhere: { url: string; path: string } | null; prefs: UiPrefs; expanded: string | null; href: string; tab: 'here' | 'queue'; doneOpen: boolean; panelOpen: boolean }
 export interface UIHandlers { onToggleSelect(): void; onClose(): void; onNoteInput(id: string, note: string): void; onRemoveElement(id: string, index: number): void; onRemoveRegion(id: string, index: number): void; onSend(): void; onSettings(patch: { theme?: Theme }): void; onToggleGroup(ref: string): void; onTab(tab: 'here' | 'queue'): void; onToggleDone(): void; onGoPage(url: string): void }
 
 const CSS = `
@@ -198,6 +198,7 @@ const T = {
     doneResult: (s: string) => `✓ ${T.agentDone}: ${s}`,
     chipIdle: '미연결', chipWaiting: '대기 중', chipSent: '전송됨', chipWorking: '수정 중', chipDone: '완료', chipOff: '연결 끊김',
     agentSentDetail: '에이전트 응답 대기',
+    agentUnheard: '에이전트가 대기 중이 아닙니다 — 채팅에서 "cobro 확인해줘"라고 알려 주세요',
     disconnected: '연결 끊김 — 재연결 중',
     hintSend: 'Send로 전송하세요', hintClick: '페이지에서 요소를 클릭하세요 · Esc로 해제',
     hintMore: (n: number) => `${n}개 선택 · 더 고르거나 메모를 적으세요`,
@@ -240,6 +241,7 @@ const T = {
     doneResult: (s: string) => `✓ ${T.agentDone}: ${s}`,
     chipIdle: 'Offline', chipWaiting: 'Waiting', chipSent: 'Sent', chipWorking: 'Working', chipDone: 'Done', chipOff: 'Disconnected',
     agentSentDetail: 'Waiting for the agent',
+    agentUnheard: 'The agent isn\'t listening — ask it in chat to check Cobro',
     disconnected: 'Disconnected — reconnecting',
     hintSend: 'Press Send to deliver', hintClick: 'Click an element on the page · Esc to exit',
     hintMore: (n: number) => `${n} selected · pick more or write a note`,
@@ -441,7 +443,8 @@ export function createUI(h: UIHandlers) {
     else if (vm.locked && vm.followPaused) hint = T.followPaused; // R176: 폴백 링크보다 낮은 우선순위
     else {
       let text: string;
-      if (vm.agent.status === 'sent' || vm.agent.status === 'working' || vm.agent.status === 'done') text = AGENT_TEXT[vm.agent.status](vm.agent.text);
+      if (vm.agent.status === 'sent' && vm.unheard) text = T.agentUnheard; // R182: 큐에 쌓인 Send를 아무도 안 가져갔다
+      else if (vm.agent.status === 'sent' || vm.agent.status === 'working' || vm.agent.status === 'done') text = AGENT_TEXT[vm.agent.status](vm.agent.text);
       else if (vm.agent.status === 'waiting' && vm.agent.text && !hasElements && (cur?.note.trim() ?? '') === '') text = T.doneResult(stripStatusLabel(vm.agent.text, LABELS.done));
       else if (cur && cur.note.trim() !== '') text = T.hintSend;
       else if (vm.selecting && !hasElements) text = T.hintClick;
@@ -475,7 +478,7 @@ export function createUI(h: UIHandlers) {
     const round = roundOf(vm.queue);
     const roundSuffix = vm.busy ? ' ' + T.progress(round.done, round.total) : '';
     chipLabel.textContent = vm.connected ? CHIP_LABEL[vm.agent.status] + roundSuffix : T.chipOff;
-    chip.title = vm.connected ? DOT_TITLE[vm.agent.status] + roundSuffix : T.disconnected;
+    chip.title = vm.connected ? (vm.agent.status === 'sent' && vm.unheard ? T.agentUnheard : DOT_TITLE[vm.agent.status]) + roundSuffix : T.disconnected;
     stratRow.hidden = !vm.strategy;
     if (vm.strategy) { stratValText.textContent = vm.strategy; stratSub.textContent = T.strategyDesc(vm.strategy); stratRow.title = T.strategyDesc(vm.strategy); }
     panel.classList.toggle('show', vm.panelOpen); // R175: 선택 모드와 분리 — 잠겨서 선택이 꺼져도 패널은 열어 둘 수 있다

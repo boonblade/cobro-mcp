@@ -10,8 +10,9 @@ export class SessionCore extends EventEmitter {
   private queue: Array<{ payload: Payload; browserRestarted?: boolean }> = [];
   private waiter: Waiter | null = null;
   private expectedUrl: string | null = null; // R176: navigateTo가 이동을 건 목적지 — noteArrival이 도착 판정에 쓴다(저장 안 함)
+  private unheardTimer: ReturnType<typeof setTimeout> | null = null; // R182: 큐에 쌓인 Send를 아무도 안 가져가는지 재는 타이머
 
-  constructor(private readonly store: Store) {
+  constructor(private readonly store: Store, private readonly unheardMs = 10_000) {
     super();
     this.s = store.load() ?? emptySession();
     // 재시작 시 'waiting'/'working'은 의미가 없다 → idle. 단, 'waiting'의 text(직전 done 요약일 수 있다)는
@@ -22,6 +23,8 @@ export class SessionCore extends EventEmitter {
     for (const b of this.s.batches) if (b.status === 'working') b.status = 'sent';
     // R176: 재시작 시 따라가기 중지 상태는 의미가 없다 — 새 프로세스는 아직 아무 곳으로도 옮긴 적이 없다
     this.s.followPaused = false;
+    // R182: 큐는 메모리라 재시작하면 없다 — 미수신 표시도 남기지 않는다
+    this.s.unheard = false;
   }
   get session(): Session { return this.s; }
 
@@ -96,15 +99,30 @@ export class SessionCore extends EventEmitter {
   }
   deliver(payload: Payload, extra: { browserRestarted?: boolean } = {}): void {
     const item = { payload, ...extra };
-    if (this.waiter) { const w = this.waiter; this.waiter = null; w.resolve({ status: 'sent', ...item }); }
-    else this.queue.push(item);
+    if (this.waiter) { const w = this.waiter; this.waiter = null; this.clearUnheard(); w.resolve({ status: 'sent', ...item }); }
+    else {
+      this.queue.push(item);
+      // R182: 대기자가 없어 큐에 쌓았다 — unheardMs 안에 wait()가 안 가져가면 오버레이가 알 수 있게 표시한다
+      if (!this.unheardTimer) {
+        this.unheardTimer = setTimeout(() => {
+          this.unheardTimer = null;
+          if (this.queue.includes(item) && !this.s.unheard) { this.s.unheard = true; this.commit(); }
+        }, this.unheardMs);
+        this.unheardTimer.unref?.();
+      }
+    }
+  }
+  /** R182: 누군가 Send를 가져갔다(또는 큐가 비었다) — 타이머를 정리하고, 켜져 있던 unheard를 끈다 */
+  private clearUnheard(): void {
+    if (this.unheardTimer) { clearTimeout(this.unheardTimer); this.unheardTimer = null; }
+    if (this.s.unheard) { this.s.unheard = false; this.commit(); }
   }
   wait(timeoutMs: number, onTick?: (elapsedMs: number) => void | Promise<void>, opts: { tickMs?: number; signal?: AbortSignal } = {}): Promise<WaitResult> {
     // 두 번째 wait()가 첫 번째보다 먼저 오면(백그라운드 재호출 등) 이전 대기자를 pending으로
     // 즉시 해소하고(타이머·abort 리스너 정리 포함) 고아로 남기지 않는다. 최신 호출만 살아있다.
     if (this.waiter) { const prev = this.waiter; this.waiter = null; prev.resolve({ status: 'pending' }); }
     const queued = this.queue.shift();
-    if (queued) return Promise.resolve({ status: 'sent', ...queued });
+    if (queued) { this.clearUnheard(); return Promise.resolve({ status: 'sent', ...queued }); }
     // cancelWait는 idle을 text: ''로 두므로, idle의 text는 재시작 복구본뿐이다(R98)
     const keep = (this.s.agent.status === 'sent' || this.s.agent.status === 'working') ? '' : this.s.agent.text;
     this.s.agent = { status: 'waiting', text: keep };

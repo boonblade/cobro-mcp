@@ -9,8 +9,8 @@ import type { Batch, ConsoleEntry, DoneInfo, PageInfo, ServerMsg, Theme, UiPrefs
 
 export interface Bridge { core: SessionCore; channel: ChannelServer; port: number; token: string; done(info: DoneInfo, batchId?: string): Batch[]; close(): Promise<void>; ui(): UiPrefs }
 
-export async function createBridge(opts: { store: Store; token: string; screenshot?: (b: Batch, page: PageInfo) => Promise<string | undefined>; consoleEntries?: () => ConsoleEntry[]; settingsFile?: string; envTheme?: Theme; resolveSource?: (b: Batch, page: PageInfo) => Promise<void> }): Promise<Bridge> {
-  const core = new SessionCore(opts.store);
+export async function createBridge(opts: { store: Store; token: string; screenshot?: (b: Batch, page: PageInfo) => Promise<string | undefined>; consoleEntries?: () => ConsoleEntry[]; settingsFile?: string; envTheme?: Theme; resolveSource?: (b: Batch, page: PageInfo) => Promise<void>; unheardMs?: number }): Promise<Bridge> {
+  const core = new SessionCore(opts.store, opts.unheardMs);
   let cachedTheme: Theme | undefined = opts.settingsFile ? readUserSettings(opts.settingsFile).theme : undefined;
   const uiPrefs = (): UiPrefs => ({ theme: opts.envTheme ?? cachedTheme ?? 'auto', themeLocked: !!opts.envTheme });
   const stateMsg = (): ServerMsg => ({ type: 'state', session: core.session, ui: uiPrefs() });

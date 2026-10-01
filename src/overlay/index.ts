@@ -66,6 +66,7 @@ declare const __COBRO_ROOT__: string;
         busy: (session?.batches ?? []).some((b) => b.status === 'sent' || b.status === 'working'),
         locked: isLocked(), // R175
         followPaused: !!session?.followPaused, // R176
+        unheard: !!session?.unheard, // R182
         pendingElsewhere: pendingElsewhere(session, href), // R171: 다른 페이지에서 끝난 완료의 폴백 "보기" 링크
         prefs, expanded: expandedGroup, href, tab, doneOpen, panelOpen,
       };

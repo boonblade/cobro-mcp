@@ -16,17 +16,18 @@ export const injected = (port: number, token: string, root = process.cwd()) => o
   .replace(/__COBRO_TOKEN__/g, () => JSON.stringify(token))
   .replace(/__COBRO_ROOT__/g, () => JSON.stringify(root));
 
-export const test = base.extend<{ ctx: BrowserContext; bridge: Bridge; cobroPage: Page; envTheme: Theme | undefined; shotEnabled: boolean }>({
+export const test = base.extend<{ ctx: BrowserContext; bridge: Bridge; cobroPage: Page; envTheme: Theme | undefined; shotEnabled: boolean; unheardMs: number | undefined }>({
   envTheme: [undefined, { option: true }],
+  unheardMs: [undefined, { option: true }], // R182: Send 미수신 표시 지연 — 기본 10초를 테스트에서 줄이는 용도
   shotEnabled: [false, { option: true }],
   ctx: async ({ browser, locale }, use) => {
     const ctx = await browser.newContext({ bypassCSP: true, locale });
     await use(ctx); await ctx.close();
   },
-  bridge: async ({ ctx, envTheme, shotEnabled }, use) => {
+  bridge: async ({ ctx, envTheme, shotEnabled, unheardMs }, use) => {
     const dir = mkdtempSync(join(tmpdir(), 'cobro-'));
     const bridge = await createBridge({
-      store: new Store(dir), token: randomBytes(16).toString('hex'), settingsFile: join(dir, 'settings.json'), envTheme,
+      store: new Store(dir), token: randomBytes(16).toString('hex'), settingsFile: join(dir, 'settings.json'), envTheme, unheardMs,
       screenshot: shotEnabled ? async (b) => `/tmp/cobro-shot-${b.id}.png` : undefined,
       resolveSource: (b, page) => resolveElementSources(b, page, (url) => fetchTextGuarded(ctx.request, url)),
     });

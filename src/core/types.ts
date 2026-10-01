@@ -36,6 +36,7 @@ export interface Session {
   detected: RefreshStrategy | null;  // 오버레이 자동 감지
   pendingDone?: Array<{ url: string; batchIds: string[]; info: DoneInfo }>; // R163: 다른 페이지에서 닫힌 묶음의 done을 그 페이지가 재접속할 때까지 들고 있는다
   followPaused?: boolean; // R176: 처리 중 사용자가 직접 다른 페이지로 이동해 브라우저 자동 이동을 멈춘 상태. 재시작 정규화에서 false
+  unheard?: boolean; // R182: Send가 큐에서 일정 시간 안 가져가졌다(에이전트가 wait 중이 아님). wait가 가져가면 false, 재시작 정규화에서 false
 }
 export interface ConsoleEntry { level: 'error' | 'warning' | 'pageerror' | 'requestfailed'; text: string; count: number; last: string }
 export interface Payload {

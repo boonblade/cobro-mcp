@@ -9,7 +9,7 @@ const handlers: UIHandlers = {
 
 const baseVm: ViewModel = {
   selecting: false, connected: true, agent: { status: 'idle', text: '' }, strategy: 'reload',
-  drafts: [], current: null, queue: [], batches: [], busy: false, locked: false, followPaused: false,
+  drafts: [], current: null, queue: [], batches: [], busy: false, locked: false, followPaused: false, unheard: false,
   pendingElsewhere: null, prefs: { theme: 'auto', themeLocked: false }, expanded: null, href: 'http://x/', tab: 'here', doneOpen: false, panelOpen: false,
 };
 
