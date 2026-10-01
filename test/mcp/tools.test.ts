@@ -54,6 +54,8 @@ describe('mcp server version', () => {
     expect(t.length).toBeLessThanOrEqual(1600);
   });
 });
+// R183: done/status는 에이전트가 받은(wait가 꺼낸) 묶음만 닫는다 — 실제 흐름(deliver → wait)으로 "받은" 상태를 만든다
+const receive = (ids: string[]) => { core.deliver({ origin: 'human', sentAt: 't', page, batches: ids.map((id) => ({ id, note: 'n', elements: [] })), console: [], refreshStrategy: 'none' }); void core.wait(1000); };
 const call = async (name: string, args: Record<string, unknown> = {}) => {
   const r = await client.callTool({ name, arguments: args });
   return JSON.parse((r.content as Array<{ text: string }>)[0]!.text);
@@ -111,6 +113,7 @@ describe('mcp tools', () => {
     await call('open', { url: 'http://a/' });
     core.setDrafts([{ id: 'b', note: 'n', elements: [], status: 'draft', createdAt: 't' }]);
     core.markSent(['b'], page);
+    receive(['b']);
     state.alive = false; // 사용자가 창을 닫았다
     const t0 = Date.now();
     expect(await call('wait', { timeoutSec: 5 })).toEqual({ status: 'pending', browserGone: true });
@@ -123,14 +126,26 @@ describe('mcp tools', () => {
   it('status sets working text; done marks sent batches and returns count', async () => {
     core.setDrafts([{ id: 'b', note: 'n', elements: [], status: 'draft', createdAt: 't' }]);
     core.markSent(['b'], page);
+    receive(['b']);
     expect(await call('status', { text: '수정 중' })).toEqual({ ok: true });
     expect(core.session.agent).toEqual({ status: 'working', text: '수정 중' });
     expect(await call('done', { summary: '완료', selectors: ['#a'] })).toEqual({ ok: true, doneBatches: 1, next: NEXT });
     expect(core.session.batches[0]!.status).toBe('done');
   });
+  it('done does not close a Send the agent has not received: Send with no waiter → done → doneBatches 0 → wait → done → 1 (R183)', async () => {
+    core.setDrafts([{ id: 'b', note: 'n', elements: [], status: 'draft', createdAt: 't' }]);
+    core.markSent(['b'], page);
+    core.deliver({ origin: 'human', sentAt: 't', page, batches: [{ id: 'b', note: 'n', elements: [] }], console: [], refreshStrategy: 'none' }); // 대기자 없음 → 큐
+    expect(await call('done', { summary: '채팅 작업' })).toEqual({ ok: true, doneBatches: 0, next: NEXT });
+    expect(core.session.batches[0]!.status).toBe('sent');
+    expect(await call('wait', { timeoutSec: 5 })).toMatchObject({ status: 'sent', payload: { batches: [{ id: 'b' }] } });
+    expect(await call('done', { summary: '완료', batchId: 'b' })).toEqual({ ok: true, doneBatches: 1, next: NEXT });
+    expect(core.session.batches[0]!.status).toBe('done');
+  });
   it('status(text, batchId) marks that batch working (R162)', async () => {
     core.setDrafts([{ id: 'b', note: 'n', elements: [], status: 'draft', createdAt: 't' }]);
     core.markSent(['b'], page);
+    receive(['b']);
     expect(await call('status', { text: '수정 중', batchId: 'b' })).toEqual({ ok: true });
     expect(core.session.batches[0]!.status).toBe('working');
   });
@@ -140,6 +155,7 @@ describe('mcp tools', () => {
       { id: 'c', note: 'n', elements: [], status: 'draft', createdAt: 't' },
     ]);
     core.markSent(['b', 'c'], page);
+    receive(['b', 'c']);
     expect(await call('done', { summary: 'ok', batchId: 'b' })).toEqual({ ok: true, doneBatches: 1, next: NEXT });
     expect(core.session.batches.find((x) => x.id === 'c')!.status).toBe('sent');
     expect(core.session.agent.status).toBe('sent');
@@ -184,6 +200,7 @@ describe('mcp tools', () => {
     core.setDrafts([{ id: 'b', note: 'n', elements: [], status: 'draft', createdAt: 't' }]);
     core.setPage(page, 'reload');
     core.markSent(['b'], page);
+    receive(['b']);
     await call('open', { url: 'http://x/' });
     calls.length = 0;
     expect(await call('done', { summary: 'ok', batchId: 'b' })).toEqual({ ok: true, doneBatches: 1, next: NEXT, navigated: true });
@@ -194,6 +211,7 @@ describe('mcp tools', () => {
     core.setDrafts([{ id: 'b', note: 'n', elements: [], status: 'draft', createdAt: 't' }]);
     core.setPage(page, 'reload');
     core.markSent(['b'], page);
+    receive(['b']);
     await call('open', { url: 'http://x/' });
     calls.length = 0;
     browser.open = async () => { throw new Error('boom'); };

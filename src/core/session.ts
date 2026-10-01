@@ -99,18 +99,31 @@ export class SessionCore extends EventEmitter {
   }
   deliver(payload: Payload, extra: { browserRestarted?: boolean } = {}): void {
     const item = { payload, ...extra };
-    if (this.waiter) { const w = this.waiter; this.waiter = null; this.clearUnheard(); w.resolve({ status: 'sent', ...item }); }
-    else {
-      this.queue.push(item);
-      // R182: 대기자가 없어 큐에 쌓았다 — unheardMs 안에 wait()가 안 가져가면 오버레이가 알 수 있게 표시한다
-      if (!this.unheardTimer) {
-        this.unheardTimer = setTimeout(() => {
-          this.unheardTimer = null;
-          if (this.queue.includes(item) && !this.s.unheard) { this.s.unheard = true; this.commit(); }
-        }, this.unheardMs);
-        this.unheardTimer.unref?.();
-      }
+    if (this.waiter) { const w = this.waiter; this.waiter = null; this.clearUnheard(); this.markDelivered(payload); w.resolve({ status: 'sent', ...item }); }
+    else { this.queue.push(item); this.armUnheard(); }
+  }
+  /** R183: payload가 에이전트에게 넘어갔다 — 그 묶음들에 받은 시각을 찍는다. done/status는 받은 묶음만 닫는다 */
+  private markDelivered(payload: Payload): void {
+    const now = new Date().toISOString();
+    let changed = false;
+    for (const b of this.s.batches) {
+      if (!b.deliveredAt && payload.batches.some((p) => p.id === b.id)) { b.deliveredAt = now; changed = true; }
     }
+    // 저장이 실패해도(D2) 배달은 막지 않는다 — 메모리 상태는 이미 갱신됐다
+    if (changed) { try { this.commit(); } catch (e) { console.error('[cobro] deliveredAt 저장 실패', (e as Error).message); } }
+  }
+  /**
+   * R182·R184: 큐에 Send가 남아 있고 대기자가 없으면 unheardMs 타이머를 건다(이미 있으면 그대로). 만료 시점에 큐가 비었거나
+   * 에이전트가 받은 미완 묶음을 처리 중이면(바쁨) 켜지 않는다 — 바쁨이 끝나는 done()이 다시 건다. 호출처: deliver(적재)·wait(꺼낸 뒤)·done
+   */
+  private armUnheard(): void {
+    if (this.unheardTimer || this.waiter || this.queue.length === 0) return;
+    this.unheardTimer = setTimeout(() => {
+      this.unheardTimer = null;
+      const busy = this.s.batches.some((b) => b.deliveredAt && (b.status === 'sent' || b.status === 'working'));
+      if (this.queue.length > 0 && !busy && !this.s.unheard) { this.s.unheard = true; this.commit(); }
+    }, this.unheardMs);
+    this.unheardTimer.unref?.();
   }
   /** R182: 누군가 Send를 가져갔다(또는 큐가 비었다) — 타이머를 정리하고, 켜져 있던 unheard를 끈다 */
   private clearUnheard(): void {
@@ -122,7 +135,7 @@ export class SessionCore extends EventEmitter {
     // 즉시 해소하고(타이머·abort 리스너 정리 포함) 고아로 남기지 않는다. 최신 호출만 살아있다.
     if (this.waiter) { const prev = this.waiter; this.waiter = null; prev.resolve({ status: 'pending' }); }
     const queued = this.queue.shift();
-    if (queued) { this.clearUnheard(); return Promise.resolve({ status: 'sent', ...queued }); }
+    if (queued) { this.clearUnheard(); this.markDelivered(queued.payload); this.armUnheard(); return Promise.resolve({ status: 'sent', ...queued }); } // m1: 큐가 남았으면 남은 Send를 위해 재무장
     // cancelWait는 idle을 text: ''로 두므로, idle의 text는 재시작 복구본뿐이다(R98)
     const keep = (this.s.agent.status === 'sent' || this.s.agent.status === 'working') ? '' : this.s.agent.text;
     this.s.agent = { status: 'waiting', text: keep };
@@ -165,9 +178,10 @@ export class SessionCore extends EventEmitter {
   }
   setAgentText(text: string, batchId?: string): void {
     // R162: batchId가 sent/working 묶음이면 그 묶음을 working으로. 아니면 무시(agent text만)
+    // R183: 에이전트가 받은(deliveredAt) 묶음만 — 큐에 남은 묶음은 올리지 않는다
     if (batchId) {
       const b = this.s.batches.find((x) => x.id === batchId);
-      if (b && (b.status === 'sent' || b.status === 'working')) b.status = 'working';
+      if (b && b.deliveredAt && (b.status === 'sent' || b.status === 'working')) b.status = 'working';
     }
     this.s.agent = { status: 'working', text };
     this.commit();
@@ -176,8 +190,9 @@ export class SessionCore extends EventEmitter {
     const now = new Date().toISOString();
     const out: Batch[] = [];
     // R162: batchId가 있으면 그 id 중 sent/working인 것만, 없으면 sent/working 전부
+    // R183: 단, 에이전트가 받은(deliveredAt) 묶음만 — 큐에 남은 Send는 batchId로 지목돼도 닫지 않는다
     for (const b of this.s.batches) {
-      if ((b.status === 'sent' || b.status === 'working') && (!batchId || b.id === batchId)) {
+      if ((b.status === 'sent' || b.status === 'working') && b.deliveredAt && (!batchId || b.id === batchId)) {
         b.status = 'done'; b.doneAt = now; b.summary = info.summary; out.push(b);
       }
     }
@@ -186,6 +201,7 @@ export class SessionCore extends EventEmitter {
     if (!remaining) { this.s.followPaused = false; this.expectedUrl = null; } // R176
     this.store.pruneShots(this.s.batches.filter((b) => b.status !== 'done').map((b) => b.id));
     this.commit();
+    this.armUnheard(); // R184: 바쁨이 끝났다 — 큐에 남은 Send가 있고 대기자가 없으면 미수신 타이머를 다시 건다
     return out;
   }
   // R163: 같은 url 항목은 교체, 최대 20개(오래된 것부터 버림)

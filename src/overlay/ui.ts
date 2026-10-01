@@ -198,7 +198,8 @@ const T = {
     doneResult: (s: string) => `✓ ${T.agentDone}: ${s}`,
     chipIdle: '미연결', chipWaiting: '대기 중', chipSent: '전송됨', chipWorking: '수정 중', chipDone: '완료', chipOff: '연결 끊김',
     agentSentDetail: '에이전트 응답 대기',
-    agentUnheard: '에이전트가 대기 중이 아닙니다 — 채팅에서 "cobro 확인해줘"라고 알려 주세요',
+    agentUnheard: '에이전트 미대기 — 채팅에서 불러 주세요', // 상태 줄(고정 폭, 말줄임 없이 들어가야 한다)
+    agentUnheardTip: '에이전트가 대기 중이 아닙니다 — 채팅에서 "cobro 확인해줘"라고 알려 주세요', // 칩 툴팁(전문)
     disconnected: '연결 끊김 — 재연결 중',
     hintSend: 'Send로 전송하세요', hintClick: '페이지에서 요소를 클릭하세요 · Esc로 해제',
     hintMore: (n: number) => `${n}개 선택 · 더 고르거나 메모를 적으세요`,
@@ -241,7 +242,8 @@ const T = {
     doneResult: (s: string) => `✓ ${T.agentDone}: ${s}`,
     chipIdle: 'Offline', chipWaiting: 'Waiting', chipSent: 'Sent', chipWorking: 'Working', chipDone: 'Done', chipOff: 'Disconnected',
     agentSentDetail: 'Waiting for the agent',
-    agentUnheard: 'The agent isn\'t listening — ask it in chat to check Cobro',
+    agentUnheard: 'Agent not listening — ping it in chat', // status line (fixed width; must fit without ellipsis)
+    agentUnheardTip: 'The agent isn\'t listening — ask it in chat to check Cobro', // chip tooltip (full text)
     disconnected: 'Disconnected — reconnecting',
     hintSend: 'Press Send to deliver', hintClick: 'Click an element on the page · Esc to exit',
     hintMore: (n: number) => `${n} selected · pick more or write a note`,
@@ -478,7 +480,7 @@ export function createUI(h: UIHandlers) {
     const round = roundOf(vm.queue);
     const roundSuffix = vm.busy ? ' ' + T.progress(round.done, round.total) : '';
     chipLabel.textContent = vm.connected ? CHIP_LABEL[vm.agent.status] + roundSuffix : T.chipOff;
-    chip.title = vm.connected ? (vm.agent.status === 'sent' && vm.unheard ? T.agentUnheard : DOT_TITLE[vm.agent.status]) + roundSuffix : T.disconnected;
+    chip.title = vm.connected ? (vm.agent.status === 'sent' && vm.unheard ? T.agentUnheardTip : DOT_TITLE[vm.agent.status]) + roundSuffix : T.disconnected;
     stratRow.hidden = !vm.strategy;
     if (vm.strategy) { stratValText.textContent = vm.strategy; stratSub.textContent = T.strategyDesc(vm.strategy); stratRow.title = T.strategyDesc(vm.strategy); }
     panel.classList.toggle('show', vm.panelOpen); // R175: 선택 모드와 분리 — 잠겨서 선택이 꺼져도 패널은 열어 둘 수 있다

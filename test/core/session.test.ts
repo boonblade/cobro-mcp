@@ -12,6 +12,9 @@ const el = { selector: '#a', tag: 'div', classes: [], text: '', rect: { x: 0, y:
 const draft = (id: string): Batch => ({ id, note: 'n' + id, elements: [el], status: 'draft', createdAt: 't' });
 const payloadOf = (ids: string[]): Payload => ({ origin: 'human', sentAt: 't', page, batches: ids.map((id) => ({ id, note: '', elements: [] })), console: [], refreshStrategy: 'none' });
 
+// R183: done/status는 에이전트가 받은(wait가 꺼낸) 묶음만 닫는다 — 실제 흐름(deliver → wait)으로 "받은" 상태를 만든다
+const receive = (c: SessionCore, ids: string[]) => { c.deliver(payloadOf(ids)); void c.wait(1000); };
+
 let core: SessionCore; let store: Store;
 beforeEach(() => { store = new Store(mkdtempSync(join(tmpdir(), 'cobro-'))); core = new SessionCore(store); });
 
@@ -127,6 +130,71 @@ describe('SessionCore', () => {
     expect(c.session.unheard).toBeFalsy();
     vi.useRealTimers();
   });
+  it('R183: done() without batchId does not close a batch the agent has not received; wait() then delivers it and done() closes it', async () => {
+    const info = { summary: 'x', selectors: [], changedFiles: [] };
+    core.setDrafts([draft('X')]);
+    core.markSent(['X'], page);
+    core.deliver(payloadOf(['X'])); // 대기자 없음 → 큐
+    expect(core.done(info)).toEqual([]);
+    expect(core.session.batches[0]!.status).toBe('sent');
+    expect(core.session.batches[0]!.deliveredAt).toBeUndefined();
+    await expect(core.wait(1000)).resolves.toMatchObject({ status: 'sent', payload: { batches: [{ id: 'X' }] } });
+    expect(core.session.batches[0]!.deliveredAt).toBeTruthy();
+    expect(core.done(info).map((b) => b.id)).toEqual(['X']);
+    expect(core.session.batches[0]!.status).toBe('done');
+  });
+  it('R183: done(info, batchId) and setAgentText(text, batchId) ignore a queued, undelivered batch even when named', async () => {
+    const info = { summary: 'x', selectors: [], changedFiles: [] };
+    core.setDrafts([draft('X')]);
+    core.markSent(['X'], page);
+    core.deliver(payloadOf(['X']));
+    core.setAgentText('수정 중', 'X');
+    expect(core.session.batches[0]!.status).toBe('sent'); // working으로 올리지 않는다
+    expect(core.done(info, 'X')).toEqual([]);
+    expect(core.session.batches[0]!.status).toBe('sent');
+    await core.wait(1000);
+    expect(core.done(info, 'X').map((b) => b.id)).toEqual(['X']);
+  });
+  it('R183: deliver() straight to a live waiter stamps deliveredAt on that payload batches only', async () => {
+    core.setDrafts([draft('1'), draft('2')]);
+    core.markSent(['1', '2'], page);
+    const p = core.wait(60_000);
+    core.deliver(payloadOf(['1']));
+    await p;
+    expect(core.session.batches.find((b) => b.id === '1')!.deliveredAt).toBeTruthy();
+    expect(core.session.batches.find((b) => b.id === '2')!.deliveredAt).toBeUndefined();
+  });
+  it('R184: a Send queued while the agent works on a received batch never turns unheard on; done() re-arms the timer and then it can (Task 75 m2)', async () => {
+    vi.useFakeTimers();
+    const c = new SessionCore(store, 10_000);
+    c.setDrafts([draft('A')]);
+    c.markSent(['A'], page);
+    c.deliver(payloadOf(['A']));
+    await c.wait(1000); // A는 에이전트가 받았다 — 처리 중
+    c.setDrafts([draft('B')]);
+    c.markSent(['B'], page); // R160: 처리 중에도 다음 Send 허용
+    c.deliver(payloadOf(['B'])); // 대기자 없음 → 큐
+    await vi.advanceTimersByTimeAsync(10_001);
+    expect(c.session.unheard).toBeFalsy(); // 에이전트는 바쁘다 — 오탐 아님
+    c.done({ summary: 'a', selectors: [], changedFiles: [] }, 'A'); // 바쁨 끝 → 큐에 B가 남았으니 재무장
+    await vi.advanceTimersByTimeAsync(10_001);
+    expect(c.session.unheard).toBe(true);
+    vi.useRealTimers();
+  });
+  it('R182 m1: after wait() takes one of two queued Sends the timer re-arms for the rest; the last wait() clears it', async () => {
+    vi.useFakeTimers();
+    const c = new SessionCore(store, 10_000);
+    c.deliver(payloadOf(['1']));
+    c.deliver(payloadOf(['2']));
+    await expect(c.wait(1000)).resolves.toMatchObject({ payload: { batches: [{ id: '1' }] } });
+    expect(vi.getTimerCount()).toBe(1);
+    await vi.advanceTimersByTimeAsync(10_001);
+    expect(c.session.unheard).toBe(true);
+    await expect(c.wait(1000)).resolves.toMatchObject({ payload: { batches: [{ id: '2' }] } });
+    expect(c.session.unheard).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+    vi.useRealTimers();
+  });
   it('wait aborts via signal as pending', async () => {
     const ac = new AbortController();
     const p = core.wait(60_000, undefined, { signal: ac.signal });
@@ -136,6 +204,7 @@ describe('SessionCore', () => {
   it('done marks sent batches done with summary', () => {
     core.setDrafts([draft('1')]);
     core.markSent(['1'], page);
+    receive(core, ['1']);
     core.setAgentText('수정 중');
     expect(core.session.agent).toEqual({ status: 'working', text: '수정 중' });
     const doneBatches = core.done({ summary: 'ok', selectors: ['#a'], changedFiles: ['a.tsx'] });
@@ -158,6 +227,7 @@ describe('SessionCore', () => {
   it('setAgentText(text, batchId) marks a sent/working batch as working; an unknown id only sets agent text (R162)', () => {
     core.setDrafts([draft('1'), draft('2')]);
     core.markSent(['1', '2'], page);
+    receive(core, ['1', '2']);
     core.setAgentText('x', '1');
     expect(core.session.batches.find((b) => b.id === '1')!.status).toBe('working');
     expect(core.session.batches.find((b) => b.id === '2')!.status).toBe('sent');
@@ -170,6 +240,7 @@ describe('SessionCore', () => {
   it('done(info, batchId) closes only that batch; agent stays sent while another sent/working batch remains, then done once all close (R162)', () => {
     core.setDrafts([draft('1'), draft('2')]);
     core.markSent(['1', '2'], page);
+    receive(core, ['1', '2']);
     const out1 = core.done({ summary: 's1', selectors: [], changedFiles: [] }, '1');
     expect(out1.map((b) => b.id)).toEqual(['1']);
     expect(core.session.batches.find((b) => b.id === '1')!.status).toBe('done');
@@ -183,6 +254,7 @@ describe('SessionCore', () => {
   it('done() with no batchId also closes working batches, not only sent (M2)', () => {
     core.setDrafts([draft('1')]);
     core.markSent(['1'], page);
+    receive(core, ['1']);
     core.setAgentText('x', '1');
     expect(core.session.batches[0]!.status).toBe('working');
     const out = core.done({ summary: 'ok', selectors: [], changedFiles: [] });
@@ -192,6 +264,7 @@ describe('SessionCore', () => {
   it('restart normalizes a working batch back to sent (R160)', () => {
     core.setDrafts([draft('1')]);
     core.markSent(['1'], page);
+    receive(core, ['1']);
     core.setAgentText('x', '1');
     expect(core.session.batches[0]!.status).toBe('working');
     const restarted = new SessionCore(store);
@@ -293,6 +366,7 @@ describe('SessionCore', () => {
     // Task 68 R174: 처리 중 묶음이 남아 있는 동안은(여기서는 '2') 새 done 정리가 끼어들지 않는다 — 같은 라운드에서 '1'만 done
     core.setDrafts([draft('1'), draft('2')]);
     core.markSent(['1', '2'], page);
+    receive(core, ['1', '2']);
     core.done({ summary: 'ok', selectors: [], changedFiles: [] }, '1');
     core.setScreenshot('1', store.shotPath('1'));
     core.setScreenshot('2', store.shotPath('2'));
@@ -324,6 +398,7 @@ describe('SessionCore', () => {
   it('setDrafts clears the last round\'s done batches once a new content draft arrives and nothing is active; an empty draft never clears (R174)', () => {
     core.setDrafts([draft('x'), draft('y')]);
     core.markSent(['x', 'y'], page);
+    receive(core, ['x', 'y']);
     core.done({ summary: 'x done', selectors: [], changedFiles: [] }, 'x');
     expect(core.session.batches.map((b) => [b.id, b.status])).toEqual([['x', 'done'], ['y', 'sent']]);
 
@@ -347,6 +422,7 @@ describe('SessionCore', () => {
     core.setPage(page, 'reload');
     core.setDrafts([draft('1')]);
     core.markSent(['1'], page);
+    receive(core, ['1']);
     core.expectNavigation('http://x/a');
     core.noteArrival('http://x/a#h'); // 따라간 도착 — hash만 다름
     expect(core.session.followPaused).toBeFalsy();
@@ -360,7 +436,8 @@ describe('SessionCore', () => {
     expect(core.expectedNavigation()).toBeNull();
 
     core.setDrafts([draft('2')]);
-    core.markSent(['2'], page); // markSent도 처리 중 묶음이 없어지는 시점에는 해제한다(막 보낸 '2'가 있으니 여기선 유지)
+    core.markSent(['2'], page);
+    receive(core, ['2']); // markSent도 처리 중 묶음이 없어지는 시점에는 해제한다(막 보낸 '2'가 있으니 여기선 유지)
     expect(core.session.followPaused).toBe(false); // 아직 일시정지된 적 없음 — 새 라운드 시작이 되살리지 않는다
     core.noteArrival('http://x/d');
     expect(core.session.followPaused).toBe(true);

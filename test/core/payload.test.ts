@@ -21,7 +21,7 @@ describe('buildPayload', () => {
   it('forces origin human, strips non-payload batch fields, keeps screenshot path', () => {
     const p = buildPayload({
       page, refreshStrategy: 'none', console: [], now: new Date('2026-09-08T00:00:00Z'),
-      batches: [{ id: 'b', note: 'n', status: 'sent', createdAt: 't', screenshot: '/s/b.png', summary: 'leak?', refSeq: 4, elements: [] }],
+      batches: [{ id: 'b', note: 'n', status: 'sent', createdAt: 't', screenshot: '/s/b.png', summary: 'leak?', refSeq: 4, deliveredAt: 't', elements: [] }],
     });
     expect(p.origin).toBe('human');
     expect(p.sentAt).toBe('2026-09-08T00:00:00.000Z');
