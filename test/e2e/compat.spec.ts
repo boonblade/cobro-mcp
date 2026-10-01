@@ -1,6 +1,8 @@
 import { test, expect, HOST, selectAt } from './helpers.js';
 import { spawn, execSync, type ChildProcess } from 'node:child_process';
 import { resolve } from 'node:path';
+import type { Page } from '@playwright/test';
+import type { Bridge } from '../../src/bridge.js';
 
 let vite: ChildProcess;
 
@@ -157,6 +159,43 @@ test('Vue 3 element gets component and SFC path', async ({ cobroPage: page, brid
   expect(r.status).toBe('sent');
   if (r.status !== 'sent') return;
   const el = r.payload.batches[0]!.elements[0]!;
-  expect(el.vue).toEqual({ component: 'Cta', source: 'src/Cta.vue' });
+  expect(el.vue).toEqual({ component: 'Cta', source: 'src/Cta.vue', callers: ['src/VueApp.vue'] });
   expect(el.react).toBeUndefined();
+});
+
+async function pickVue(page: Page, bridge: Bridge, selector: string) {
+  bridge.core.setStrategy('none');
+  await page.goto('http://127.0.0.1:4174/vue.html');
+  await selectAt(page, selector);
+  await page.locator(`${HOST} textarea`).fill('메모');
+  const waiting = bridge.core.wait(10_000);
+  await page.locator(`${HOST} button.send`).click();
+  const r = await waiting;
+  expect(r.status).toBe('sent');
+  if (r.status !== 'sent') return undefined;
+  return r.payload.batches[0]!.elements[0]!.vue;
+}
+
+test('Vue: user SFC element reports itself plus calling SFCs (R189)', async ({ cobroPage: page, bridge }) => {
+  expect(await pickVue(page, bridge, '#vp')).toEqual({ component: 'VuePanel', source: 'src/VuePanel.vue', callers: ['src/VueApp.vue'] });
+});
+
+test('Vue: library component root element reports the SFC that uses it (R189)', async ({ cobroPage: page, bridge }) => {
+  expect(await pickVue(page, bridge, '#vbtn')).toEqual({ component: 'FButton', source: 'src/VuePanel.vue', callers: ['src/VueApp.vue'] });
+});
+
+test('Vue: slot content inside a library component root reports the SFC that uses it (R189)', async ({ cobroPage: page, bridge }) => {
+  expect(await pickVue(page, bridge, '#vbtn-in')).toEqual({ component: 'FButton', source: 'src/VuePanel.vue', callers: ['src/VueApp.vue'] });
+});
+
+test('Vue: user element in a library slot reports the SFC that wrote the slot content (R189)', async ({ cobroPage: page, bridge }) => {
+  expect(await pickVue(page, bridge, '#vcard-in')).toEqual({ component: 'FCard', source: 'src/VueCard.vue', callers: ['src/VuePanel.vue', 'src/VueApp.vue'] });
+});
+
+test('Vue: library-internal layer (no __file) keeps the outermost library tag the user wrote as component (R190-b)', async ({ cobroPage: page, bridge }) => {
+  expect(await pickVue(page, bridge, '#vbtn .f-icon')).toEqual({ component: 'FButton', source: 'src/VuePanel.vue', callers: ['src/VueApp.vue'] });
+});
+
+test('Vue: Vue built-ins (Transition) are skipped on the way to the user SFC (R189)', async ({ cobroPage: page, bridge }) => {
+  expect(await pickVue(page, bridge, '#vtag-in')).toEqual({ component: 'FTag', source: 'src/VueCard.vue', callers: ['src/VuePanel.vue', 'src/VueApp.vue'] });
 });
