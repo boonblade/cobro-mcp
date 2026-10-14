@@ -3,6 +3,8 @@
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
+### Changed
+- README: Limitations now cover Vue source lines, re-checking picked elements after the page changes, region outlines after the layout shifts, and closing the browser after Send.
 
 ## [0.10.3] — 2026-10-01
 ### Fixed

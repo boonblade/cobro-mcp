@@ -183,6 +183,10 @@ window.addEventListener('cobro:done', (e) => { const { summary, changedFiles, se
 ## Limitations
 
 - React component name comes from dev builds. `source` (file:line) is recovered from the dev server's source maps (React 19) or from `_debugSource` (React ≤ 18); production builds without maps report the component only. For component libraries: the location is the JSX call site in your code, not the library's internals.
+- Vue `source` is the SFC path only (no line). When a library component sits inside another library component's slot in the same SFC (e.g. an `el-tag` inside an `el-card`), `component` may name the outer one; the file is still right.
+- Picked elements are re-checked by selector, tag and text. If the page changes, an element without text (icons, empty cells, `col`) can still be matched to a neighbour, and an element whose text changed after you picked it is reported as `missing` on Send.
+- A region (a dragged band) is drawn at the page coordinates where you drew it; if the layout shifts, its outline can be off.
+- If the Cobro browser is closed after Send, the agent has to call `open` again before it receives that Send (the Send is kept, not lost).
 - No iframe support (top-level document only). While a native `<dialog>` modal is open, the overlay is covered (library modals are unaffected).
 - Element highlighting on `done` is best-effort (it replays after a reload).
 - A disabled control (e.g. a disabled button) does not receive clicks, so click-picking lands on its parent; drag a band over it instead.
